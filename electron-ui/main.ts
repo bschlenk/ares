@@ -506,6 +506,8 @@ app
       height: 800,
       minWidth: 650,
       minHeight: 480,
+      backgroundColor: '#000000',
+      ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),
       webPreferences: {
         preload: path.join(appRoot, 'dist/preload.cjs'),
         contextIsolation: true,
