@@ -135,7 +135,7 @@ ARES_PROFILE=play npm start -- --disable-plugins --services
 
 From the repository root, use `npm start --prefix electron-ui --` before those
 flags. Copied apps accept `--disable-plugins --services` on their bundled
-`Contents/MacOS/Electron` executable. `ARES_DISABLE_PLUGINS=1` is the environment
+`Contents/MacOS/Ares` executable. `ARES_DISABLE_PLUGINS=1` is the environment
 equivalent. The profile lock still permits only one process per profile.
 
 This bypasses persisted enabled plugins, bundled defaults and ARES_PLUGIN_DIRS

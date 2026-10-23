@@ -22,6 +22,8 @@ copy(
   path.join(path.dirname(require.resolve('electron')), 'dist/Electron.app'),
   destination,
 )
+fs.renameSync(path.join(destination, 'Contents/MacOS/Electron'), path.join(destination, 'Contents/MacOS/Ares'))
+execFileSync('plutil', ['-replace', 'CFBundleExecutable', '-string', 'Ares', path.join(destination, 'Contents/Info.plist')])
 const resources = path.join(destination, 'Contents/Resources'),
   app = path.join(resources, 'app')
 fs.mkdirSync(app)
@@ -116,7 +118,7 @@ for (const file of ['SDL', 'MoltenVK'])
     path.resolve(libraryRoot, '../licenses', file),
     path.join(resources, 'licenses', file),
   )
-const runtime = path.join(destination, 'Contents/MacOS/Electron')
+const runtime = path.join(destination, 'Contents/MacOS/Ares')
 const nodeVersion = execFileSync(runtime, ['-p', 'process.versions.node'], {
   encoding: 'utf8',
   timeout: 5000,
@@ -136,7 +138,7 @@ fs.writeFileSync(
 ARES_RESOURCES=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 unset NODE_OPTIONS NODE_PATH ELECTRON_ENABLE_LOGGING
 export ELECTRON_RUN_AS_NODE=1
-exec "$ARES_RESOURCES/../MacOS/Electron" "$ARES_RESOURCES/app/dist/mcp/server.js" "$@"
+exec "$ARES_RESOURCES/../MacOS/Ares" "$ARES_RESOURCES/app/dist/mcp/server.js" "$@"
 `,
   { mode: 0o755 },
 )
@@ -147,7 +149,7 @@ fs.writeFileSync(
 ARES_RESOURCES=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 unset NODE_OPTIONS NODE_PATH ELECTRON_ENABLE_LOGGING
 export ELECTRON_RUN_AS_NODE=1
-exec "$ARES_RESOURCES/../MacOS/Electron" "$ARES_RESOURCES/app/dist/plugins/cli.js" "$@"
+exec "$ARES_RESOURCES/../MacOS/Ares" "$ARES_RESOURCES/app/dist/plugins/cli.js" "$@"
 `,
   { mode: 0o755 },
 )

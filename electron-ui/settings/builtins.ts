@@ -12,3 +12,9 @@ export const nativeRuntimeSettings: readonly SettingDescriptor[] = [
   { id: 'video.saturation', title: 'Saturation', section: 'Video', type: 'number', min: 0, max: 2, default: 1, apply: 'live', nativeKey: 'Video/Saturation' },
   { id: 'video.gamma', title: 'Gamma', section: 'Video', type: 'number', min: 0.1, max: 3, default: 1, apply: 'live', nativeKey: 'Video/Gamma' },
 ];
+
+export const agentSettings: readonly SettingDescriptor[] = [
+  { id: 'agent.enabled', section: 'Agent Integration', title: 'Enable MCP and CLI access', type: 'boolean', default: false, apply: 'live' },
+  { id: 'agent.name', section: 'Agent Integration', title: 'Stable instance name (optional)', type: 'string', default: '', maxLength: 48, apply: 'live' },
+  { id: 'debug.provenance', section: 'Agent Integration', title: 'Record N64 DMA provenance', type: 'boolean', default: false, apply: 'live' },
+];

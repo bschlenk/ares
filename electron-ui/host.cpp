@@ -77,7 +77,8 @@ struct Host : ares::Platform {
   std::mutex mutex;
   std::condition_variable wake;
   bool credit = false, available = false;
-  std::vector<uint8_t> latest;
+  std::shared_ptr<std::vector<uint8_t>> latest;
+  std::vector<std::shared_ptr<std::vector<uint8_t>>> framePool;
   uint32_t sequence = 0, rateFrames = 0;
   double recentVps = 0;
   Clock::time_point rateStarted = Clock::now();
@@ -171,8 +172,14 @@ struct Host : ares::Platform {
     ++rateFrames;
     auto interval = std::chrono::duration<double>(now-rateStarted).count();
     if(interval >= 1) { recentVps=rateFrames/interval;rateFrames=0;rateStarted=now; }
-    latest.resize(48 + size_t(width) * height * 4);
-    auto p = latest.data();
+    // Reuse presentation packets unless the writer or a bounded screenshot pin
+    // still owns them. Debug screenshots share these bytes instead of copying
+    // a second RGBA image on every frame.
+    latest.reset();
+    for(auto& buffer : framePool) if(buffer.use_count() == 1) { latest = buffer; break; }
+    if(!latest) { latest = std::make_shared<std::vector<uint8_t>>(); framePool.push_back(latest); }
+    latest->resize(48 + size_t(width) * height * 4);
+    auto p = latest->data();
     std::memcpy(p, "AEF2", 4);
     put32(p + 4, width * height * 4); put32(p + 8, width); put32(p + 12, height);
     put32(p + 16, ++sequence); put32(p + 20, appliedInput);
@@ -193,22 +200,23 @@ struct Host : ares::Platform {
         *p++ = color >> 16; *p++ = color >> 8; *p++ = color; *p++ = 255;
       }
     }
-    captures.observe(screen.get(), latest.data() + 48, width, height, sequence, screen ? 0 : service.epoch, screen ? 0 : service.execution.frame);
+    captures.observe(screen.get(), latest->data() + 48, width, height, sequence, screen ? 0 : service.epoch, screen ? 0 : service.execution.frame, latest);
     captured = now; available = true; wake.notify_one();
   }
   void writeFrames() {
-    std::vector<uint8_t> frame;
+    std::shared_ptr<std::vector<uint8_t>> frame;
     while(!quit) {
       {
         std::unique_lock lock(mutex);
         wake.wait(lock, [&] { return quit || (credit && available); });
         if(quit) break;
-        frame.swap(latest); available = false; credit = false;
-        put64(frame.data() + 32, std::chrono::duration<double, std::milli>(Clock::now() - captured).count());
+        frame = latest; available = false; credit = false;
+        put64(frame->data() + 32, std::chrono::duration<double, std::milli>(Clock::now() - captured).count());
       }
-      if(std::fwrite(frame.data(), 1, frame.size(), frameOutput) != frame.size() || std::fflush(frameOutput)) {
+      if(std::fwrite(frame->data(), 1, frame->size(), frameOutput) != frame->size() || std::fflush(frameOutput)) {
         quit = true; break;
       }
+      frame.reset();
     }
   }
   void readCommands() {
@@ -527,12 +535,17 @@ int main(int argc, char** argv) {
   host.service.videoRequest = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
     if(method.starts_with("video.record.")) {
       auto result = host.recording.execute(method, args, owner, host.service.epoch, execution.frame, execution.frameKind);
-      if(result.error.empty() && method == "video.record.start") host.captures.enabled = true;
       return result;
     }
     return host.captures.execute(method, args, owner, host.service.epoch, execution.frame, n64, execution.frameKind, host.service.paused);
   };
   host.service.runtimeRequest = [&](const std::string& method, const std::vector<std::string>& args) {
+    if(method == "runtime.provenance") {
+      if(args.size() != 1 || (args[0] != "0" && args[0] != "1")) return ControlResult{"invalid_request", {}};
+      auto& provenance = ares::Nintendo64::dmaProvenance;
+      if(args[0] == "1") provenance.enable(); else provenance.disable();
+      return ControlResult{{}, std::string("{\"enabled\":") + (provenance.enabled ? "true}" : "false}")};
+    }
     return configureRuntime(method, args, bool(execution.active) || bool(execution.reservation) || host.stateLoader.upload.has_value());
   };
   host.service.audioRequest = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {

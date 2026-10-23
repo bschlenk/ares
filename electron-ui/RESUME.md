@@ -1,8 +1,23 @@
 # Fresh-agent handoff
 
-Updated 2026-10-21. Read this before building, testing or changing runtime files.
+Updated 2026-10-23. Read this before building, testing or changing runtime files.
 
 ## Current objective
+
+The bundle executable is now Contents/MacOS/Ares. Actual packaged UI validation
+covers helper installation and copied configuration with an isolated HOME.
+MCP provenance_control can enable DMA recording before ROM loading and disable
+it afterward; it controls the same profile preference as the manual checkbox.
+
+Latest addition: root `./scripts/build-macos-app.sh` produces/replaces
+`build_macos/Ares.app`. Settings → Agent Integration controls live MCP/CLI access,
+optional stable instance naming, copied configuration and packaged CLI wrappers.
+`--services` / `--no-services` are launch overrides. DMA provenance is separately
+explicit/default-off; log reads never enable recording. Screenshots share native
+presentation packets. See the 2026-10-23 execution-log entry for current validation
+(121 passed, one optional private-ROM check skipped; focused Electron/MCP/copied
+package checks passed, full acceptance runner not rerun).
+
 
 **Foundation and task 13 are complete. The requested minimal UI/workspace is implemented.**
 See [WORKSPACE.md](WORKSPACE.md) for video-only startup, Cmd+, settings, split

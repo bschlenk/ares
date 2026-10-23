@@ -1,0 +1,65 @@
+import { app, BrowserWindow, clipboard } from 'electron';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { LocalServiceClient } from '../dist/services/local-endpoint.js';
+const temporary = fs.mkdtempSync('/tmp/ares-agent-');
+const profile = path.join(temporary, 'profile'); fs.mkdirSync(profile);
+const file = path.join(profile, 'preferences.json');
+const saved = process.argv.includes('--no-services');
+fs.writeFileSync(file, JSON.stringify({ version: 1, values: { 'agent.enabled': saved } }));
+app.setPath('userData', profile);
+Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_ROM: '', ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DISABLE_PLUGINS: '1', ARES_SERVICE_DIR: path.join(temporary, 'ipc') });
+delete process.env.ARES_ENABLE_SERVICES;
+const { sessions, serviceHost, preferences } = await import('../dist/main.js');
+const until = async fn => { for (let n = 0; n < 400; ++n) { try { const value = await fn(); if (value) return value; } catch {} await new Promise(r => setTimeout(r, 25)); } throw new Error('agent integration timed out'); };
+const deadline = setTimeout(() => app.exit(1), 25000);
+app.on('will-quit', () => { clearTimeout(deadline); fs.rmSync(temporary, { recursive: true, force: true }); });
+app.whenReady().then(async () => {
+  let client;
+  try {
+    const window = await until(() => BrowserWindow.getAllWindows()[0]);
+    const js = code => window.webContents.executeJavaScript(code);
+    await until(() => js("!!window.ares && !!document.querySelector('[data-setting=\"agent.enabled\"]')"));
+    await until(() => sessions.identity);
+    const initial = await sessions.request('session.status');
+    const entry = () => preferences.catalog().entries.find(e => e.descriptor.id === 'agent.enabled');
+    assert.equal(entry().value, process.argv.includes('--services'));
+    assert.equal(!!serviceHost.info, process.argv.includes('--services'));
+    assert.equal(JSON.parse(fs.readFileSync(file)).values['agent.enabled'], saved, 'launch override never rewrites saved preference');
+    await js("window.ares.preferences.set('agent.enabled', false)");
+    assert.equal(serviceHost.info, undefined);
+    await js("window.ares.preferences.set('agent.name', 'integration')");
+    await js("window.ares.preferences.set('agent.enabled', true)");
+    assert.ok(serviceHost.info);
+    const metadata = serviceHost.metadataFile;
+    client = LocalServiceClient.named(process.env.ARES_SERVICE_DIR, 'integration');
+    assert.equal((await client.request('session.status')).session, initial.session);
+    await js("window.ares.agentAction('copy')");
+    const configuration = JSON.parse(await clipboard.readText()).mcpServers.ares;
+    assert.ok(configuration.args.join(' ').includes('--instance-name'));
+    assert.ok(configuration.args.join(' ').includes('integration'));
+    await until(() => js("document.getElementById('mcp-config-preview').textContent.includes('--instance-name integration')"));
+    assert.deepEqual(JSON.parse(await js("document.getElementById('mcp-config-preview').textContent")), JSON.parse(await clipboard.readText()));
+    await js("document.querySelector('[data-tab=agent]').click(); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    fs.writeFileSync('/tmp/ares-agent-settings.png', (await window.webContents.capturePage()).toPNG());
+    // Runtime settings reach the existing host, without recreating its game session.
+    assert.equal((await js("window.ares.preferences.set('debug.provenance', true)")).error, undefined);
+    assert.equal((await js("window.ares.preferences.set('debug.provenance', false)")).error, undefined);
+    const shot = await sessions.request('artifact.screenshot', undefined, { source: 'presented', inline: true, scale: 1, overwrite: false, path: null, region: null });
+    assert.equal(shot.ok, true, JSON.stringify(shot));
+    await js("window.ares.preferences.set('agent.enabled', false)");
+    assert.equal(serviceHost.info, undefined);
+    assert.equal(fs.existsSync(metadata), false);
+    await assert.rejects(client.request('session.status'));
+    client.close();
+    await js("window.ares.preferences.set('agent.enabled', true)");
+    client = LocalServiceClient.named(process.env.ARES_SERVICE_DIR, 'integration');
+    assert.equal((await client.request('session.status')).session, initial.session);
+    await js("window.ares.preferences.set('agent.name', 'renamed')");
+    client.close(); client = LocalServiceClient.named(process.env.ARES_SERVICE_DIR, 'renamed');
+    assert.equal((await client.request('session.status')).session, initial.session);
+    console.log('Runtime MCP enable/disable/re-enable, launch override, named connection, clipboard and idle screenshot passed');
+  } catch (error) { console.error(error); await serviceHost.close(); fs.rmSync(temporary, { recursive: true, force: true }); app.exit(1); }
+  finally { client?.close(); app.quit(); }
+});

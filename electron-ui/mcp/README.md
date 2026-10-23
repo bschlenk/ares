@@ -17,7 +17,29 @@ Development:
 ARES_ENABLE_SERVICES=1 npm start --prefix electron-ui
 ```
 
-Or pass `--services` to the app executable. Service exposure is opt-in. Electron
+Or pass `--services` to the app executable. Service exposure is opt-in. **Settings → Agent Integration → Enable MCP and CLI
+access** starts/stops access immediately without restarting the game and persists
+per profile. `--services` and `--no-services` override the saved preference at
+launch (last flag wins), without rewriting it; a later Settings edit can change
+access for that run. `ARES_ENABLE_SERVICES=1` remains supported; explicit flags
+win over it. Stopping access disconnects external clients and releases their
+owned controls.
+
+Choose an optional unique **Stable instance name** to keep copied MCP
+configuration useful across app restarts. **Copy MCP configuration** selects that
+name, or the exact current UUID when unnamed. **Install CLI helpers…** in a
+packaged app installs wrappers for `ares`, `ares-mcp` and `ares-plugin` under
+`~/.local/bin`; add it to PATH as needed. Wrappers use the current app location;
+reinstall them after moving the app. Unrelated existing commands are preserved.
+
+**Record N64 DMA provenance** is separately opt-in and live. It records up to
+4096 cartridge-to-RAM transfers, starting when enabled; earlier history cannot
+be recovered. Disabling frees the history. `overlay_log` only reads and reports
+`enabled`; it never starts recording. Enabling MCP access does not enable this
+recording. Screenshots share existing presentation buffers and pin them only for
+the bounded export; video recording allocates recorded frames only while active.
+
+ Electron
 prints a connection-file path and instance UUID to stderr. Default metadata lives
 in `/tmp/ares-services-UID/` on macOS, in a private directory. `ARES_SERVICE_DIR`
 can select another private directory with a short Unix-socket path. Metadata
@@ -30,8 +52,8 @@ Configure your MCP client with the exact file and UUID for the intended app:
 {
   "mcpServers": {
     "ares": {
-      "command": "/Applications/Ares.app/Contents/Resources/ares-mcp",
-      "args": ["--connection", "/tmp/ares-services-501/INSTANCE.json", "--instance", "INSTANCE"]
+      "command": "/bin/sh",
+      "args": ["-c", "exec ~/.local/bin/ares-mcp --connection /tmp/ares-services-501/INSTANCE.json --instance INSTANCE"]
     }
   }
 }
@@ -217,10 +239,19 @@ starting another trace supersedes the stored pages. A non-null file path request
 
 ## PI provenance
 
+MCP `provenance_control` with `{"enabled":true}` enables recording immediately
+and for subsequent ROM loads. Enable it before opening/resetting a ROM to record
+boot transfers. Use `{"enabled":false}` to stop and free the history; omit
+`enabled` to query. This controls the same profile setting as the checkbox.
+Recording defaults off. The response includes `enabled`, `requested`, `pending`
+and `error` so a saved-but-not-applied preference is explicit.
+
 `overlay_log` returns PI cartridge-to-RDRAM transfers with initiating PC, ROM
-address/offset and observed write-loop ranges. A services-enabled app passes
---debug-provenance to record from boot. A raw host enables recording on first
-query and reports incomplete earlier history. `recording_from_epoch_start`
+address/offset and observed write-loop ranges. Enable **Record N64 DMA provenance**
+in Settings to start recording explicitly; reading the log never enables it.
+The raw native host also accepts `--debug-provenance` to record from boot, or
+`runtime.provenance` to switch recording at a safe point. `enabled` reports the
+current state. Disabling clears the history and frees its storage. `recording_from_epoch_start`
 distinguishes recording start; `history_complete` also becomes false after ring
 overwrite. The 4096-record ring reports dropped records, and each record reports
 range truncation at 64 ranges.
@@ -661,3 +692,17 @@ The 68-tool reference inventory is unchanged. See
 [scaffold/build/open/reload and explicit command examples](../plugins/README.md#bundled-tools-and-agent-commands).
 The stop/register panel consumes the same native immutable stop used by
 `last_stop`; it does not reconstruct a hit from later live register reads.
+
+The visible MCP configuration preview and Copy button use `/bin/sh` to expand
+`~/.local/bin/ares-mcp` at launch
+when an executable Ares-managed helper is installed, so reinstalling helpers
+from a moved app preserves the configured command. Before helper installation,
+it falls back to the current bundle path. Install helpers before copying the
+configuration for a stable setup. Choose a stable instance name as well to keep
+the connection selection valid across app restarts.
+
+The Agent Integration page shows the exact JSON before copying, including while
+access is disabled. It refreshes after settings changes or helper installation.
+Copy is available when access is enabled. Home paths use tilde notation through
+an explicit shell launch, because direct process launching does not reliably
+expand a tilde in a command path. All shell arguments are individually quoted.

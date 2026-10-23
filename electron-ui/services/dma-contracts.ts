@@ -4,7 +4,7 @@ export interface DmaRecord {
   from_rom: boolean; rom_offset: string | null; cpu_pc: string; bytes_attempted: number; bytes_written: number | null;
   writes_confirmed: boolean; ranges_truncated: boolean; ranges: { dram_address: string; length: number }[]; code_candidate: boolean;
 }
-export interface DmaLog { entries: DmaRecord[]; next_since_id: number; more: boolean; capacity: 4096; dropped: number; epoch: number; history_complete: boolean; recording_from_epoch_start: boolean; enabled_at_frame: number; code_range: { start: string; end: string }; note: string }
+export interface DmaLog { enabled: boolean; entries: DmaRecord[]; next_since_id: number; more: boolean; capacity: 4096; dropped: number; epoch: number; history_complete: boolean; recording_from_epoch_start: boolean; enabled_at_frame: number; code_range: { start: string; end: string }; note: string }
 export interface DmaServiceMap { 'n64.dma.log': { params: { sinceId: number; limit: number; codeStart: number; codeEnd: number }; result: DmaLog } }
 const integer = (n: unknown, max = Number.MAX_SAFE_INTEGER): n is number => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= max;
 export function encodeDma(p: any): string | undefined {
@@ -12,7 +12,7 @@ export function encodeDma(p: any): string | undefined {
   return ` ${p.sinceId} ${p.limit} ${p.codeStart} ${p.codeEnd}`;
 }
 export function validDma(s: any): s is DmaLog {
-  if (!s || !Array.isArray(s.entries) || s.entries.length > 16 || !integer(s.next_since_id) || typeof s.more !== 'boolean' || (s.more && !s.entries.length) || s.capacity !== 4096 || !integer(s.dropped) || !integer(s.epoch) || !s.epoch || typeof s.history_complete !== 'boolean' || typeof s.recording_from_epoch_start !== 'boolean' || !integer(s.enabled_at_frame) || !s.code_range || !hex64(s.code_range.start) || !hex64(s.code_range.end) || typeof s.note !== 'string') return false;
+  if (!s || typeof s.enabled !== 'boolean' || !Array.isArray(s.entries) || s.entries.length > 16 || !integer(s.next_since_id) || typeof s.more !== 'boolean' || (s.more && !s.entries.length) || s.capacity !== 4096 || !integer(s.dropped) || !integer(s.epoch) || !s.epoch || typeof s.history_complete !== 'boolean' || typeof s.recording_from_epoch_start !== 'boolean' || !integer(s.enabled_at_frame) || !s.code_range || !hex64(s.code_range.start) || !hex64(s.code_range.end) || typeof s.note !== 'string') return false;
   let previous = 0;
   return s.entries.every((r: DmaRecord) => {
     if (!r) return false;

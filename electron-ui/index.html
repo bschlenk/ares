@@ -21,12 +21,22 @@
     <header class="settings-header"><h1 id="settings-title">Settings</h1><button id="close-settings" aria-label="Close settings">×</button></header>
     <div class="settings-layout">
       <nav id="settings-tabs" aria-label="Settings sections">
-        <button data-tab="general">General</button><button data-tab="input">Input</button><button data-tab="firmware">Firmware</button><button data-tab="core">Core options</button><button data-tab="plugins">Plugins</button><button data-tab="workspace">Workspace</button>
+        <button data-tab="general">General</button><button data-tab="input">Input</button><button data-tab="firmware">Firmware</button><button data-tab="core">Core options</button><button data-tab="plugins">Plugins</button><button data-tab="agent">Agent Integration</button><button data-tab="workspace">Workspace</button>
       </nav>
       <div class="settings-pages">
         <section data-page="general">
           <div class="session-controls"><label>System for next ROM<select id="system"><option value="">Auto-detect</option></select></label><button id="pause">Pause</button><button id="reset">Reset game</button></div>
           <div id="settings-general"></div>
+        </section>
+        <section data-page="agent" hidden>
+          <div id="settings-agent"></div>
+          <p>MCP and CLI access connects external tools to this app. Leave the instance name empty for a connection specific to this launch, or choose a unique name to reuse your MCP configuration across app restarts. DMA provenance records N64 ROM-to-RAM transfers only while enabled; disabling it clears the history.</p>
+          <h2>MCP configuration</h2>
+          <pre id="mcp-config-preview" tabindex="0" aria-label="MCP configuration">Loading configuration…</pre>
+          <p class="help">Enable access before connecting. The shell expands ~ to your home directory. Install CLI helpers before copying to keep the command stable when moving the app.</p>
+          <button id="copy-mcp-config">Copy MCP configuration</button>
+          <button id="install-cli-helpers">Install CLI helpers</button>
+          <p id="agent-status" role="status"></p>
         </section>
         <section data-page="input" hidden><p class="help">Bindings apply to virtual controller port 1. Click the video to use the keyboard.</p><div id="settings-input"></div><details><summary>Advanced input settings</summary><div id="settings-input-advanced"></div></details></section>
         <section data-page="firmware" hidden><div id="settings-firmware"></div></section>

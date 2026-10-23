@@ -175,7 +175,10 @@ test('isolated N64 host and real MCP stdio share instruction operations, registe
     assert.equal((await peer.tool('read_memory_va', { addr: '0x80001000', length: 4 })).hex.length, 8);
     assert.equal((await peer.tool('write_memory_va', { addr: '0x80001000', hex_bytes: '00' })).error, 'rdram_not_initialized');
     const provenance = await peer.tool('overlay_log');
-    assert.equal(provenance.capacity, 4096); assert.equal(provenance.history_complete, false, 'raw host enables recording at first query');
+    assert.equal(provenance.capacity, 4096); assert.equal(provenance.history_complete, false, 'history is incomplete while recording is disabled');
+    assert.equal(provenance.enabled, false);
+    assert.equal(unwrap(await native.request('runtime.provenance', undefined, { enabled: true })).enabled, true);
+    assert.equal((await peer.tool('overlay_log')).enabled, true);
     assert.equal(provenance.limit_effective, 128); assert.equal(provenance.code_range.start, '0x400');
     assert.equal((await peer.tool('overlay_log', { code_start: 16, code_end: 8 })).error, 'invalid_request');
     const pcTrace = await peer.tool('trace_pc', { max_seconds: 0.01, max_records: 4, inline_limit: 2 });

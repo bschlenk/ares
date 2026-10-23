@@ -9,7 +9,6 @@ struct DmaService {
     uint64_t since, limit, low, high;
     if(args.size() != 4 || !ExecutionService::number(args[0], since) || !ExecutionService::number(args[1], limit) || !limit || limit > 16 ||
        !ExecutionService::number(args[2], low) || !ExecutionService::number(args[3], high) || low >= high || high > 0x100000000ull) return {"invalid_request", {}};
-    dmaProvenance.enable();
     std::vector<const DmaProvenance::Record*> records;
     for(auto& r : dmaProvenance.records) if(r.id > since) records.push_back(&r);
     std::sort(records.begin(), records.end(), [](auto* a, auto* b) { return a->id < b->id; });
@@ -34,6 +33,7 @@ struct DmaService {
     }
     return {{}, out + "],\"next_since_id\":" + std::to_string(last) + ",\"more\":" + (records.size() > count ? "true" : "false")
       + ",\"capacity\":4096,\"dropped\":" + std::to_string(dmaProvenance.dropped) + ",\"epoch\":" + std::to_string(dmaProvenance.epoch)
+      + ",\"enabled\":" + (dmaProvenance.enabled ? "true" : "false")
       + ",\"history_complete\":" + (dmaProvenance.historyComplete && !dmaProvenance.dropped ? "true" : "false") + ",\"recording_from_epoch_start\":" + (dmaProvenance.historyComplete ? "true" : "false") + ",\"enabled_at_frame\":" + std::to_string(dmaProvenance.enabledAtFrame)
       + ",\"code_range\":{\"start\":" + hex(low) + ",\"end\":" + hex(high) + "},\"note\":\"PI cartridge-to-RDRAM only. Code candidates are not proof of overlays. Unconfirmed ranges are attempted bus writes; decompressed/generated code is not captured.\"}"};
   }

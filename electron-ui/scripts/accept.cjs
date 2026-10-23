@@ -106,6 +106,9 @@ async function main() {
     ['electron-plugin-settings', 'electron-plugin-settings.mjs', []],
     ['electron-workspace', 'electron-workspace.mjs', []],
     ['electron-settings', 'electron-settings.mjs', []],
+    ['electron-agent', 'electron-agent-integration.mjs', []],
+    ['electron-agent-forced-on', 'electron-agent-integration.mjs', ['--services']],
+    ['electron-agent-forced-off', 'electron-agent-integration.mjs', ['--no-services']],
     ['electron-recovery', 'electron-recovery.mjs', ['--disable-plugins']],
   ]) await gate(name, electron, [`tests/${file}`, ...args])
   await gate('profile-ownership', process.execPath, ['tests/profile-live.cjs'])
@@ -118,6 +121,7 @@ async function main() {
     if (fs.statSync(path.join(root, 'artifacts/package-mcp.json')).mtimeMs < packageStarted) throw new Error('Copied-package evidence was not refreshed')
     summary.package = JSON.parse(fs.readFileSync(path.join(root, 'artifacts/package-mcp.json'), 'utf8'))
     if (summary.package.result !== 'PACKAGE_MCP_PASS') throw new Error('Missing copied-package acceptance evidence')
+    await gate('packaged-agent-ui', process.execPath, ['tests/packaged-agent-ui.cjs', bundle])
   } finally { fs.rmSync(bundle, { recursive: true, force: true }) }
   summary.result = 'passed'
   console.log(`ACCEPTANCE_PASS: ${summary.gates.length} gates; ${summary.fixtureTests} fixture tests; ${summaryFile}`)

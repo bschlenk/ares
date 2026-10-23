@@ -214,6 +214,9 @@ export class LocalServiceHost {
       await new Promise<void>((resolve) => this.server.close(() => resolve()))
     if (this.metadataFile) await fs.rm(this.metadataFile, { force: true })
     if (this.info) await fs.rm(this.info.endpoint, { force: true })
+    this.info = undefined
+    this.metadataFile = undefined
+    this.claimFile = undefined
   }
   private accept(socket: net.Socket): void {
     if (this.sockets.size >= 8) {

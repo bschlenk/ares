@@ -25,7 +25,18 @@ media are still required for systems whose loaders require them.
 
 ## Build and run (verified on macOS arm64)
 
-From the repository root:
+For a self-contained local app on macOS Apple Silicon, run from the repository root:
+
+```sh
+./scripts/build-macos-app.sh
+open build_macos/Ares.app
+```
+
+This builds both the native host and UI, installs missing npm dependencies and
+safely replaces the prior packaged output after successful signing. Access is
+configured live under **Settings → Agent Integration**; see [MCP setup](mcp/README.md).
+
+For development, from the repository root:
 
 ```sh
 cmake -S . -B build-electron-make -G 'Unix Makefiles' \

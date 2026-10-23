@@ -73,3 +73,5 @@ details > summary { cursor:pointer; font-weight:550; padding:12px 0; }
 /* Pointer focus stays quiet; keyboard focus is visible on every focusable control. */
 :focus:not(:focus-visible) { outline:none; }
 :focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
+#mcp-config-preview { padding:12px; border:1px solid var(--line); border-radius:5px; background:var(--panel); user-select:text; }

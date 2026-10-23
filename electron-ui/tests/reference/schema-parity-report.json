@@ -7,7 +7,7 @@
   "signature_matching": 68,
   "signature_differences": [],
   "reference_count": 68,
-  "current_count": 85,
+  "current_count": 86,
   "missing": [],
   "added": [
     "memory_capture_freeze",
@@ -24,6 +24,7 @@
     "memory_record_stop",
     "memory_snapshot",
     "plugin_logs",
+    "provenance_control",
     "read_memory_many",
     "read_memory_many_va",
     "ui_screenshot"

@@ -4,6 +4,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (process.platform === 'darwin') document.body.dataset.windowChrome = 'macos'
 })
 const api: AresBridge = {
+  agentAction: action => ipcRenderer.invoke('agent.action', action),
   workspace: {
     load: () => ipcRenderer.invoke('workspace.load'),
     save: layout => ipcRenderer.invoke('workspace.save', layout),

@@ -26,6 +26,24 @@ Building this fork
 ------------------
 
 This fork uses [Ares Workbench's Electron frontend](electron-ui/README.md).
+On macOS Apple Silicon, build a runnable app from the repository root:
+
+```sh
+./scripts/build-macos-app.sh
+open build_macos/Ares.app
+```
+
+The command builds the native host and UI, installs npm dependencies if missing,
+and packages a self-contained app. It replaces the previous output only after
+packaging and signing succeed. `ARES_BUILD_JOBS` controls parallelism (default 8);
+`ARES_NATIVE_BUILD_DIR` can reuse another native build directory. The default
+native build directory is `build_macos/workbench`. This is an ad-hoc-signed local
+app; release notarization remains separate.
+
+Enable access in **Settings → Agent Integration → Enable MCP and CLI access**,
+then copy the MCP configuration. Recording N64 DMA provenance is a separate,
+default-off live setting. CLI helpers can be installed from the packaged app.
+
 The native host is the default CMake frontend target; emulation remains native
 C++. Build/run instructions, tested macOS arm64 prerequisites, isolated profiles
 and development/package checks are in that README. For ongoing implementation,

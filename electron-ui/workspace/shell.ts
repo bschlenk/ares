@@ -10,6 +10,7 @@ export function notify(error: unknown): void {
 }
 let workspace: Workspace;
 export function showSettings(tab = 'general'): void {
+  if (tab === 'agent') void refreshAgentConfiguration();
   window.dispatchEvent(new Event('ares-input-release'));
   for (const page of document.querySelectorAll<HTMLElement>('[data-page]')) page.hidden = page.dataset.page !== tab;
   for (const button of document.querySelectorAll<HTMLElement>('[data-tab]')) { button.setAttribute('aria-selected', String(button.dataset.tab === tab)); button.tabIndex = button.dataset.tab === tab ? 0 : -1; }
@@ -33,6 +34,31 @@ for (const tab of document.querySelectorAll<HTMLElement>('[data-tab]')) {
     const tabs = [...document.querySelectorAll<HTMLElement>('[data-tab]')], index = tabs.indexOf(tab);
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : ['ArrowRight','ArrowDown'].includes(event.key) ? (index + 1) % tabs.length : ['ArrowLeft','ArrowUp'].includes(event.key) ? (index + tabs.length - 1) % tabs.length : -1;
     if (next >= 0) { event.preventDefault(); showSettings(tabs[next]!.dataset.tab); tabs[next]!.focus(); }
+  };
+}
+mountSettingsForm(element('settings-agent'), window.ares.preferences, entry => entry.descriptor.section === 'Agent Integration', true);
+let agentPreviewGeneration = 0;
+async function refreshAgentConfiguration(): Promise<void> {
+  const generation = ++agentPreviewGeneration;
+  try {
+    const json = await window.ares.agentAction('preview');
+    if (generation !== agentPreviewGeneration) return;
+    element('mcp-config-preview').textContent = json;
+    const snapshot = await window.ares.preferences.catalog();
+    if (generation !== agentPreviewGeneration) return;
+    element<HTMLButtonElement>('copy-mcp-config').disabled = snapshot.entries.find(entry => entry.descriptor.id === 'agent.enabled')?.applied !== true;
+  } catch (error) {
+    if (generation !== agentPreviewGeneration) return;
+    element('mcp-config-preview').textContent = String(error).replace(/^Error:.*Error: /, '');
+    element<HTMLButtonElement>('copy-mcp-config').disabled = true;
+  }
+}
+window.ares.preferences.changed(() => { void refreshAgentConfiguration(); });
+void refreshAgentConfiguration();
+for (const [id, action] of [['copy-mcp-config', 'copy'], ['install-cli-helpers', 'install']] as const) {
+  element<HTMLButtonElement>(id).onclick = async () => {
+    try { element('agent-status').textContent = await window.ares.agentAction(action); await refreshAgentConfiguration(); }
+    catch (error) { element('agent-status').textContent = String(error); }
   };
 }
 mountSettingsForm(element('settings-general'), window.ares.preferences, entry => ['Presentation', 'Audio', 'Video'].includes(entry.descriptor.section));
