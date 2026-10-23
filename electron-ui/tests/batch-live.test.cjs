@@ -78,6 +78,11 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
       const sample = await peer.tool('memory_capture_read', { handle, sequence, length: 2 });
       assert.equal(sample.hex, hex); assert.equal(sample.frame, sequence + 1);
     }
+    const exported = await peer.tool('memory_capture_export', {handle,path:path.join(dir,'capture.json')});
+    assert.equal(exported.samples,3,JSON.stringify(exported));
+    const bulk=JSON.parse(fs.readFileSync(exported.path,'utf8'));
+    assert.deepEqual(bulk.chunks.map(c=>c.hex),['1234','1234','5678']);
+    assert.equal(bulk.metadata.dropped,0);
     await peer.tool('memory_capture_release', { handle });
     const inputError = await peer.tool('batch', { steps: [{ kind: 'memory_record_start', name: 'partial', reads: [{ region: 'RDRAM', offset: 0x2000, length: 2 }] }, { kind: 'input', a: true }, { kind: 'run', n: 1 }, { kind: 'state_load', path: path.join(dir, 'missing.bs') }] });
     assert.equal(inputError.stop_reason, 'step_error');
@@ -123,7 +128,9 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     assert.equal(keptGoing.stop_reason, 'batch_done'); assert.equal(keptGoing.results[0].ok, false); assert.equal(keptGoing.results[1].data.hex, 'aa');
     const samples = await peer.tool('batch', { steps: Array.from({length:50},()=>[{kind:'run',n:0},{kind:'read',addr:'0x2000',length:1}]).flat() });
     assert.equal(samples.stop_reason, 'batch_done', JSON.stringify({reason:samples.stop_reason,count:samples.steps_completed,bytes:JSON.stringify(samples).length}));
-    assert.equal(samples.steps.length, 100); assert.deepEqual(samples.steps, samples.results);
+    assert.equal(samples.results.length, 100); assert.equal(samples.steps, undefined);
+    const legacy = await peer.tool('batch', {steps:[{kind:'read',addr:'0x2000',length:2}],legacy_results:true});
+    assert.deepEqual(legacy.steps,legacy.results);
     const timed = await peer.tool('batch', { max_seconds: 0.05, steps: [{ kind: 'run', n: 1000000 }, { kind: 'write', addr: '0x2000', hex: 'bb', view: 'rdram' }] });
     assert.equal(timed.stop_reason, 'timeout', JSON.stringify(timed)); assert.equal(timed.results.length, 1); assert.equal(timed.results[0].data.state, 'done'); assert.ok(timed.results[0].data.elapsed_frames < 1000000);
     // Interrupt a long run through UI; foreign mutations must remain excluded.

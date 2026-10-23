@@ -1,3 +1,4 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type ExecutionOperation, type SessionClient, type SessionIdentity, type SessionReply } from '../services/contracts.js';
@@ -82,7 +83,7 @@ export function formatOperation<T extends ExecutionOperation>(result: T, fpr=fal
 export function formatStop(s: Stop, fpr = false, cop0 = false, verbose = false) {
   return { ...s, ...(s.registers ? { registers: formatRegisters(s.registers, fpr, cop0, verbose) } : {}) };
 }
-export function registerN64Tools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>,
+export function registerN64Tools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>,
   operation: (method: 'execution.runFrames' | 'execution.runUntilFrame' | 'execution.stepInstructions', amount: number, seconds: number) => Promise<ExecutionOperation>,
   rememberOperation: (id: number, identity: SessionIdentity) => void) {
   const unwrap = <T>(reply: SessionReply<T>): T => { if (!reply.ok || !reply.result) throw new ServiceError(reply.error || 'invalid_reply'); return reply.result; };

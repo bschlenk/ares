@@ -1,7 +1,8 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity } from '../services/contracts.js';
-export function registerRecordingTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>) {
+export function registerRecordingTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>) {
   const call = async (method: 'video.record.start' | 'video.record.status' | 'artifact.videoStop', params?: any) => {
     const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
     try { const reply = await client.request(method, await status(), params); if (!reply.ok || !reply.result) throw new ServiceError(reply.error || 'invalid_reply'); return text(reply.result); }

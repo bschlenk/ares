@@ -77,6 +77,11 @@ export function encodeRequest<M extends ServiceMethod>(id: string, identity: Ses
   if (!identity || typeof identity !== 'object' || !token(id) || !token(identity.session) || !integer(identity.epoch) || identity.epoch < 1 ||
       !METHODS.includes(method) || !token(owner)) throw new ServiceError('invalid_request');
   let suffix = '';
+  if (method === 'artifact.memoryExport') {
+    const p = params as any;
+    if (!keys(p, ['handle','path','overwrite']) || !integer(p.handle) || !p.handle || typeof p.path !== 'string' || !p.path.length || p.path.length > 4096 || p.path.includes('\0') || typeof p.overwrite !== 'boolean') throw new ServiceError('invalid_request');
+    return '';
+  }
   // Main-only methods use this validator but never enter the native wire.
   if (MEMORY_TOOL_METHODS.includes(method as typeof MEMORY_TOOL_METHODS[number])) {
     const encoded = encodeMemoryTools(method, params);
@@ -196,6 +201,7 @@ export function decodeReply<M extends ServiceMethod = 'session.status'>(line: st
     if (method.startsWith('video.record.') || method === 'artifact.videoStop') valid = validRecording(method, s);
     else if (method.startsWith('video.')) valid = validFrame(method, s) && (method !== 'video.begin' || s.epoch === r.epoch);
     if (SCREENSHOT_METHODS.includes(method as typeof SCREENSHOT_METHODS[number])) valid = validScreenshotResult(method, s) && (method !== 'artifact.screenshot' || s.epoch === r.epoch);
+    if (method === 'artifact.memoryExport') valid = !!s && s.format === 'ares-memory-capture-v1' && s.session === r.session && s.epoch === r.epoch && typeof s.path === 'string' && integer(s.bytes) && s.bytes <= 64*1024*1024 && typeof s.sha256 === 'string' && /^[a-f0-9]{64}$/.test(s.sha256) && integer(s.samples) && s.samples <= 1024;
     if (method === 'artifact.traceExport' || method === 'artifact.rdpExport') valid = validArtifact(s) && s.session === r.session && s.epoch === r.epoch && s.format === (method === 'artifact.rdpExport' ? 'ares-rdp-capture-v1' : 'ares-trace-v1');
     if (N64_METHODS.includes(method as N64Method)) {
       valid = validN64(method as N64Method, s);

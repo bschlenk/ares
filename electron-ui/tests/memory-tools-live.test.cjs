@@ -23,6 +23,10 @@ test('native snapshot immutability, compare paging, ring wrap and owner/epoch cl
   assert.equal(status.active,false);assert.equal(status.next_sequence,4);assert.equal(status.dropped,2);assert.equal(status.first_sequence,2);
   const a=await request('memory.capture.read',{handle:recording.handle,sequence:2,range:0,offset:0,length:1}),b=await request('memory.capture.read',{handle:recording.handle,sequence:3,range:0,offset:0,length:1});assert.equal(b.frame,a.frame+1);
   assert.equal((await client.request('memory.capture.read',undefined,{handle:recording.handle,sequence:0,range:0,offset:0,length:1},'owner')).error,'cursor_overwritten');
+  assert.equal((await client.request('memory.capture.page',undefined,{handle:recording.handle,sequence:0,range:0,offset:0},'owner')).error,'cursor_overwritten');
+  const page=await request('memory.capture.page',{handle:recording.handle,sequence:2,range:0,offset:0});
+  assert.equal(page.next,null); assert.equal(page.chunks.length,2); assert.deepEqual(page.chunks.map(c=>c.sequence),[2,3]);
+  assert.equal(page.chunks[0].hex.slice(0,2),a.hex);
   await request('execution.release');assert.equal((await client.request('memory.capture.status',undefined,{handle:snap.handle},'owner')).error,'stale_memory_handle');
   const reset=await request('memory.snapshot.capture',{reads,scheduling:'immediate'});await request('session.reset');assert.equal((await client.request('memory.capture.status',undefined,{handle:reset.handle},'owner')).error,'stale_memory_handle');
  }finally{client.close();child.stdin.end('quit\n');await closed;fs.rmSync(saves,{recursive:true,force:true})}

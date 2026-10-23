@@ -54,7 +54,7 @@ export async function installCliHelpers(appRoot: string, packaged: boolean, exec
   for (const [name, command] of Object.entries(commands)) {
     const file = path.join(directory, name), temporary = `${file}.${randomUUID()}.tmp`;
     try {
-      await fs.writeFile(temporary, `#!/bin/sh\n${marker}\nunset ELECTRON_RUN_AS_NODE NODE_OPTIONS NODE_PATH ELECTRON_ENABLE_LOGGING\nexec ${quote(command)} "$@"\n`, { flag: 'wx', mode: 0o755 });
+      await fs.writeFile(temporary, `#!/bin/sh\n${marker}\nunset ELECTRON_RUN_AS_NODE NODE_OPTIONS NODE_PATH ELECTRON_ENABLE_LOGGING\n${name === 'ares' ? `case \"$1\" in\n  call|tools|run) export ELECTRON_RUN_AS_NODE=1; exec ${quote(executable)} ${quote(path.join(appRoot, 'dist/cli.js'))} \"$@\" ;;\nesac\n` : ''}exec ${quote(command)} "$@"\n`, { flag: 'wx', mode: 0o755 });
       await fs.rename(temporary, file);
     } finally { await fs.rm(temporary, { force: true }); }
   }

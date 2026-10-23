@@ -728,3 +728,23 @@ Recorder reads accept current region IDs or exact region names, resolved after
 the state load. Read the handle in the start/stop step result with
 `memory_capture_status` and `memory_capture_read`; release it with
 `memory_capture_release` when finished. Duplicate recorder names reject.
+
+### Direct CLI and capture export
+
+The installed `ares` helper preserves normal app launch. `ares tools` lists the
+same schemas as MCP without opening the app. `ares call TOOL --json params.json`
+(or `--name VALUE` pairs, with JSON values for arrays/objects/booleans) calls the
+shared handler directly through automatic app discovery. JSON results go to
+stdout; argument/connection errors go to stderr. SIGINT cancels only work started
+by that call, using the original operation identity; mutations are never retried.
+
+`batch` returns its ordered array once in `results`. The deprecated `steps`
+alias is available with `legacy_results: true` during migration.
+
+`memory_capture_export {handle,path,overwrite?}` writes every retained sample of
+a stopped recorder or immutable snapshot atomically. Stop a running recorder
+first. The `ares-memory-capture-v1` file contains capture metadata and ordered
+`chunks` with sequence, frame, range, byte offset and hex. Adjacent chunks may
+split a large range; concatenate by sequence/range/offset. `first_sequence`,
+`next_sequence` and `dropped` make ring wrap explicit. Export preserves the native
+handle, rejects stale epochs/disconnects, and limits JSON output to 64 MiB.

@@ -1,3 +1,4 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity, type SessionReply } from '../services/contracts.js';
@@ -14,7 +15,7 @@ export async function readViewerCapture(client: SessionClient, identity: Session
   const { offset, next_offset, ...summary } = first;
   return { ...summary, entries, count: entries.length, truncated: first.truncated || first.committed > entries.length, inline_limit_effective: effective, next_offset: entries.length < first.retained ? entries.length : null };
 }
-export function registerViewerTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>) {
+export function registerViewerTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>) {
   const output = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
   const call = (fn: () => Promise<unknown>) => fn().then(output, e => ({ ...output({ error: e instanceof ServiceError ? e.code : 'request_failed' }), isError: true }));
   server.registerTool('rsp_capture', { description: 'Read completed RSP command/dispatch segments from the last VI-origin-swap viewer buffer. Live F3DEX2 signature-validated dispatch hooks preserve command words before reuse, timing and DMA byte counts; traced JIT and interpreter supported. At most 4096 stored/1024 inline rows. Unknown microcode yields no fabricated command records. RSPQ uses companion ELF-validated queue hooks, bounded overlay descriptors and frozen semantic arguments. This is not exact next-VI capture.', inputSchema: z.object({ limit: z.number().int().min(0).max(1048576).default(4096) }).strict(), annotations: { readOnlyHint: true } }, p => call(async () => readViewerCapture(client, await status(), 'rsp', p.limit)));

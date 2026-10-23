@@ -1,9 +1,10 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity } from '../services/contracts.js';
 import { registerIndex } from '../services/machine-contracts.js';
 import { lossless } from './n64-tools.js';
-export function registerMachineTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>) {
+export function registerMachineTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>) {
   const output = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
   const call = (fn: () => Promise<unknown>) => fn().then(output, e => ({ ...output({ error: e instanceof ServiceError ? e.code : 'request_failed' }), isError: true }));
   const addr = z.union([z.number().int().nonnegative(), z.string()]);

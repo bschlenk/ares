@@ -1,7 +1,8 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity } from '../services/contracts.js';
-export function registerAudioTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>) {
+export function registerAudioTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>) {
   const output = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
   const call = async (method: 'audio.capture' | 'audio.status' | 'artifact.audioSave', params?: any) => {
     try {

@@ -1,8 +1,9 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity, type SessionReply } from '../services/contracts.js';
 import { lossless } from './n64-tools.js';
-export function registerDmaTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>) {
+export function registerDmaTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>) {
   const output = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
   const unwrap = <T>(r: SessionReply<T>): T => { if (!r.ok || !r.result) throw new ServiceError(r.error || 'invalid_reply'); return r.result; };
   const address = z.union([z.number().int().nonnegative(), z.string()]);

@@ -114,6 +114,24 @@ struct MemoryTools {
     if(method=="memory.capture.release") {if(a.size()!=1)return {"invalid_request",{}};captures.erase(found);return {{},"{\"released\":true}"};}
     if(method=="memory.recorder.stop") {if(a.size()!=1)return {"invalid_request",{}};c.active=false;c.pending=false;return {{},metadata(c,kind)};}
     if(method=="memory.capture.status") {if(a.size()!=1)return {"invalid_request",{}};return {{},metadata(c,kind)};}
+    if(method=="memory.capture.page") {
+      uint32_t sequence,range,offset;
+      if(a.size()!=4||!MemoryService::number(a[1],sequence)||!MemoryService::number(a[2],range)||!MemoryService::number(a[3],offset)||range>=c.ranges.size())return {"invalid_request",{}};
+      if(c.active)return {"capture_active",{}};
+      if(!c.samples.empty()&&sequence<c.samples.front().sequence)return {"cursor_overwritten",{}};
+      if(sequence>c.next || (sequence==c.next&&(range||offset)))return {"out_of_bounds",{}};
+      std::string out="{\"chunks\":[";size_t remaining=16384;unsigned chunks=0;
+      while(sequence<c.next&&remaining&&chunks<64) {
+        auto& sample=c.samples[sequence-c.samples.front().sequence];auto& bytes=sample.bytes[range];
+        if(offset>=bytes.size())return {"out_of_bounds",{}};
+        size_t length=std::min(remaining,bytes.size()-offset);
+        if(chunks++)out+=',';
+        out+="{\"sequence\":"+std::to_string(sequence)+",\"frame\":"+std::to_string(sample.frame)+",\"range\":"+std::to_string(range)+",\"offset\":"+std::to_string(offset)+",\"hex\":"+controlQuote(hex(bytes,offset,length))+"}";
+        remaining-=length;c.transferredBytes+=length;offset+=length;
+        if(offset==bytes.size()){offset=0;if(++range==c.ranges.size()){range=0;++sequence;}}
+      }
+      return {{},out+"],\"next\":"+(sequence==c.next?"null":"{\"sequence\":"+std::to_string(sequence)+",\"range\":"+std::to_string(range)+",\"offset\":"+std::to_string(offset)+"}")+"}"};
+    }
     if(method=="memory.capture.read") {
       uint32_t sequence,range,offset,length;
       if(a.size()!=5||!MemoryService::number(a[1],sequence)||!MemoryService::number(a[2],range)||!MemoryService::number(a[3],offset)||!MemoryService::number(a[4],length)||!length||length>16384||range>=c.ranges.size())return {"invalid_request",{}};

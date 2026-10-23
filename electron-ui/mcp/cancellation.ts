@@ -1,3 +1,4 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { McpServer, type ServerContext } from '@modelcontextprotocol/server';
@@ -7,7 +8,7 @@ import { ServiceError, type SessionIdentity } from '../services/contracts.js';
 // Each concurrent tools/call has its own cancellation scope. Abort only an
 // operation started by that call, retaining its original session/epoch and ID.
 // In particular, aborting operation_status must never cancel the polled handle.
-export function installCancellation(server: McpServer, client: LocalServiceClient) {
+export function installCancellation(server: ToolRegistrar, client: LocalServiceClient) {
   const scope = new AsyncLocalStorage<{signal:AbortSignal; operation?:{id:number;identity:SessionIdentity}; batch?:{identity:SessionIdentity;token:string}; cancel?:Promise<unknown>}>();
   const request = client.request.bind(client);
   function cancel(s: NonNullable<ReturnType<typeof scope.getStore>>) {

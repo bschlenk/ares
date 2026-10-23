@@ -1,8 +1,9 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity } from '../services/contracts.js';
 import { lossless } from './n64-tools.js';
-export function registerStateTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>) {
+export function registerStateTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>) {
   const call = async (method: 'state.info' | 'state.list' | 'state.peek' | 'state.save' | 'state.load', params: any) => {
     const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
     try { const reply = await client.request(method, await status(), params); if (!reply.ok || !reply.result) throw new ServiceError(reply.error || 'invalid_reply'); return text(reply.result); }
