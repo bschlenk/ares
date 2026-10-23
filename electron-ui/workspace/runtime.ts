@@ -206,13 +206,14 @@ export class Workspace {
         if ((event.target as HTMLElement).closest('button')) return;
         event.preventDefault(); const target = resizing ? grip : header; target.setPointerCapture(event.pointerId);
         const rect = element.getBoundingClientRect();
-        const start = { ...item, x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+        const rootRect = this.floatingRoot.getBoundingClientRect();
+        const start = { ...item, x: rect.left - rootRect.left, y: rect.top - rootRect.top, width: rect.width, height: rect.height };
         // Pointer origin names differ from stored position to avoid shadowing.
         const originX = event.clientX, originY = event.clientY;
         target.onpointermove = event => {
           const dx = event.clientX - originX, dy = event.clientY - originY;
           if (resizing) { item.width = Math.max(180, Math.min(8192, start.width + dx)); item.height = Math.max(100, Math.min(8192, start.height + dy)); }
-          else { item.x = Math.max(0, Math.min(innerWidth - 60, start.x + dx)); item.y = Math.max(0, Math.min(innerHeight - 36, start.y + dy)); }
+          else { item.x = Math.max(0, Math.min(rootRect.width - 60, start.x + dx)); item.y = Math.max(0, Math.min(rootRect.height - 36, start.y + dy)); }
           this.geometry(element, item);
         };
         target.onpointerup = target.onpointercancel = () => { target.onpointermove = null; this.commit(this.snapshot()); };
@@ -226,8 +227,9 @@ export class Workspace {
     this.changed();
   }
   private geometry(element: HTMLElement, item: FloatingPanel): void {
-    element.style.left = `${Math.min(item.x, Math.max(0, innerWidth - 60))}px`; element.style.top = `${Math.min(item.y, Math.max(0, innerHeight - 36))}px`;
-    element.style.width = `${Math.min(item.width, innerWidth)}px`; element.style.height = `${Math.min(item.height, innerHeight)}px`;
+    const { width, height } = this.floatingRoot.getBoundingClientRect();
+    element.style.left = `${Math.min(item.x, Math.max(0, width - 60))}px`; element.style.top = `${Math.min(item.y, Math.max(0, height - 36))}px`;
+    element.style.width = `${Math.min(item.width, width)}px`; element.style.height = `${Math.min(item.height, height)}px`;
   }
   private clampWindows(): void { for (const item of this.layout.floating) { const element = this.floatingRoot.querySelector<HTMLElement>(`[data-floating="${item.id}"]`); if (element) this.geometry(element, item); } }
 }

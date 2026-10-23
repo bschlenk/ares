@@ -5,6 +5,9 @@ Settings, including shared application and plugin settings and plugin management
 Cmd+Shift+L toggles workspace editing; Escape exits it. Game input is released
 while editing or using Settings.
 
+On macOS, the native traffic lights sit in a plain black top area. Drag that area
+to move the window; the workspace below remains interactive.
+
 Each region has a panel chooser and controls to split side by side or top/bottom,
 close the region, or add its panel as an overlay or popup. Drag a divider to resize
 adjacent regions. There is one video canvas: choosing Video in another region

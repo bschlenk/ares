@@ -4,6 +4,10 @@ body[data-theme=green] { --bg:#07130c; --panel:#102217; --text:#c0efca; --muted:
 * { box-sizing:border-box; }
 [hidden] { display:none !important; }
 body { margin:0; height:100vh; overflow:hidden; background:#000; color:var(--text); font:13px system-ui,sans-serif; }
+#window-drag-region { display:none; }
+body[data-window-chrome=macos] { padding-top:28px; }
+body[data-window-chrome=macos] #window-drag-region { display:block; position:fixed; inset:0 0 auto; height:28px; background:#000; app-region:drag; user-select:none; }
+body[data-window-chrome=macos] #floating-layer { top:28px; }
 button,select,input,textarea { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:5px; padding:7px 10px; }
 button { cursor:pointer; } button:hover { border-color:var(--accent); } button:disabled { opacity:.45; cursor:default; }
 select { max-width:100%; } input[type=checkbox] { accent-color:var(--accent); width:auto; }

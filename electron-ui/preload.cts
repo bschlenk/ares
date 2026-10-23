@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AresBridge } from './bridge.js'
+window.addEventListener('DOMContentLoaded', () => {
+  if (process.platform === 'darwin') document.body.dataset.windowChrome = 'macos'
+})
 const api: AresBridge = {
   workspace: {
     load: () => ipcRenderer.invoke('workspace.load'),
