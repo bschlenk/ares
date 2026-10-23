@@ -22,16 +22,18 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
 import { MAX_TRANSFER, ServiceError, type ExecutionOperation, type SessionIdentity, type SessionReply } from '../services/contracts.js';
-import { LocalServiceClient } from '../services/local-endpoint.js';
+import { AutomaticServiceClient } from '../services/automatic-client.js';
+import { defaultServiceDirectory, LocalServiceClient } from '../services/local-endpoint.js';
 import { MemoryClient, hexToBytes, type RegionHandle } from '../services/memory.js';
 
 const args = process.argv.slice(2);
 const take = (flag: string) => { const index = args.indexOf(flag); return index >= 0 ? args[index + 1] : undefined; };
 const file = take('--connection'), instance = take('--instance'), name = take('--instance-name'), directory = take('--service-dir');
-if (args.length !== 4 || !(name && directory && path.isAbsolute(directory) && !file && !instance || file && path.isAbsolute(file) && instance && !name && !directory)) {
-  console.error('Usage: ares-mcp --connection /absolute/instance.json --instance UUID OR --service-dir /absolute/dir --instance-name NAME'); process.exit(2);
+if (args.some((arg, i) => i % 2 === 0 && !['--connection','--instance','--instance-name','--service-dir'].includes(arg)) || args.length % 2 || new Set(args.filter((_,i) => i % 2 === 0)).size !== args.length / 2 ||
+    (file || instance ? !(file && path.isAbsolute(file) && instance && !name && !directory) : directory !== undefined && !path.isAbsolute(directory))) {
+  console.error('Usage: ares-mcp [--service-dir /absolute/dir] [--instance-name NAME] OR --connection /absolute/instance.json --instance UUID'); process.exit(2);
 }
-const local = name ? LocalServiceClient.named(directory!, name) : new LocalServiceClient(file!, instance!);
+const local = file ? new LocalServiceClient(file, instance!) : new AutomaticServiceClient(directory ?? process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory(), name);
 const memory = new MemoryClient(local);
 let regions: RegionHandle[] | undefined;
 // Retain identity with recent operation handles, just as region handles do.
@@ -66,7 +68,13 @@ function createServer(): McpServer {
     const result=await status() as Awaited<ReturnType<typeof status>> & {last_stop?:import('../services/n64-contracts.js').Stop;debug_mode?:Record<string,unknown>};
     if(result.last_stop) result.last_stop=formatStop(result.last_stop) as any;
     if(result.debug_mode && !verbose) {const {renderer,expansion_pak,rdram_size,rsp_debugger_active,run_ahead_during_operations,rewind_during_operations,...mode}=result.debug_mode;result.debug_mode=mode;}
-    return result;
+    return { ...result, adapter_launched_app: local instanceof AutomaticServiceClient && local.launchedApp };
+  }));
+  server.registerTool('load_rom', { description: 'Open a ROM in the connected Ares app. If the same ROM content is already loaded, returns already_loaded=true without pausing, resetting or changing the current state. Otherwise returns already_loaded=false, replaces the current game, pauses it and invalidates old session/capture handles. Supply system when identification is ambiguous. Returns the new session status.', inputSchema: z.object({ path: z.string().min(1).max(4096), system: z.string().max(128).optional() }).strict() }, p => call(async () => {
+    const result = await local.manage({ operation: 'load_rom', ...p }); if (!result.already_loaded) { regions = undefined; operationIdentities.clear(); } await status(); return result;
+  }));
+  server.registerTool('close_rom', { description: 'Close the current ROM and return to the empty app. Invalidates session and capture handles.', inputSchema: z.object({}).strict() }, () => call(async () => {
+    const result = await local.manage({ operation: 'close_rom' }); regions = undefined; operationIdentities.clear(); return result;
   }));
   server.registerTool('pause', { description: 'Pause at a native slice boundary and finish an owned operation with reason paused.', inputSchema: z.object({}).strict() }, async () => call(async () => {
     if (!local.identity) await status(); const reply = await local.request('session.pause'); return { ...unwrap(reply), session: reply.session, epoch: reply.epoch };

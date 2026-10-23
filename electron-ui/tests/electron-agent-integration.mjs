@@ -7,7 +7,7 @@ const temporary = fs.mkdtempSync('/tmp/ares-agent-');
 const profile = path.join(temporary, 'profile'); fs.mkdirSync(profile);
 const file = path.join(profile, 'preferences.json');
 const saved = process.argv.includes('--no-services');
-fs.writeFileSync(file, JSON.stringify({ version: 1, values: { 'agent.enabled': saved } }));
+fs.writeFileSync(file, JSON.stringify({ version: 1, values: { 'agent.enabled': saved, 'agent.name': 'legacy-name' } }));
 app.setPath('userData', profile);
 Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_ROM: '', ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DISABLE_PLUGINS: '1', ARES_SERVICE_DIR: path.join(temporary, 'ipc') });
 delete process.env.ARES_ENABLE_SERVICES;
@@ -29,18 +29,19 @@ app.whenReady().then(async () => {
     assert.equal(JSON.parse(fs.readFileSync(file)).values['agent.enabled'], saved, 'launch override never rewrites saved preference');
     await js("window.ares.preferences.set('agent.enabled', false)");
     assert.equal(serviceHost.info, undefined);
-    await js("window.ares.preferences.set('agent.name', 'integration')");
+    assert.equal(await js("document.querySelector('[data-setting=\"agent.name\"]') === null"), true);
+    assert.equal(preferences.catalog().entries.some(e => e.descriptor.id === 'agent.name'), false);
     await js("window.ares.preferences.set('agent.enabled', true)");
     assert.ok(serviceHost.info);
     const metadata = serviceHost.metadataFile;
-    client = LocalServiceClient.named(process.env.ARES_SERVICE_DIR, 'integration');
+    client = new LocalServiceClient(serviceHost.metadataFile, serviceHost.instance);
     assert.equal((await client.request('session.status')).session, initial.session);
     await js("window.ares.agentAction('copy')");
     const configuration = JSON.parse(await clipboard.readText()).mcpServers.ares;
-    assert.ok(configuration.args.join(' ').includes('--instance-name'));
-    assert.ok(configuration.args.join(' ').includes('integration'));
-    await until(() => js("document.getElementById('mcp-config-preview').textContent.includes('--instance-name integration')"));
-    assert.deepEqual(JSON.parse(await js("document.getElementById('mcp-config-preview').textContent")), JSON.parse(await clipboard.readText()));
+    assert.ok(!configuration.args.join(' ').includes('--instance-name'));
+    assert.ok(!configuration.args.join(' ').includes('--service-dir'));
+    await until(() => js("document.getElementById('mcp-config-preview').textContent.includes('dist/mcp/server.js')"));
+    assert.equal(await js("document.getElementById('mcp-config-preview').textContent"), await clipboard.readText());
     await js("document.querySelector('[data-tab=agent]').click(); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     fs.writeFileSync('/tmp/ares-agent-settings.png', (await window.webContents.capturePage()).toPNG());
     // Runtime settings reach the existing host, without recreating its game session.
@@ -54,12 +55,9 @@ app.whenReady().then(async () => {
     await assert.rejects(client.request('session.status'));
     client.close();
     await js("window.ares.preferences.set('agent.enabled', true)");
-    client = LocalServiceClient.named(process.env.ARES_SERVICE_DIR, 'integration');
+    client = new LocalServiceClient(serviceHost.metadataFile, serviceHost.instance);
     assert.equal((await client.request('session.status')).session, initial.session);
-    await js("window.ares.preferences.set('agent.name', 'renamed')");
-    client.close(); client = LocalServiceClient.named(process.env.ARES_SERVICE_DIR, 'renamed');
-    assert.equal((await client.request('session.status')).session, initial.session);
-    console.log('Runtime MCP enable/disable/re-enable, launch override, named connection, clipboard and idle screenshot passed');
+    console.log('Runtime MCP enable/disable/re-enable, launch override, unnamed connection, hidden legacy setting, clipboard and idle screenshot passed');
   } catch (error) { console.error(error); await serviceHost.close(); fs.rmSync(temporary, { recursive: true, force: true }); app.exit(1); }
   finally { client?.close(); app.quit(); }
 });

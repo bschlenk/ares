@@ -33,6 +33,7 @@
     "test:recovery": "npm run build && electron tests/electron-recovery.mjs --disable-plugins",
     "accept": "node scripts/accept.cjs",
     "test:agent": "npm run build && electron tests/electron-agent-integration.mjs",
+    "test:automatic-launch": "npm run build && node tests/automatic-launch.cjs",
     "test:controls": "npm run build && electron tests/electron-controls.mjs"
   },
   "devDependencies": {

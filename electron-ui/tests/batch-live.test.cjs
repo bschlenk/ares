@@ -59,6 +59,32 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     const initializedFile = path.join(dir, 'initialized.bs'); fs.writeFileSync(initializedFile, initialized);
     assert.equal((await peer.tool('state_load', { path: initializedFile })).error, undefined);
     const baseline = path.join(dir, 'baseline.bs'); assert.equal((await peer.tool('state_save', { path: baseline })).error, undefined);
+    const timeline = await peer.tool('batch', { steps: [
+      { kind: 'state_load', path: baseline },
+      { kind: 'memory_record_start', name: 'timeline', reads: [{ region: 'RDRAM', offset: 0x2000, length: 2 }], capacity: 8 },
+      { kind: 'input', right: true }, { kind: 'write', addr: '0x2000', hex: '1234', view: 'rdram' }, { kind: 'run', n: 2 },
+      { kind: 'input', right: true, b: true }, { kind: 'write', addr: '0x2000', hex: '5678', view: 'rdram' }, { kind: 'run', n: 1 },
+      { kind: 'input' }, { kind: 'memory_record_stop', name: 'timeline' }
+    ] });
+    assert.equal(timeline.stop_reason, 'batch_done', JSON.stringify(timeline));
+    assert.equal(timeline.results[2].data.ports[0].pending.buttons, 1 << 7);
+    assert.equal(timeline.results[5].data.ports[0].pending.buttons, (1 << 7) | (1 << 1));
+    assert.equal(timeline.results[8].data.ports[0].pending.buttons, 0);
+    assert.equal((await peer.tool('controller_state')).ports[0].pending.overridden, false);
+    const handle = timeline.results[1].data.handle;
+    const recorded = await peer.tool('memory_capture_status', { handle });
+    assert.equal(recorded.active, false); assert.equal(recorded.next_sequence, 3);
+    for (const [sequence, hex] of [[0, '1234'], [1, '1234'], [2, '5678']]) {
+      const sample = await peer.tool('memory_capture_read', { handle, sequence, length: 2 });
+      assert.equal(sample.hex, hex); assert.equal(sample.frame, sequence + 1);
+    }
+    await peer.tool('memory_capture_release', { handle });
+    const inputError = await peer.tool('batch', { steps: [{ kind: 'memory_record_start', name: 'partial', reads: [{ region: 'RDRAM', offset: 0x2000, length: 2 }] }, { kind: 'input', a: true }, { kind: 'run', n: 1 }, { kind: 'state_load', path: path.join(dir, 'missing.bs') }] });
+    assert.equal(inputError.stop_reason, 'step_error');
+    const partial = await peer.tool('memory_capture_status', { handle: inputError.results[0].data.handle });
+    assert.equal(partial.active, false); assert.equal(partial.next_sequence, 1);
+    await peer.tool('memory_capture_release', { handle: partial.handle });
+    assert.equal((await peer.tool('controller_state')).ports[0].pending.overridden, false);
     for (const [candidate, hex, rgb] of [['red', 'f801', [255, 0, 0]], ['green', '07c1', [0, 255, 0]]]) {
       const output = path.join(dir, `${candidate}.png`);
       const result = await peer.tool('batch', { steps: [

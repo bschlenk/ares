@@ -14,7 +14,6 @@ export const nativeRuntimeSettings: readonly SettingDescriptor[] = [
 ];
 
 export const agentSettings: readonly SettingDescriptor[] = [
-  { id: 'agent.enabled', section: 'Agent Integration', title: 'Enable MCP and CLI access', type: 'boolean', default: false, apply: 'live' },
-  { id: 'agent.name', section: 'Agent Integration', title: 'Stable instance name (optional)', type: 'string', default: '', maxLength: 48, apply: 'live' },
+  { id: 'agent.enabled', section: 'Agent Integration', title: 'Enable MCP and CLI access', type: 'boolean', default: true, apply: 'live' },
   { id: 'debug.provenance', section: 'Agent Integration', title: 'Record N64 DMA provenance', type: 'boolean', default: false, apply: 'live' },
 ];

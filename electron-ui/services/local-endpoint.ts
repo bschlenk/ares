@@ -455,18 +455,20 @@ export class LocalServiceClient implements SessionClient {
     }
     this.pending.clear()
   }
+  protected async resolveConnection(): Promise<{ file: string; instance: string }> {
+    if (!this.named) return { file: this.metadataFile, instance: this.instance };
+    try { return { file: this.metadataFile, instance: await connectionInstance(this.metadataFile) }; }
+    catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') throw new ServiceError('instance_not_running'); throw e; }
+  }
   private async connect(): Promise<void> {
     if (this.stopped) throw new ServiceError('app_disconnected')
     if (this.socket && this.connection) return
     if (this.connecting) return this.connecting
     const generation = this.generation
     this.connecting = (async () => {
-      let selected = this.instance;
-      if (this.named) {
-        try { selected = await connectionInstance(this.metadataFile); }
-        catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') throw new ServiceError('instance_not_running'); throw e; }
-      }
-      const info = await readConnection(this.metadataFile, selected)
+      const target = await this.resolveConnection();
+      const selected = target.instance;
+      const info = await readConnection(target.file, selected)
       if (this.stopped || this.generation !== generation)
         throw new ServiceError('app_disconnected')
       await new Promise<void>((resolve, reject) => {

@@ -19,14 +19,7 @@ export function isBundledCliRuntime(appRoot: string, executable: string): boolea
     });
   } catch { return false; }
 }
-const shellWord = (value: string) => {
-  const home = os.homedir();
-  const safe = (word: string) => /^[a-zA-Z0-9_./:-]+$/.test(word) ? word : quote(word);
-  if (value === home) return '~';
-  return value.startsWith(home + '/') ? '~/' + safe(value.slice(home.length + 1)) : safe(value);
-};
-export async function mcpConfiguration(appRoot: string, packaged: boolean, executable: string, connection: string, instance: string, name?: string, directory?: string) {
-  const args = name ? ['--service-dir', directory!, '--instance-name', name] : ['--connection', connection, '--instance', instance];
+export async function mcpConfiguration(appRoot: string, packaged: boolean, executable: string) {
   let command = path.join(appRoot, '../ares-mcp');
   if (packaged) {
     const helper = path.join(os.homedir(), '.local/bin/ares-mcp');
@@ -35,11 +28,9 @@ export async function mcpConfiguration(appRoot: string, packaged: boolean, execu
       if (stat.isFile() && (stat.mode & 0o111) && (await fs.readFile(helper, 'utf8')).startsWith(`#!/bin/sh\n${marker}\n`)) command = helper;
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
-  const words = packaged ? [command, ...args] : [executable, path.join(appRoot, 'dist/mcp/server.js'), ...args];
-  // MCP clients spawn commands directly. Explicitly use a shell to expand home
-  // paths, quoting every argument so paths/names cannot become shell commands.
   return { mcpServers: { ares: {
-    command: '/bin/sh', args: ['-c', 'exec ' + words.map(shellWord).join(' ')],
+    command: packaged ? command : executable,
+    args: packaged ? [] : [path.join(appRoot, 'dist/mcp/server.js')],
     ...(!packaged ? { env: { ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '', NODE_PATH: '' } } : {}),
   } } };
 }

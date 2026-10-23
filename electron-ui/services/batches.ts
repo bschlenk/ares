@@ -23,6 +23,7 @@ export class Batches {
     const timer = setTimeout(() => job.cancel('timeout'), p.timeoutMs);
     let identity = { ...starting }, frame = 0, batchId: number | undefined;
     const results: BatchStepResult[] = [];
+    const recorders = new Map<string, number>();
     const guard = () => {
       if (cancelled) throw new ServiceError(cancelled);
       if (!current()) throw new ServiceError('native_host_disconnected');
@@ -44,7 +45,24 @@ export class Batches {
           let data: any;
           if (step.kind === 'state_load') {
             const r = await invoke.request('state.load', identity, { path: step.path, resume: false, keepOverrides: false }, child);
-            data = unwrap(r); identity = { session: r.session, epoch: r.epoch }; frame = data.frame;
+            data = unwrap(r); recorders.clear(); identity = { session: r.session, epoch: r.epoch }; frame = data.frame;
+          } else if (step.kind === 'input') {
+            const { kind, ...params } = step; data = unwrap(await invoke.request('n64.input.set', identity, params, child));
+          } else if (step.kind === 'memory_record_start') {
+            if (recorders.has(step.name)) throw new ServiceError('duplicate_recorder_name');
+            const { kind, name, ...params } = step;
+            const regions = unwrap(await native.request('memory.regions', identity, undefined, child)).regions;
+            const reads = params.reads.map(read => {
+              const matches = regions.filter(r => r.id === read.region || r.name === read.region);
+              if (matches.length !== 1) throw new ServiceError(matches.length ? 'ambiguous_region' : 'unknown_region');
+              return { ...read, region: matches[0].id };
+            });
+            data = unwrap(await native.request('memory.recorder.start', identity, { ...params, reads }, owner));
+            recorders.set(name, data.handle);
+          } else if (step.kind === 'memory_record_stop') {
+            const handle = recorders.get(step.name);
+            if (handle === undefined) throw new ServiceError('unknown_recorder_name');
+            data = unwrap(await native.request('memory.recorder.stop', identity, { handle }, owner));
           } else if (step.kind === 'write') {
             const { kind, ...params } = step; data = unwrap(await invoke.request('n64.memory.write', identity, params, child));
           } else if (step.kind === 'read') {
@@ -77,6 +95,11 @@ export class Batches {
       reason = e instanceof ServiceError ? e.code : 'batch_failed';
     } finally {
       clearTimeout(timer); revoke(); await release;
+      // Captures belong to the authenticated parent, not the disposable batch.
+      // Stop sampling on every exit; preserve retained data for subsequent reads.
+      for (const handle of recorders.values()) {
+        await native.request('memory.recorder.stop', identity, { handle }, owner).catch(() => {});
+      }
       if (this.jobs.get(owner) === job) this.jobs.delete(owner);
     }
     return { batch_id: batchId!, state: 'done', stopped: true, stop_reason: reason, start_epoch: starting.epoch,

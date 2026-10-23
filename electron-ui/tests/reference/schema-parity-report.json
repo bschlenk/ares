@@ -7,9 +7,11 @@
   "signature_matching": 68,
   "signature_differences": [],
   "reference_count": 68,
-  "current_count": 86,
+  "current_count": 88,
   "missing": [],
   "added": [
+    "close_rom",
+    "load_rom",
     "memory_capture_freeze",
     "memory_capture_read",
     "memory_capture_release",
@@ -148,6 +150,119 @@
                 {
                   "additionalProperties": false,
                   "properties": {
+                    "a": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "b": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "c_down": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "c_left": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "c_right": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "c_up": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "down": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "const": "input",
+                      "type": "string"
+                    },
+                    "l": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "left": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "port": {
+                      "default": 1,
+                      "maximum": 4,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "r": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "right": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "start": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "timeout_frames": {
+                      "anyOf": [
+                        {
+                          "maximum": 100000,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "timeout_seconds": {
+                      "anyOf": [
+                        {
+                          "maximum": 3600,
+                          "minimum": 0.001,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "up": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "x": {
+                      "default": 0,
+                      "maximum": 32767,
+                      "minimum": -32767,
+                      "type": "integer"
+                    },
+                    "y": {
+                      "default": 0,
+                      "maximum": 32767,
+                      "minimum": -32767,
+                      "type": "integer"
+                    },
+                    "z": {
+                      "default": false,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
                     "addr": {
                       "anyOf": [
                         {
@@ -227,6 +342,66 @@
                 {
                   "additionalProperties": false,
                   "properties": {
+                    "capacity": {
+                      "default": 60,
+                      "maximum": 1024,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "duration": {
+                      "default": 0,
+                      "maximum": 1000000,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "kind": {
+                      "const": "memory_record_start",
+                      "type": "string"
+                    },
+                    "name": {
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                      "type": "string"
+                    },
+                    "reads": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "length": {
+                            "maximum": 65536,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "offset": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "region": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "length",
+                          "offset",
+                          "region"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 64,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "name",
+                    "reads"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
                     "inline": {
                       "const": false,
                       "default": false,
@@ -281,6 +456,24 @@
                   "required": [
                     "kind",
                     "path"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "memory_record_stop",
+                      "type": "string"
+                    },
+                    "name": {
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "name"
                   ],
                   "type": "object"
                 },
