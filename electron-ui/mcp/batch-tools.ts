@@ -1,10 +1,11 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity } from '../services/contracts.js';
 import { lossless } from './n64-tools.js';
 import { screenshotSchema } from './screenshot-tools.js';
 import type { BatchStep } from '../services/batch-contracts.js';
-export function registerBatchTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>) {
+export function registerBatchTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>) {
   const addr = z.union([z.number().int().nonnegative(), z.string()]);
   const buttons = ['a','b','z','start','up','down','left','right','c_up','c_down','c_left','c_right','l','r'];
   const inputFields = Object.fromEntries(buttons.map(b => [b, z.boolean().default(false)]));
@@ -18,7 +19,7 @@ export function registerBatchTools(server: McpServer, client: SessionClient, sta
     z.object({ kind: z.literal('run'), n: z.number().int().min(0).max(1000000) }).strict(),
     screenshotSchema.extend({ kind: z.literal('screenshot'), path: z.string().min(1).max(4096), inline: z.literal(false).default(false) }).strict()
   ]);
-  server.registerTool('batch', { description: 'Ordered native-reserved state_load/input/write/run/screenshot/read and memory_record_start/stop steps. Input replaces the whole port state and is released on every batch exit. Recorders use batch-local names; returned handles remain readable by this connection and stop on batch exit. State loads invalidate earlier captures; start recorders after loading. Bounds: 256 steps, 1M total VI frames, 16 KiB read/write bytes, 8 file screenshots, 600 seconds, 128 KiB result. No nesting/parallel execution or rollback. State loads remain paused; interrupted runs retain actual progress. UI pause, human input, deadline or disconnect revoke ownership. Reload a baseline explicitly for each candidate.', inputSchema: z.object({ steps: z.array(steps).min(1).max(256), max_seconds: z.number().min(0.001).max(600).default(60), stop_on_error: z.boolean().default(true) }).strict() }, async p => {
+  server.registerTool('batch', { description: 'Results are returned once in results; deprecated steps alias is opt-in via legacy_results. Ordered native-reserved state_load/input/write/run/screenshot/read and memory_record_start/stop steps. Input replaces the whole port state and is released on every batch exit. Recorders use batch-local names; returned handles remain readable by this connection and stop on batch exit. State loads invalidate earlier captures; start recorders after loading. Bounds: 256 steps, 1M total VI frames, 16 KiB read/write bytes, 8 file screenshots, 600 seconds, 128 KiB result. No nesting/parallel execution or rollback. State loads remain paused; interrupted runs retain actual progress. UI pause, human input, deadline or disconnect revoke ownership. Reload a baseline explicitly for each candidate.', inputSchema: z.object({ steps: z.array(steps).min(1).max(256), max_seconds: z.number().min(0.001).max(600).default(60), stop_on_error: z.boolean().default(true), legacy_results: z.boolean().default(false) }).strict() }, async p => {
     const output = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
     try {
       const normalized: BatchStep[] = p.steps.map(s => {
@@ -31,7 +32,7 @@ export function registerBatchTools(server: McpServer, client: SessionClient, sta
       });
       const r = await client.request('experiment.batch', await status(), { steps: normalized, timeoutMs: Math.ceil(p.max_seconds * 1000), stopOnError: p.stop_on_error });
       if (!r.ok || !r.result) throw new ServiceError(r.error || 'invalid_reply');
-      return output({ ...r.result, steps: r.result.results });
+      return output(p.legacy_results ? { ...r.result, steps: r.result.results } : r.result);
     } catch (e) { return { ...output({ error: e instanceof ServiceError ? e.code : 'batch_failed' }), isError: true }; }
   });
 }

@@ -1,10 +1,11 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { traceEntries as entries } from '../services/trace-format.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity, type SessionReply, type ServiceParams } from '../services/contracts.js';
 import { GPR_NAMES, lossless } from './n64-tools.js';
 import type { TracePage } from '../services/trace-contracts.js';
-export function registerTraceTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity & { frame?: number }>, remember: (id: number, identity: SessionIdentity) => void, identityFor: (id: number) => SessionIdentity | undefined) {
+export function registerTraceTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity & { frame?: number }>, remember: (id: number, identity: SessionIdentity) => void, identityFor: (id: number) => SessionIdentity | undefined) {
   const output = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
   const call = (fn: () => Promise<unknown>) => fn().then(output, e => ({ ...output({ error: e instanceof ServiceError ? e.code : 'request_failed', message: e.message }), isError: true }));
   const unwrap = <T>(r: SessionReply<T>): T => { if (!r.ok || !r.result) throw new ServiceError(r.error || 'invalid_reply'); return r.result; };

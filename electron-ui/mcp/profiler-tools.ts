@@ -1,7 +1,8 @@
+import type { ToolRegistrar } from '../tools/registry.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { ServiceError, type SessionClient, type SessionIdentity, type SessionReply } from '../services/contracts.js';
-export function registerProfilerTools(server: McpServer, client: SessionClient, status: () => Promise<SessionIdentity>) {
+export function registerProfilerTools(server: ToolRegistrar, client: SessionClient, status: () => Promise<SessionIdentity>) {
   const output = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
   const unwrap = <T>(r: SessionReply<T>): T => { if (!r.ok || !r.result) throw new ServiceError(r.error || 'invalid_reply'); return r.result; };
   const call = async (action: () => Promise<unknown>) => {

@@ -1,7 +1,9 @@
-export const ARTIFACT_METHODS = ['artifact.traceExport'] as const;
+export const ARTIFACT_METHODS = ['artifact.traceExport', 'artifact.memoryExport'] as const;
 export interface TraceExportParams { operationId: number; path: string; overwrite: boolean }
 export interface PublishedArtifact { path: string; bytes: number; sha256: string; session: string; epoch: number; operation_id: number; entries: number; format: 'ares-trace-v1' | 'ares-rdp-capture-v1' }
-export interface ArtifactServiceMap { 'artifact.traceExport': { params: TraceExportParams; result: PublishedArtifact } }
+export interface MemoryExportParams { handle: number; path: string; overwrite: boolean }
+export interface MemoryExportResult { path: string; bytes: number; sha256: string; session: string; epoch: number; samples: number; format: 'ares-memory-capture-v1' }
+export interface ArtifactServiceMap { 'artifact.memoryExport': {params: MemoryExportParams; result: MemoryExportResult}; 'artifact.traceExport': { params: TraceExportParams; result: PublishedArtifact } }
 export function validTraceExport(p: any): p is TraceExportParams {
   return !!p && typeof p === 'object' && Object.keys(p).sort().join(',') === 'operationId,overwrite,path' && Number.isSafeInteger(p.operationId) && p.operationId > 0 && typeof p.path === 'string' && p.path.length > 0 && p.path.length <= 4096 && !p.path.includes('\0') && typeof p.overwrite === 'boolean';
 }

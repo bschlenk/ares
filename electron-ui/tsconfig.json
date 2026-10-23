@@ -22,6 +22,8 @@
     "protocol.ts",
     "bridge.ts",
     "services/**/*.ts",
-    "mcp/**/*.ts"
+    "mcp/**/*.ts",
+    "tools/**/*.ts",
+    "cli.ts"
   ]
 }
