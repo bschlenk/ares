@@ -327,3 +327,16 @@ pending and limit even when the renderer has not itself hit its admission bound.
 The internal window bridge is not the public SDK; native ok:false service replies
 remain ordinary resolved SDK replies. Live unload tests settle pending calls and
 verify both zero host bookkeeping and a working replacement plugin generation.
+
+## Controller mapping editors
+
+Panels may declare `"placement": "input-settings"` to appear in Settings → Input's
+editor selector. Register them with the ordinary `ui.registerPanel` API. The host
+mounts the selected editor while the Input page is open, and disposes it on close,
+selection change or plugin revocation. Scoped timers/listeners and mount signals
+work as for workspace panels. These panels are not workspace panels, so do not use
+`ui.openPanel` for them. Use `settings.read` / `settings.write` and the public
+`context.settings` API to configure host input bindings. The optional bundled
+[controller editor](../bundled-plugins/controls/README.md) demonstrates artwork,
+keyboard/Gamepad capture and remapping without special host access. Advanced
+input fields remain available independently of plugins.

@@ -88,7 +88,8 @@ test('registry scopes capabilities, resources, storage and pending work across l
     client,
     () => identity,
   )
-  await registry.initialize()
+  await registry.initialize([plugin])
+  assert.equal(registry.catalog().plugins.length, 1, 'a bundled directory explicitly enabled for development is discovered once')
   registry.attach()
   registry.observe({
     protocol: 1,

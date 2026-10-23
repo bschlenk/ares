@@ -106,7 +106,8 @@ export function validateManifest(value: unknown): PluginManifest {
       const names = new Set()
       for (const item of list) {
         if (
-          !object(item, ['id', 'title']) ||
+          !object(item, kind === 'panels' ? ['id', 'title', 'placement'] : ['id', 'title']) ||
+          (kind === 'panels' && item.placement !== undefined && item.placement !== 'input-settings') ||
           !text(item.id, 64) ||
           !id.test(item.id) ||
           !text(item.title) ||

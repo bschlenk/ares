@@ -1,0 +1,434 @@
+{
+  "nes": {
+    "sourceCrop": [
+      4,
+      4,
+      142,
+      143
+    ],
+    "artworkSize": [
+      128,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "snes": {
+    "sourceCrop": [
+      150,
+      4,
+      288,
+      143
+    ],
+    "artworkSize": [
+      128,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "n64": {
+    "sourceCrop": [
+      291,
+      4,
+      438,
+      143
+    ],
+    "artworkSize": [
+      137,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "gamecube": {
+    "sourceCrop": [
+      445,
+      4,
+      578,
+      143
+    ],
+    "artworkSize": [
+      128,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "wii": {
+    "sourceCrop": [
+      590,
+      4,
+      729,
+      143
+    ],
+    "artworkSize": [
+      128,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "wii-u": {
+    "sourceCrop": [
+      735,
+      4,
+      878,
+      143
+    ],
+    "artworkSize": [
+      128,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "switch": {
+    "sourceCrop": [
+      883,
+      29,
+      1023,
+      117
+    ],
+    "artworkSize": [
+      128,
+      73
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "game-boy": {
+    "sourceCrop": [
+      17,
+      149,
+      130,
+      290
+    ],
+    "artworkSize": [
+      100,
+      127
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "game-boy-color": {
+    "sourceCrop": [
+      167,
+      154,
+      260,
+      286
+    ],
+    "artworkSize": [
+      82,
+      119
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "game-boy-advance": {
+    "sourceCrop": [
+      294,
+      166,
+      439,
+      274
+    ],
+    "artworkSize": [
+      128,
+      91
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "nintendo-ds": {
+    "sourceCrop": [
+      445,
+      148,
+      580,
+      290
+    ],
+    "artworkSize": [
+      128,
+      127
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "nintendo-3ds-blue": {
+    "sourceCrop": [
+      585,
+      144,
+      735,
+      295
+    ],
+    "artworkSize": [
+      137,
+      137
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "nintendo-3ds-white": {
+    "sourceCrop": [
+      735,
+      144,
+      881,
+      295
+    ],
+    "artworkSize": [
+      137,
+      137
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "master-system": {
+    "sourceCrop": [
+      3,
+      313,
+      143,
+      417
+    ],
+    "artworkSize": [
+      128,
+      91
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "mega-drive": {
+    "sourceCrop": [
+      153,
+      314,
+      287,
+      418
+    ],
+    "artworkSize": [
+      119,
+      91
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "saturn": {
+    "sourceCrop": [
+      296,
+      295,
+      437,
+      438
+    ],
+    "artworkSize": [
+      128,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "dreamcast": {
+    "sourceCrop": [
+      446,
+      295,
+      579,
+      438
+    ],
+    "artworkSize": [
+      128,
+      127
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "game-gear": {
+    "sourceCrop": [
+      148,
+      463,
+      292,
+      562
+    ],
+    "artworkSize": [
+      128,
+      82
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "playstation": {
+    "sourceCrop": [
+      295,
+      597,
+      437,
+      719
+    ],
+    "artworkSize": [
+      128,
+      100
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "playstation-2": {
+    "sourceCrop": [
+      446,
+      592,
+      581,
+      727
+    ],
+    "artworkSize": [
+      128,
+      119
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "playstation-2-slim": {
+    "sourceCrop": [
+      589,
+      601,
+      730,
+      717
+    ],
+    "artworkSize": [
+      128,
+      100
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "playstation-3": {
+    "sourceCrop": [
+      735,
+      588,
+      877,
+      731
+    ],
+    "artworkSize": [
+      128,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "psp": {
+    "sourceCrop": [
+      584,
+      762,
+      734,
+      848
+    ],
+    "artworkSize": [
+      137,
+      73
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "ps-vita": {
+    "sourceCrop": [
+      731,
+      760,
+      883,
+      850
+    ],
+    "artworkSize": [
+      137,
+      73
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "xbox": {
+    "sourceCrop": [
+      441,
+      885,
+      580,
+      1014
+    ],
+    "artworkSize": [
+      128,
+      110
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "xbox-360": {
+    "sourceCrop": [
+      590,
+      880,
+      731,
+      1015
+    ],
+    "artworkSize": [
+      128,
+      110
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  },
+  "xbox-one": {
+    "sourceCrop": [
+      734,
+      880,
+      878,
+      1023
+    ],
+    "artworkSize": [
+      128,
+      128
+    ],
+    "canvasSize": [
+      144,
+      144
+    ]
+  }
+}

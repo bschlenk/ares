@@ -13,7 +13,10 @@ export function showSettings(tab = 'general'): void {
   window.dispatchEvent(new Event('ares-input-release'));
   for (const page of document.querySelectorAll<HTMLElement>('[data-page]')) page.hidden = page.dataset.page !== tab;
   for (const button of document.querySelectorAll<HTMLElement>('[data-tab]')) { button.setAttribute('aria-selected', String(button.dataset.tab === tab)); button.tabIndex = button.dataset.tab === tab ? 0 : -1; }
-  if (!dialog.open) dialog.showModal();
+  if (!dialog.open) {
+    dialog.showModal();
+    document.querySelector<HTMLElement>('[data-tab][aria-selected="true"]')?.focus({ preventScroll: true });
+  }
 }
 export function closeSettings(): void { dialog.close(); element<HTMLCanvasElement>('screen').focus({ preventScroll: true }); }
 element('close-settings').onclick = closeSettings;
@@ -33,7 +36,7 @@ for (const tab of document.querySelectorAll<HTMLElement>('[data-tab]')) {
   };
 }
 mountSettingsForm(element('settings-general'), window.ares.preferences, entry => ['Presentation', 'Audio', 'Video'].includes(entry.descriptor.section));
-mountSettingsForm(element('settings-input'), window.ares.preferences, entry => entry.descriptor.id.startsWith('input.'));
+mountSettingsForm(element('settings-input-advanced'), window.ares.preferences, entry => entry.descriptor.id.startsWith('input.'));
 mountSettingsForm(element('settings-firmware'), window.ares.preferences, entry => entry.descriptor.id.startsWith('firmware.') || entry.descriptor.id === 'paths.importBml');
 mountSettingsForm(element('settings-core'), window.ares.preferences, entry => !!entry.descriptor.nativeKey && !['Presentation', 'Audio', 'Video', 'Firmware', 'Paths'].includes(entry.descriptor.section));
 mountSettingsForm(element('settings-plugins'), window.ares.preferences, entry => entry.descriptor.id.startsWith('plugin:'));

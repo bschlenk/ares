@@ -1,4 +1,5 @@
 import { workspace, showSettings, notify } from '../workspace/shell.js'
+import { registerInputSettingsPanel } from '../settings/input-panels.js'
 import { panelKey } from '../workspace/model.js'
 import type { PluginCatalog, PluginInfo, PluginCandidate } from './contracts.js'
 import type { PluginModule } from './sdk.js'
@@ -86,16 +87,19 @@ manager.querySelector<HTMLButtonElement>('[data-refresh]')!.onclick = () =>
 function host(id: string): Dock {
   return {
     commands: manager.querySelector('[data-commands]')!,
-    registerPanel: (local, title, mount) => workspace.registerPanel(panelKey(id, local), title, context => {
-      try { return mount(context) } catch (error) {
-        const scope = scopes.get(id)
-        if (scope && !scope.abort.signal.aborted) {
-          errors.set(id, String(error)); void scope.dispose().catch(showError)
-          void bridge.fail(scope.token, String(error)).catch(() => {})
+    registerPanel: (local, title, mount, placement) => {
+      const register = placement === 'input-settings' ? registerInputSettingsPanel : workspace.registerPanel.bind(workspace)
+      return register(panelKey(id, local), title, context => {
+        try { return mount(context) } catch (error) {
+          const scope = scopes.get(id)
+          if (scope && !scope.abort.signal.aborted) {
+            errors.set(id, String(error)); void scope.dispose().catch(showError)
+            void bridge.fail(scope.token, String(error)).catch(() => {})
+          }
+          throw error
         }
-        throw error
-      }
-    }),
+      })
+    },
     openPanel: (local, automatic) => workspace.openPanel(panelKey(id, local), automatic),
     changed: health,
     error: error => {

@@ -31,7 +31,8 @@
     "test:workspace": "npm run build && electron tests/electron-workspace.mjs",
     "test:settings": "npm run build && electron tests/electron-settings.mjs",
     "test:recovery": "npm run build && electron tests/electron-recovery.mjs --disable-plugins",
-    "accept": "node scripts/accept.cjs"
+    "accept": "node scripts/accept.cjs",
+    "test:controls": "npm run build && electron tests/electron-controls.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

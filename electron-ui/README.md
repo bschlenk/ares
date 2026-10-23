@@ -68,13 +68,14 @@ ARES_SYSTEM='PlayStation' ARES_ROM='/absolute/path/to/disc.cue' npm start --pref
 
 Run `npm start` from `electron-ui/` (or `npm start --prefix electron-ui` from the
 repository root). Each launch builds into a fresh ignored `artifacts/runs/launch-*`
-snapshot and copies the native host, media databases and bundled plugins there.
+snapshot and copies the native host and media databases there. Bundled plugin
+sources are linked to the checkout so plugin edits reload automatically.
 The running instance keeps its snapshot until shutdown. Subsequent JS/test/package
 builds and native host relinks cannot replace its executable or loaded UI files.
 Normal shutdown removes the snapshot; a killed launcher may leave a disposable
 snapshot behind. Dependencies in `node_modules` are shared; quit development apps
 before reinstalling dependencies. Explicit local plugin directories remain watched
-for authoring; bundled plugins are copied with the runtime.
+for authoring; bundled plugins are watched directly from the checkout.
 
 Development launches use the `development` profile by default; copied apps use
 `default`. On macOS, named profiles live under
