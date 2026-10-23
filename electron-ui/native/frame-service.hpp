@@ -12,6 +12,9 @@ struct FrameService {
   struct Tag { uint64_t epoch = 0, frame = 0; };
   struct Image {
     std::vector<uint8_t> pixels;
+    std::shared_ptr<const std::vector<uint8_t>> packet;
+    const uint8_t* data() const { return packet ? packet->data() + 48 : pixels.data(); }
+    size_t size() const { return uint64_t(width) * height * 4; }
     uint32_t width = 0, height = 0, origin = 0, depth = 0;
     uint64_t epoch = 0, frame = 0, sequence = 0, nonblack = 0;
     bool framebuffer = false;
@@ -23,29 +26,34 @@ struct FrameService {
   uint64_t epoch = 1, nextId = 1;
   std::unordered_map<const void*, Tag> submissions;
   std::shared_ptr<const Image> latest;
+  Image presented;
   std::vector<Pin> pins;
   static constexpr uint64_t maxPixels = 4194304;
   void submitted(const void* screen, uint64_t e, uint64_t f) {
-    if(!enabled) return;
     std::lock_guard guard(mutex);
     if(submissions.size() < 8 || submissions.count(screen)) submissions[screen] = {e, f};
   }
   void forget(const void* screen) { std::lock_guard guard(mutex); submissions.erase(screen); }
   void reset(uint64_t e) {
-    std::lock_guard guard(mutex); epoch = e; latest.reset(); pins.clear();
+    std::lock_guard guard(mutex); epoch = e; latest.reset(); presented = {}; pins.clear();
     // Keep submission tags: an already queued refresh must retain its old epoch.
   }
-  void observe(const void* screen, const uint8_t* rgba, uint32_t width, uint32_t height, uint64_t sequence, uint64_t syntheticEpoch = 0, uint64_t syntheticFrame = 0) {
-    if(!enabled || !width || !height || uint64_t(width) * height > maxPixels) return;
+  void observe(const void* screen, const uint8_t* rgba, uint32_t width, uint32_t height, uint64_t sequence, uint64_t syntheticEpoch = 0, uint64_t syntheticFrame = 0, std::shared_ptr<const std::vector<uint8_t>> packet = {}) {
+    if((!enabled && !packet) || !width || !height || uint64_t(width) * height > maxPixels) return;
     std::lock_guard guard(mutex);
     Tag tag{syntheticEpoch, syntheticFrame};
     if(screen) { auto it = submissions.find(screen); if(it == submissions.end()) return; tag = it->second; }
     if(tag.epoch != epoch) return;
     if(onCapture) onCapture(rgba, width, height, tag.epoch, tag.frame);
-    auto image = std::make_shared<Image>();
-    image->width = width; image->height = height; image->epoch = tag.epoch; image->frame = tag.frame; image->sequence = sequence;
-    image->pixels.assign(rgba, rgba + uint64_t(width) * height * 4);
-    latest = std::move(image);
+    if(packet) {
+      presented.width = width; presented.height = height; presented.epoch = tag.epoch;
+      presented.frame = tag.frame; presented.sequence = sequence; presented.packet = std::move(packet);
+    } else {
+      auto image = std::make_shared<Image>();
+      image->width = width; image->height = height; image->epoch = tag.epoch; image->frame = tag.frame; image->sequence = sequence;
+      image->pixels.assign(rgba, rgba + uint64_t(width) * height * 4);
+      latest = std::move(image);
+    }
   }
   void releaseOwner(const std::string& owner) {
     std::lock_guard guard(mutex); std::erase_if(pins, [&](const Pin& pin) { return pin.owner == owner; });
@@ -94,7 +102,6 @@ struct FrameService {
         if(!ExecutionService::number(args[1], expected)) return {"invalid_request", {}};
         if(!paused || f != expected) return {"capture_frame_changed", {}};
       }
-      enabled = true;
       if(args[0] == "framebuffer") {
         if(!n64) return {"unavailable", {}};
         auto result = framebuffer(image, e, f); if(!result.error.empty()) return result;
@@ -104,14 +111,14 @@ struct FrameService {
     std::erase_if(pins, [](const Pin& pin) { return Clock::now() >= pin.expires; });
     if(method == "video.begin") {
       if(e != epoch) return {"stale_epoch", {}};
-      if(!image) image = latest;
+      if(!image) image = presented.packet ? std::make_shared<Image>(presented) : latest;
       if(!image) return {"no_frame", {}};
       if(image->epoch != e) return {"stale_frame", {}};
       if(!image->framebuffer && image->width <= 1 && image->height <= 1) return {"invalid_frame", {}};
       if(pins.size() >= 2 || std::any_of(pins.begin(), pins.end(), [&](const Pin& pin) { return pin.owner == owner; })) return {"busy", {}};
       uint64_t id = nextId++; pins.push_back({id, owner, image, Clock::now() + std::chrono::seconds(30)});
       return {{}, "{\"snapshot_id\":" + std::to_string(id) + ",\"width\":" + std::to_string(image->width) + ",\"height\":" + std::to_string(image->height)
-        + ",\"bytes\":" + std::to_string(image->pixels.size()) + ",\"epoch\":" + std::to_string(image->epoch) + ",\"frame\":" + std::to_string(image->frame)
+        + ",\"bytes\":" + std::to_string(image->size()) + ",\"epoch\":" + std::to_string(image->epoch) + ",\"frame\":" + std::to_string(image->frame)
         + ",\"frame_kind\":" + controlQuote(n64 ? "vi" : frameKind) + ",\"current_frame\":" + std::to_string(f)
         + ",\"sequence\":" + std::to_string(image->sequence) + ",\"source\":" + controlQuote(image->framebuffer ? "framebuffer" : "presented")
         + ",\"origin\":" + (image->framebuffer ? controlQuote(N64Service::hex(image->origin)) : "null") + ",\"color_depth\":" + std::to_string(image->depth)
@@ -125,8 +132,9 @@ struct FrameService {
     if(pin == pins.end()) return {"stale_snapshot", {}};
     if(pin->owner != owner) return {"busy", {}};
     if(method == "video.release") { pins.erase(pin); return {{}, "{\"released\":true}"}; }
-    auto& data = pin->image->pixels;
-    if(offset >= data.size() || length > data.size() - offset) return {"out_of_bounds", {}};
+    auto* data = pin->image->data();
+    auto size = pin->image->size();
+    if(offset >= size || length > size - offset) return {"out_of_bounds", {}};
     std::string hex; hex.reserve(length * 2); static const char digits[] = "0123456789abcdef";
     for(uint64_t n = offset; n < offset + length; ++n) { hex += digits[data[n] >> 4]; hex += digits[data[n] & 15]; }
     return {{}, "{\"snapshot_id\":" + std::to_string(id) + ",\"offset\":" + std::to_string(offset) + ",\"length\":" + std::to_string(length) + ",\"hex\":" + controlQuote(hex) + "}"};

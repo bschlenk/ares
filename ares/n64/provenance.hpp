@@ -33,6 +33,10 @@ struct DmaProvenance {
     if(enabled) return;
     enabled = true; enabledAtFrame = executionCoordinate.frame; historyComplete = false;
   }
+  void disable() {
+    enabled = false; historyComplete = false; current = nullptr;
+    std::vector<Record>().swap(records); dropped = 0; writeIndex = 0;
+  }
   void begin(uint32_t cart, uint32_t dram, uint32_t length, uint64_t pc, uint32_t romSize, uint32_t ramSize, bool linear) {
     if(!enabled) { current = nullptr; return; }
     Record r;

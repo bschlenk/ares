@@ -189,6 +189,7 @@ export function decodeReply<M extends ServiceMethod = 'session.status'>(line: st
   if (r.ok) {
     const s = r.result;
     let valid = false;
+    if (method === 'runtime.provenance') valid = !!s && typeof s.enabled === 'boolean';
     if (method === 'runtime.settings' || method === 'runtime.configure') valid = validRuntimeSettings(s);
     if (method.startsWith('state.') || method.startsWith('n64.state.')) valid = validStateResult(method, s) && (!['state.load', 'n64.state.loadCommit'].includes(method) || s.epoch === r.epoch);
     if (method.startsWith('audio.') || method === 'artifact.audioSave') valid = validAudio(method, s) && (method !== 'artifact.audioSave' || s.epoch === r.epoch);

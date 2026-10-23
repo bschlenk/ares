@@ -123,7 +123,7 @@ async function run() {
     { cwd: temporary, env, input: 'quit\n', timeout: 10000 },
   )
   const child = spawn(
-    path.join(bundle, 'Contents/MacOS/Electron'),
+    path.join(bundle, 'Contents/MacOS/Ares'),
     [`--user-data-dir=${path.join(temporary, 'profile')}`],
     { cwd: temporary, env },
   )
@@ -156,7 +156,7 @@ async function run() {
     const inventory = (await peer.request('tools/list', {})).result.tools.map(
       (t) => t.name,
     )
-    assert.equal(inventory.length, 85)
+    assert.equal(inventory.length, 86)
     for (const name of [
       'profiler_control',
       'profiler_clear',

@@ -96,3 +96,32 @@ Validation: `npm run test:settings` exercises real Electron controls and reload;
 `tests/settings.test.cjs` covers persistence across reconstructed stores, unknown
 keys, descriptor removal/readdition, validation, malformed files and failed or
 deferred application.
+
+## Agent Integration
+
+Agents can use MCP `provenance_control` with `{"enabled":true}` before loading a
+ROM and `{"enabled":false}` when finished. Omitting `enabled` queries the state.
+It controls the same setting as the checkbox and applies to subsequent ROM loads.
+
+Settings → Agent Integration controls live MCP/CLI access, independently of the
+current ROM. Access defaults off and persists per profile. `--services` /
+`--no-services` override the initial state without changing the profile; the last
+flag wins. A Settings edit can override that initial choice during the run.
+An optional stable instance name allows copied MCP configuration to survive app
+restarts. Copy MCP configuration uses the selected name or exact current UUID.
+Packaged apps can install `ares`, `ares-mcp` and `ares-plugin` wrappers in
+`~/.local/bin`; reinstall after moving the app.
+
+Record N64 DMA provenance defaults off. Enable it before the transfers of interest;
+turning it off stops recording and frees its bounded history. Reading `overlay_log`
+does not enable it. Screenshots share the existing video packet rather than
+copying a separate debug image every frame. Video recording captures only while
+its explicit recording operation is active.
+
+The visible MCP configuration preview and Copy button use `/bin/sh` to expand
+`~/.local/bin/ares-mcp` at launch
+when an executable Ares-managed helper is installed, so reinstalling helpers
+from a moved app preserves the configured command. Before helper installation,
+it falls back to the current bundle path. Install helpers before copying the
+configuration for a stable setup. Choose a stable instance name as well to keep
+the connection selection valid across app restarts.

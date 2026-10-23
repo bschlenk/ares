@@ -25,6 +25,7 @@ export type NativeCommand =
   | { type: 'clear' }
   | { type: 'report'; report: RendererStats };
 export interface AresBridge {
+  agentAction(action: 'copy' | 'install' | 'preview'): Promise<string>;
   workspace: WorkspaceBridge;
   onAction(callback: (action: 'settings' | 'open' | 'pause' | 'reset' | 'edit-workspace' | 'reset-workspace') => void): () => void;
   plugins: PluginBridge;

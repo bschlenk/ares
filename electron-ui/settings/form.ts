@@ -1,7 +1,7 @@
 import type { PreferencesBridge, SettingEntry, SettingsSnapshot } from './contracts.js';
 
 /** Descriptor-driven controls; reusable by a settings plugin with the same API. */
-export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridge, include = (_entry: SettingEntry) => true): () => void {
+export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridge, include = (_entry: SettingEntry) => true, expandSections = false): () => void {
   const message = document.createElement('p');
   message.setAttribute('role', 'status');
   const sections = document.createElement('div');
@@ -38,6 +38,7 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
         if (!group) {
           const details = document.createElement('details'), summary = document.createElement('summary');
           summary.textContent = descriptor.section;
+          details.open = expandSections;
           details.append(summary); sections.append(details); groups.set(descriptor.section, details); group = details;
         }
         const field = document.createElement('div'), label = document.createElement('label');

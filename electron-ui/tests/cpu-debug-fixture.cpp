@@ -326,6 +326,14 @@ int main(int argc, char** argv) {
   check(partial.requestedLength == 8 && partial.bytesWritten == 6 && partial.ranges[0].address == 0x3012 && partial.ranges[0].length == 6, "PI misalignment records actual short first-block writes");
   for(unsigned n = 0; n < 6; ++n) check(rdram.ram.read<Byte>(0x3012 + n, RBusDevice::ARES_DEBUGGER) == 0x80 + n, "short PI range agrees with actual RAM");
   check(rdram.ram.read<Byte>(0x3018, RBusDevice::ARES_DEBUGGER) == 0, "PI provenance does not extend through untouched bytes");
+  // Reading provenance must not silently opt ordinary gameplay into recording.
+  dmaProvenance.disable();
+  DmaService disabledDma; disabledDma.available = true;
+  auto disabledPage = disabledDma.execute({"0", "16", "1024", "2359296"});
+  check(disabledPage.error.empty() && !dmaProvenance.enabled && dmaProvenance.records.empty(), "DMA read leaves recording disabled and disabled history is freed");
+  dmaProvenance.enable();
+  pi.power(false); pi.io.pbusAddress = 0x10000000; pi.io.dramAddress = 0x3000; pi.io.writeLength = 7; pi.io.originPc = base + 0x218; pi.dmaWrite();
+  pi.power(false); pi.io.pbusAddress = 0x10000000; pi.io.dramAddress = 0x3012; pi.io.writeLength = 7; pi.io.originPc = base + 0x218; pi.dmaWrite();
   DmaService dmaView; dmaView.available = true;
   auto dmaPage = dmaView.execute({"0", "16", "1024", "2359296"});
   check(dmaPage.error.empty(), "DMA log serializes actual transfers");
@@ -451,11 +459,13 @@ int main(int argc, char** argv) {
   images.releaseOwner("image-owner");
   const void* screenToken = &images;
   const uint8_t rgba[16] = {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255};
-  images.submitted(screenToken, 1, 10); images.observe(screenToken, rgba, 2, 2, 1);
-  check(images.latest && images.latest->epoch == 1 && images.latest->frame == 10, "native presented image uses emulation-thread submission tag");
-  images.reset(2); images.observe(screenToken, rgba, 2, 2, 2);
+  auto packet = std::make_shared<std::vector<uint8_t>>(48 + sizeof(rgba));
+  std::copy(rgba, rgba + sizeof(rgba), packet->data() + 48);
+  images.submitted(screenToken, 1, 10); images.observe(screenToken, rgba, 2, 2, 1, 0, 0, packet);
+  check(images.presented.packet == packet && images.presented.epoch == 1 && images.presented.frame == 10 && !images.enabled, "native presented image uses emulation-thread submission tag");
+  images.reset(2); images.observe(screenToken, rgba, 2, 2, 2, 0, 0, packet);
   check(!images.latest && images.execute("video.begin", {"presented"}, "image-owner", 2, 0, true).error == "no_frame", "delayed pre-reset refresh cannot become a fresh image");
-  images.submitted(screenToken, 2, 0); images.observe(screenToken, rgba, 2, 2, 3);
+  images.submitted(screenToken, 2, 0); images.observe(screenToken, rgba, 2, 2, 3, 0, 0, packet);
   check(images.execute("video.begin", {"presented"}, "image-owner", 2, 0, true).error.empty(), "new-epoch presented snapshot accepted");
   images.pins[0].expires = FrameService::Clock::now() - std::chrono::seconds(1);
   check(images.execute("video.read", {std::to_string(images.pins[0].id), "0", "4"}, "image-owner", 2, 0, true).error == "stale_snapshot", "expired native image pin revoked");

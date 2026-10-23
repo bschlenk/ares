@@ -5,7 +5,7 @@ import { inputDescriptors } from './settings/input.js'
 import { validRuntimeSettings, type RuntimeSettings } from './services/runtime-contracts.js'
 import { coreDescriptors, firmwareDescriptors, importedValues, nativeSettingsBml, parseNativeSettingsInfo } from './settings/native.js'
 import { SettingsStore } from './settings/store.js'
-import { presentationSettings, nativeRuntimeSettings } from './settings/builtins.js'
+import { presentationSettings, nativeRuntimeSettings, agentSettings } from './settings/builtins.js'
 import { profileRoot, profileSaves } from './profile.js'
 import { PluginRegistry } from './plugins/registry.js'
 import {
@@ -16,6 +16,7 @@ import {
   MessageChannelMain,
   Menu,
   protocol,
+  clipboard,
   type MessagePortMain,
 } from 'electron'
 import { spawn, execFile, type ChildProcessByStdio } from 'node:child_process'
@@ -27,7 +28,8 @@ import { performance } from 'node:perf_hooks'
 import { FrameParser, type NativeFrame } from './protocol.js'
 import { randomUUID } from 'node:crypto'
 import { NativeSessionClient } from './services/native-client.js'
-import { LocalServiceHost } from './services/local-endpoint.js'
+import { LocalServiceHost, defaultServiceDirectory } from './services/local-endpoint.js'
+import { installCliHelpers, mcpConfiguration, isBundledCliRuntime } from './agent-integration.js'
 import { SessionRouter } from './services/session-router.js'
 import type { NativeCommand, StartOptions } from './bridge.js'
 import type {
@@ -175,6 +177,13 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
   )
     throw new Error('invalid_plugin_request')
   switch (params.operation) {
+    case 'provenance': {
+      if (Object.keys(params).sort().join(',') !== 'operation' && Object.keys(params).sort().join(',') !== 'enabled,operation') throw new Error('invalid_provenance_request')
+      if (params.enabled !== undefined && typeof params.enabled !== 'boolean') throw new Error('invalid_provenance_request')
+      const snapshot = params.enabled === undefined ? preferences.catalog() : await setPreference('debug.provenance', params.enabled)
+      const entry = snapshot.entries.find(entry => entry.descriptor.id === 'debug.provenance')!
+      return { enabled: entry.applied, requested: entry.value, pending: entry.pending, error: snapshot.error ?? null }
+    }
     case 'logs':
       return plugins.logs(params.id, params.cursor, params.limit, params.generation)
     case 'screenshot': {
@@ -243,6 +252,7 @@ export const workspace = new WorkspaceStore(path.join(app.getPath('userData'), '
 export const preferences = new SettingsStore(
   path.join(app.getPath('userData'), 'preferences.json'), [
     ...presentationSettings,
+    ...agentSettings,
     ...nativeRuntimeSettings,
     ...inputDescriptors,
     { id: 'paths.importBml', title: 'Imported ares settings', section: 'Paths', type: 'string', file: { extensions: ['bml'] },
@@ -252,6 +262,24 @@ export const preferences = new SettingsStore(
     if (window && !window.isDestroyed()) window.webContents.send('preferences-changed', snapshot)
   },
   async (id, value) => {
+    if (id === 'agent.enabled') { await configureServices(value === true); return }
+    if (id === 'agent.name') {
+      if (value && !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$/.test(String(value))) throw new Error('Use letters, numbers, underscores or hyphens for the instance name')
+      if (serviceHost.info) {
+        const previousName = String(preferences.catalog().entries.find(entry => entry.descriptor.id === 'agent.name')!.applied)
+        await serviceHost.close()
+        try { await configureServices(true, String(value)) }
+        catch (error) { await configureServices(true, previousName); throw error }
+      }
+      return
+    }
+    if (id === 'debug.provenance') {
+      if (sessions.identity) {
+        const reply = await sessions.request('runtime.provenance', sessions.identity, { enabled: value === true })
+        if (!reply.ok) throw new Error(reply.error)
+      }
+      return
+    }
     if (!nativeRuntimeSettings.some(descriptor => descriptor.id === id)) return
     const session = active, identity = sessions.identity
     if (!session || !identity) throw new Error('no_session; applies on next ROM load')
@@ -268,8 +296,26 @@ export const preferences = new SettingsStore(
     if (active !== session || sessions.identity?.session !== identity.session || sessions.identity?.epoch !== identity.epoch) throw new Error('stale_session')
     if (Object.keys(configuration).some(key => reply.result?.[key as keyof RuntimeSettings] !== configuration[key as keyof RuntimeSettings])) throw new Error('runtime_settings_not_applied')
   },
-  process.env.ARES_SETTINGS ? { 'paths.importBml': process.env.ARES_SETTINGS } : {},
+  {
+    ...(process.env.ARES_SETTINGS ? { 'paths.importBml': process.env.ARES_SETTINGS } : {}),
+    ...(serviceLaunchOverride() === undefined ? {} : { 'agent.enabled': serviceLaunchOverride() }),
+  },
 )
+function serviceLaunchOverride(): boolean | undefined {
+  const switches = process.argv.filter(arg => arg === '--services' || arg === '--no-services')
+  if (switches.length) return switches.at(-1) === '--services'
+  if (process.env.ARES_ENABLE_SERVICES === '1' || process.argv.includes('--instance-name')) return true
+  return undefined
+}
+async function configureServices(enabled: boolean, selectedName?: string) {
+  if (!enabled) { await serviceHost.close(); return }
+  if (serviceHost.info) return
+  const index = process.argv.indexOf('--instance-name')
+  const name = index < 0 ? (selectedName ?? String(preferences.catalog().entries.find(entry => entry.descriptor.id === 'agent.name')!.applied)) || undefined : process.argv[index + 1]
+  if (index >= 0 && (!name || name.startsWith('--'))) throw new Error('invalid_instance_name')
+  const file = await serviceHost.listen(process.env.ARES_SERVICE_DIR, name, hostPath)
+  console.error(`ares service instance ${serviceHost.instance}: ${file}`)
+}
 let nativeSettingsRegistered = false
 async function refreshNativeSettings() {
   const importedFile = String(preferences.catalog().entries.find(entry => entry.descriptor.id === 'paths.importBml')!.value)
@@ -283,6 +329,7 @@ async function refreshNativeSettings() {
   preferences.inherit(importedValues(info, preferences.catalog().entries.map(entry => entry.descriptor)))
 }
 async function setPreference(id: string, value: unknown, reset = false, guard: () => void = () => {}) {
+  if (id === 'agent.name' && !reset && value !== '' && (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$/.test(value))) throw new Error('Use letters, numbers, underscores or hyphens for the instance name')
   if (reset) await preferences.reset(id, guard); else await preferences.set(id, value, guard)
   if (id === 'paths.importBml') await refreshNativeSettings()
   return preferences.catalog()
@@ -353,11 +400,7 @@ async function start(options: StartOptions) {
   await stop()
   const args = options.rom ? ['--rom', options.rom] : ['--synthetic']
   if (options.rom) args.push('--system', system)
-  if (
-    process.env.ARES_ENABLE_SERVICES === '1' ||
-    process.argv.includes('--services') || process.argv.includes('--instance-name')
-  )
-    args.push('--debug-provenance', '--debug-capture')
+  if (startupSettings.entries.find(entry => entry.descriptor.id === 'debug.provenance')!.value) args.push('--debug-provenance')
   for (const media of options.media || []) args.push('--media', media)
   if (settingsFile) args.push('--settings', settingsFile)
   if (options.hd) args.push('--1080p')
@@ -418,7 +461,7 @@ async function start(options: StartOptions) {
     removeConfiguration()
     if (reply.ok && active === session) {
       preferences.markApplied(startupSettings, 'next-rom')
-      preferences.markApplied(startupSettings, 'live', nativeRuntimeSettings.map(descriptor => descriptor.id))
+      preferences.markApplied(startupSettings, 'live', [...nativeRuntimeSettings.map(descriptor => descriptor.id), 'debug.provenance'])
     }
   }).catch(error => status(String(error)))
   child.on('error', (error) =>
@@ -493,13 +536,7 @@ app
         })
       }
     })
-    if (
-      process.env.ARES_ENABLE_SERVICES === '1' ||
-      process.argv.includes('--services') || process.argv.includes('--instance-name')
-    ) {
-      const file = await serviceHost.listen(process.env.ARES_SERVICE_DIR, process.argv[process.argv.indexOf('--instance-name') + 1] && process.argv.includes('--instance-name') ? process.argv[process.argv.indexOf('--instance-name') + 1] : undefined, hostPath)
-      console.error(`ares service instance ${serviceHost.instance}: ${file}`)
-    }
+    await configureServices(preferences.catalog().entries.find(entry => entry.descriptor.id === 'agent.enabled')!.value === true)
     window = new BrowserWindow({
       show: process.env.ARES_BACKGROUND_TEST !== '1',
       width: 1100,
@@ -698,6 +735,24 @@ app
         return sessions.request(method, identity, params)
       },
     )
+    ipcMain.handle('agent.action', async (event, action: unknown) => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('invalid_sender')
+      const bundled = isBundledCliRuntime(appRoot, process.execPath)
+      if (action === 'install') return installCliHelpers(appRoot, bundled, process.execPath)
+      if (action === 'copy' || action === 'preview') {
+        if (action === 'copy' && (!serviceHost.info || !serviceHost.metadataFile)) throw new Error('Enable MCP and CLI access first')
+        const directory = process.env.ARES_SERVICE_DIR || defaultServiceDirectory()
+        const connection = serviceHost.metadataFile || path.join(directory, `${serviceHost.instance}.json`)
+        const configuration = await mcpConfiguration(appRoot, bundled, process.execPath, connection, serviceHost.instance,
+          process.argv.includes('--instance-name') ? process.argv[process.argv.indexOf('--instance-name') + 1] : String(preferences.catalog().entries.find(entry => entry.descriptor.id === 'agent.name')!.applied) || undefined,
+          directory)
+        const json = JSON.stringify(configuration, null, 2)
+        if (action === 'preview') return json
+        await clipboard.writeText(json)
+        return 'MCP configuration copied'
+      }
+      throw new Error('invalid_request')
+    })
     for (const operation of ['catalog', 'set', 'reset', 'chooseFile'] as const) {
       ipcMain.handle('preferences.' + operation, (event, ...args: unknown[]) => {
         if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)

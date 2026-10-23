@@ -2457,3 +2457,97 @@ particle parser found four emitters. No raw game data is tracked. Existing isola
 cross-binary serializer test passed v153 in both directions and rejected incompatible
 4 MiB configuration (`artifacts/state-reference.json`). Handoff records exact scope
 and remaining exclusions. Final harness syntax and `git diff --check` passed.
+
+## Runtime agent access and centralized macOS app build — 2026-10-23
+
+Added `scripts/build-macos-app.sh`: configure/build native, install missing npm
+packages, compile UI, package/sign into staging, then publish `build_macos/Ares.app`.
+The old app survives failed packaging; repeated successful builds replace it.
+Native build defaults to `build_macos/workbench`; `ARES_NATIVE_BUILD_DIR` supports
+reusing an existing native build (used for this verification).
+
+Settings → Agent Integration now persists live MCP/CLI access and an optional
+stable instance name, copies exact/named MCP configuration, and installs packaged
+CLI wrappers in `~/.local/bin` without replacing unrelated commands. Launch
+`--services` / `--no-services` override the initial preference without rewriting
+it; Settings edits remain available. Disabling disconnects external owners;
+re-enabling preserves the native game session. Instance rename restores the
+previous endpoint if acquiring the new name fails.
+
+DMA provenance is separately explicit/default-off: `runtime.provenance` changes
+recording at a native safe point; disabling frees its ring. `overlay_log` reports
+`enabled` and never starts recording. Native screenshot pins share pooled immutable
+presentation packets instead of copying an extra RGBA image every frame. Video
+recording remains explicitly started and bounded.
+
+Verification:
+
+- Native host/CPU fixture and all three strict TypeScript builds passed.
+- Sequential suite: 122 tests, 121 passed, 0 failed, 1 optional private Kirby ROM
+  check skipped. This is not a claim of a fresh complete `npm run accept` pass.
+- Native synthetic transport + original generated GB/NES smoke passed.
+- Actual Electron runtime access enable/disable/re-enable, stable-name reconnect,
+  clipboard configuration, idle screenshot and unchanged native session passed;
+  separate `--services` and `--no-services` cases preserved saved preferences.
+- Full actual Electron/MCP integration passed, including GB screenshots/audio,
+  renderer reload, N64 debugging, explicit provenance-off and shutdown.
+- CLI wrapper quoting/refusal and copied configuration tests passed; final targeted
+  settings/helper suite: 8 passed. Settings layout visually inspected.
+- Central build command successfully produced and replaced `build_macos/Ares.app`.
+  Copied app MCP/plugin CLI/TSX reload checks passed with checkout access denied.
+- Acceptance runner now includes all three runtime agent launch modes; the entire
+  runner was not rerun for this change. Release signing/notarization remains deferred.
+
+### Stable copied MCP launcher — 2026-10-23
+
+Copy MCP configuration now prefers the absolute `~/.local/bin/ares-mcp` path when
+an executable Ares-managed wrapper is installed. Before installation it retains
+the direct-bundle fallback. Stable named instances preserve connection selection
+across restarts; helper reinstallation redirects the command after app relocation.
+Strict TS and all 3 helper/configuration tests passed, including moving a bundle,
+reinstalling wrappers and executing the original unchanged MCP command. Rebuilt
+`build_macos/Ares.app` through the centralized command.
+
+### App executable identity and MCP provenance control — 2026-10-23
+
+Fixed helper installation rejecting the real built app: Electron classifies an
+executable still named Electron as unpackaged. The packager now renames the main
+binary to Contents/MacOS/Ares, updates CFBundleExecutable, and updates both bundled
+CLI launchers. Helper/configuration actions additionally check the actual Ares
+bundle layout, preserving rejection of temporary npm development snapshots.
+
+Added MCP provenance_control to query or explicitly set the same profile setting
+as the checkbox. It applies immediately and to subsequent ROM loads, allowing an
+agent to enable it before loading a ROM and disable/free history afterward.
+Recording defaults off and overlay_log never enables it.
+
+Validation: strict TS and 4 helper tests passed. An actual copied-app UI test used
+an isolated HOME, asserted app.isPackaged is true, invoked Install CLI Helpers,
+and verified copied MCP configuration selects the installed wrapper. Full actual
+Electron MCP integration passed, including enabling before ROM load, recording
+from the new epoch start and history clearing on disable. Rebuilt the app at
+build_macos/Ares.app with the renamed executable.
+
+
+### Visible MCP configuration and portable home paths — 2026-10-23
+
+Agent Integration now displays the exact JSON copied by the Copy button. The
+preview is available while access is off; Copy requires enabled access. Settings
+changes, reopening the page and installing helpers refresh it. An explicit
+/bin/sh launch safely expands tilde home paths, with each argument shell-quoted;
+the JSON no longer embeds the user's absolute home directory. Installed helper
+selection and explicit instance naming remain stable across bundle relocation.
+
+Strict TS and 4 helper tests passed, including execution after relocation with
+spaces/quotes in the home and service-directory paths. Actual Electron UI checks
+verified preview/clipboard equality. Copied-app UI validation installed helpers
+under a temporary HOME and successfully launched a real MCP stdio connection from
+the copied tilde configuration, then read emu_status. Rebuilt build_macos/Ares.app.
+
+### PR preparation — 2026-10-23
+
+Regenerated the schema-parity inventory for the intentional provenance_control
+addition: 86 current tools, with all 68 preserved reference signatures unchanged.
+The targeted schema-parity checks passed; the generated diff changes only the
+new tool entry and current tool count. No related GitHub issue was found in this
+fork when preparing the draft PR.

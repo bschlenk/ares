@@ -17,6 +17,11 @@ skips. Hosted CI has not run yet. [ACCEPTANCE.md](ACCEPTANCE.md) records command
 evidence boundaries and explicit private-media/manual/fault deferrals. These do
 not block the next numbered task and are not claimed as completed product gates.
 
+Runtime agent access and the centralized macOS app build were added on 2026-10-23:
+Settings now enables MCP/CLI access without a game restart, with separate explicit
+DMA recording. Root `./scripts/build-macos-app.sh` publishes `build_macos/Ares.app`.
+The execution log records focused validation and the optional private-ROM skip.
+
 Runtime evidence and historical checkpoints are in
 [EXECUTION-LOG.md](EXECUTION-LOG.md).
 

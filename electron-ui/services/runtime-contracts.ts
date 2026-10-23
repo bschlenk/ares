@@ -1,6 +1,7 @@
 export interface RuntimeSettings { volume: number; mute: boolean; luminance: number; saturation: number; gamma: number }
-export const RUNTIME_METHODS = ['runtime.settings', 'runtime.configure'] as const;
+export const RUNTIME_METHODS = ['runtime.settings', 'runtime.configure', 'runtime.provenance'] as const;
 export interface RuntimeServiceMap {
+  'runtime.provenance': { params: { enabled: boolean }; result: { enabled: boolean } };
   'runtime.settings': { params: undefined; result: RuntimeSettings };
   'runtime.configure': { params: RuntimeSettings; result: RuntimeSettings };
 }
@@ -11,6 +12,10 @@ export function validRuntimeSettings(value: unknown): value is RuntimeSettings {
     && bounded(p.volume, 0, 1) && typeof p.mute === 'boolean' && bounded(p.luminance, 0, 2) && bounded(p.saturation, 0, 2) && bounded(p.gamma, 0.1, 3);
 }
 export function encodeRuntime(method: string, params: unknown): string | undefined {
+  if (method === 'runtime.provenance') {
+    const p = params as { enabled: boolean };
+    return p && typeof p === 'object' && Object.keys(p).join(',') === 'enabled' && typeof p.enabled === 'boolean' ? ` ${p.enabled ? 1 : 0}` : undefined;
+  }
   if (method === 'runtime.settings') return params === undefined ? '' : undefined;
   if (!validRuntimeSettings(params)) return;
   return ` ${params.volume} ${params.mute ? 1 : 0} ${params.luminance} ${params.saturation} ${params.gamma}`;

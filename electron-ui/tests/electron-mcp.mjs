@@ -41,7 +41,7 @@ app.whenReady().then(async () => {
   const mcp = peer(); await mcp.initialize();
   enter('MCP tools');
   const list = (await mcp.request('tools/list', {})).result.tools;
-  assert.deepEqual(list.map(t => t.name).sort(), ['memory_capture_freeze','memory_changes','memory_query_advance','memory_query_page','memory_query_release','memory_query_start','memory_capture_read','memory_capture_release','memory_capture_status','memory_compare','memory_record_start','memory_record_stop','memory_snapshot','plugin_logs','read_memory_many','read_memory_many_va','ui_screenshot','emu_status', 'pause', 'resume', 'memory_regions', 'read_memory', 'write_memory', 'run_frames', 'run_until_frame', 'step', 'operation_status', 'cancel_operation', 'cpu_registers', 'last_stop', 'step_instructions', 'run_until_hit', 'break_add', 'break_remove', 'break_list', 'watch_add', 'watch_remove', 'watch_list', 'read_memory_va', 'write_memory_va', 'write_memory_many', 'controller_set', 'controller_release', 'controller_state', 'controller_host_mode', 'trace_pc', 'trace_calls', 'trace_page', 'overlay_log', 'profiler_control', 'profiler_clear', 'cpu_profiler_top', 'controller_tap', 'screenshot', 'audio_capture', 'audio_status', 'audio_save', 'video_start', 'video_status', 'video_stop', 'state_info', 'state_list', 'state_peek', 'state_save', 'state_load', 'batch', 'cpu_set_registers', 'rsp_registers', 'rdp_state', 'peripheral_registers', 'disassemble', 'rsp_capture', 'capture_control', 'call_function', 'call_recover', 'stack', 'render_probe', 'dump_rdram', 'dump_range', 'rdp_capture', 'rsp_debug', 'rsp_break', 'rsp_step', 'rsp_run', 'rsp_stop'].sort());
+  assert.deepEqual(list.map(t => t.name).sort(), ['provenance_control','memory_capture_freeze','memory_changes','memory_query_advance','memory_query_page','memory_query_release','memory_query_start','memory_capture_read','memory_capture_release','memory_capture_status','memory_compare','memory_record_start','memory_record_stop','memory_snapshot','plugin_logs','read_memory_many','read_memory_many_va','ui_screenshot','emu_status', 'pause', 'resume', 'memory_regions', 'read_memory', 'write_memory', 'run_frames', 'run_until_frame', 'step', 'operation_status', 'cancel_operation', 'cpu_registers', 'last_stop', 'step_instructions', 'run_until_hit', 'break_add', 'break_remove', 'break_list', 'watch_add', 'watch_remove', 'watch_list', 'read_memory_va', 'write_memory_va', 'write_memory_many', 'controller_set', 'controller_release', 'controller_state', 'controller_host_mode', 'trace_pc', 'trace_calls', 'trace_page', 'overlay_log', 'profiler_control', 'profiler_clear', 'cpu_profiler_top', 'controller_tap', 'screenshot', 'audio_capture', 'audio_status', 'audio_save', 'video_start', 'video_status', 'video_stop', 'state_info', 'state_list', 'state_peek', 'state_save', 'state_load', 'batch', 'cpu_set_registers', 'rsp_registers', 'rdp_state', 'peripheral_registers', 'disassemble', 'rsp_capture', 'capture_control', 'call_function', 'call_recover', 'stack', 'render_probe', 'dump_rdram', 'dump_range', 'rdp_capture', 'rsp_debug', 'rsp_break', 'rsp_step', 'rsp_run', 'rsp_stop'].sort());
   assert.equal(list.find(t => t.name === 'read_memory').inputSchema.properties.length.default, 64);
   assert.equal(list.find(t => t.name === 'resume').inputSchema.properties.keep_overrides.default, false);
   assert.equal(list.find(t => t.name === 'emu_status').inputSchema.properties.verbose.default, false);
@@ -155,12 +155,19 @@ app.whenReady().then(async () => {
   enter('N64 provenance opt-in and stopped UI');
   const n64Image = Buffer.alloc(0x1000); n64Image.writeUInt32BE(0x80371240); n64Image.write('DMA UI FIXTURE', 0x20); n64Image[0x3e] = 0x45;
   const n64File = path.join(temporary, 'fixture.z64'); fs.writeFileSync(n64File, n64Image);
+  assert.equal((await mcp.tool('provenance_control')).enabled, false);
+  assert.equal((await mcp.tool('provenance_control', { enabled: true })).enabled, true);
   const showOpenDialog = dialog.showOpenDialog;
   dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [n64File] });
   try { await window.webContents.executeJavaScript('window.ares.open({system: "Nintendo 64"})'); }
   finally { dialog.showOpenDialog = showOpenDialog; }
   await until(async () => (await sessions.request('session.status')).result.system === 'Nintendo 64');
   await mcp.tool('emu_status'); assert.equal((await mcp.tool('pause')).paused, true);
+  const bootProvenance = await mcp.tool('overlay_log');
+  assert.equal(bootProvenance.enabled, true);
+  assert.equal(bootProvenance.recording_from_epoch_start, true, 'MCP enabled before ROM loading records from the new epoch start');
+  assert.equal((await mcp.tool('provenance_control', { enabled: false })).enabled, false);
+  assert.equal((await mcp.tool('overlay_log')).entries.length, 0, 'disabling clears provenance history');
   const batchRead = await mcp.tool('batch', { steps: [{ kind: 'read', addr: '0x2000', length: 1 }] });
   assert.equal(batchRead.stop_reason, 'batch_done'); assert.equal(batchRead.results[0].data.hex, '00');
   await sessions.request('session.reset'); await mcp.tool('emu_status');
@@ -201,7 +208,7 @@ app.whenReady().then(async () => {
   // UI pause is allowed to revoke an idle external RSP gate.
   await sessions.request('session.pause');
   assert.equal((await mcp.tool('rsp_registers')).debug.active, false);
-  assert.equal((await mcp.tool('overlay_log')).history_complete, true, 'services-enabled app records provenance from boot');
+  assert.equal((await mcp.tool('overlay_log')).enabled, false, 'MCP access alone never starts provenance recording');
   assert.equal((await mcp.tool('profiler_control')).enabled, true);
   assert.equal((await mcp.tool('step_instructions')).executed, 1);
   assert.equal((await mcp.tool('cpu_profiler_top')).timebase_hz, 187500000);

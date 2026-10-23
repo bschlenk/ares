@@ -9,7 +9,7 @@ const sleep = ms => new Promise(r=>setTimeout(r,ms));
 module.exports = async function checkSignals(bundle) {
   const directory=fs.mkdtempSync('/tmp/ares-signals-'),serviceDirectory=path.join(directory,'ipc');
   const root=path.resolve(__dirname,'..');
-  const electron=bundle?path.join(bundle,'Contents/MacOS/Electron'):require('electron');
+  const electron=bundle?path.join(bundle,'Contents/MacOS/Ares'):require('electron');
   const entry=bundle?[]:[path.join(root,'dist/main.js')];
   const bridge=bundle?path.join(bundle,'Contents/Resources/app/dist/mcp/server.js'):path.join(root,'dist/mcp/server.js');
   const baseEnv={...process.env};
