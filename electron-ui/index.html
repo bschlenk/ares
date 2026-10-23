@@ -30,7 +30,7 @@
         </section>
         <section data-page="agent" hidden>
           <div id="settings-agent"></div>
-          <p>MCP and CLI access connects external tools to this app. Leave the instance name empty for a connection specific to this launch, or choose a unique name to reuse your MCP configuration across app restarts. DMA provenance records N64 ROM-to-RAM transfers only while enabled; disabling it clears the history.</p>
+          <p>MCP and CLI access connects external tools to this app. MCP automatically connects to your running app and launches it when closed. No session or connection settings are needed. DMA provenance records N64 ROM-to-RAM transfers only while enabled; disabling it clears the history.</p>
           <h2>MCP configuration</h2>
           <pre id="mcp-config-preview" tabindex="0" aria-label="MCP configuration">Loading configuration…</pre>
           <p class="help">Enable access before connecting. The shell expands ~ to your home directory. Install CLI helpers before copying to keep the command stable when moving the app.</p>

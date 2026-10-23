@@ -581,3 +581,14 @@ The preserved MCP tool count remains 68.
 The default workspace is video only. **Cmd+,** opens Settings; **Cmd+Shift+L**
 reveals region controls for splitting and choosing panels. Settings → Workspace
 configures overlays, draggable popup panels and their hotkeys. See [Workspace](WORKSPACE.md).
+
+### Automatic MCP startup and recording timelines
+
+The default MCP configuration now attaches to the running app without a session
+name and launches Ares when it is closed. MCP access defaults to enabled; explicit
+instance targeting remains available for scripts. A launched app outlives the
+adapter. `load_rom` and `close_rom` manage the game and invalidate old handles.
+`batch` additionally supports complete `input` states and named
+`memory_record_start` / `memory_record_stop` steps, so a baseline load and recorded
+input timeline can execute in one call. See [the MCP guide](mcp/README.md) for the
+configuration and timeline example.

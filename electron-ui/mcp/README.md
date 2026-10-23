@@ -1,73 +1,60 @@
 # MCP adapter (tasks 3–9, partial)
 
 The Node stdio entry point is `dist/mcp/server.js`, compiled as native ESM from `server.ts`.
-It attaches to an already-running Electron main process through the shared
-`services/` contracts, `LocalServiceClient` and `MemoryClient`. It never spawns an
-emulator. The verified registry has 68 tools: eleven generic/session/run tools,
-thirteen N64 CPU/VA tools, five controller tools (including controller_tap), three
-trace tools, overlay_log, three CPU profiler tools, screenshot, three audio tools and three video recording tools and five state tools, plus batch and five task 9 machine/disassembly/mutation tools, five RSP debugger tools and exact rdp_capture, plus stack/render_probe/dump_rdram/dump_range and call_function/call_recover, rsp_capture/capture_control. CPU/VA/input/
-trace/profiler/framebuffer features are N64-specific; presented screenshots also
-support other cores, as does post-mix audio capture when streams are available. Diagnostics go to stderr; stdout carries MCP JSON-RPC only.
+It connects to your running Ares app through the private local service. If Ares
+is closed, the adapter launches it automatically and waits for readiness. The app
+continues running after the MCP connection closes. `emu_status.adapter_launched_app`
+reports whether this adapter launched the connected app.
 
-## Start and explicitly select an app
+## Connect to Ares
 
-Development:
-
-```sh
-ARES_ENABLE_SERVICES=1 npm start --prefix electron-ui
-```
-
-Or pass `--services` to the app executable. Service exposure is opt-in. **Settings → Agent Integration → Enable MCP and CLI
-access** starts/stops access immediately without restarting the game and persists
-per profile. `--services` and `--no-services` override the saved preference at
-launch (last flag wins), without rewriting it; a later Settings edit can change
-access for that run. `ARES_ENABLE_SERVICES=1` remains supported; explicit flags
-win over it. Stopping access disconnects external clients and releases their
-owned controls.
-
-Choose an optional unique **Stable instance name** to keep copied MCP
-configuration useful across app restarts. **Copy MCP configuration** selects that
-name, or the exact current UUID when unnamed. **Install CLI helpers…** in a
-packaged app installs wrappers for `ares`, `ares-mcp` and `ares-plugin` under
-`~/.local/bin`; add it to PATH as needed. Wrappers use the current app location;
-reinstall them after moving the app. Unrelated existing commands are preserved.
-
-**Record N64 DMA provenance** is separately opt-in and live. It records up to
-4096 cartridge-to-RAM transfers, starting when enabled; earlier history cannot
-be recovered. Disabling frees the history. `overlay_log` only reads and reports
-`enabled`; it never starts recording. Enabling MCP access does not enable this
-recording. Screenshots share existing presentation buffers and pin them only for
-the bounded export; video recording allocates recorded frames only while active.
-
- Electron
-prints a connection-file path and instance UUID to stderr. Default metadata lives
-in `/tmp/ares-services-UID/` on macOS, in a private directory. `ARES_SERVICE_DIR`
-can select another private directory with a short Unix-socket path. Metadata
-filenames contain the UUID, so multiple apps remain distinguishable. No client
-chooses the newest/first app or launches a game automatically.
-
-Configure your MCP client with the exact file and UUID for the intended app:
+In the packaged app, use **Settings → Agent Integration → Install CLI helpers…**,
+then **Copy MCP configuration**. No session name or service-directory configuration is needed. After installing
+helpers, the normal configuration is:
 
 ```json
 {
   "mcpServers": {
     "ares": {
-      "command": "/bin/sh",
-      "args": ["-c", "exec ~/.local/bin/ares-mcp --connection /tmp/ares-services-501/INSTANCE.json --instance INSTANCE"]
+      "command": "/Users/YOUR_USER/.local/bin/ares-mcp",
+      "args": []
     }
   }
 }
 ```
 
-Replace all example paths/IDs with the printed values. After a cold app restart,
-select the new app UUID explicitly. Renderer reload retains the existing app
-instance, socket, native session and MCP connection. Replacing a ROM revokes old
-session handles; `emu_status` and `memory_regions` are explicit discovery calls.
-Stale memory writes fail and are not retried against the new game.
+The preview and copied JSON contain the same full absolute executable path, with no tilde expansion or shell wrapper.
 
-For development only, the command can instead be `node` with
-`electron-ui/dist/mcp/server.js` before these same flags. Use the copied
-app's launcher for a self-contained distribution; it supplies its own runtime.
+MCP and CLI access is enabled by default. Settings can disable it; `--services`
+and `--no-services` override the saved setting for a launch. Automatic startup uses
+`--services`. If an existing app has disabled service access and holds the profile
+lock, the adapter reports `profile_in_use`; enable access in that app. It does not
+open another window or quit an existing app.
+
+The adapter discovers the single live app in the private service directory
+(`/tmp/ares-services-UID` on macOS). `--service-dir /absolute/path` or
+`ARES_SERVICE_DIR` selects another directory. Stale records are ignored; multiple
+live apps produce `multiple_apps_running`. Advanced scripts may still use
+`--instance-name NAME` for a specific named app, or
+`--connection /absolute/instance.json --instance UUID` for a specific launch.
+Explicit connection-file targeting attaches only and does not launch a replacement.
+Copied configuration uses automatic discovery even if the app has a name.
+
+Development clients can run `node electron-ui/dist/mcp/server.js` after building.
+The development adapter launches the checkout's Electron runtime. The packaged
+launcher supplies its bundled runtime. Diagnostics go to stderr; stdout carries
+MCP JSON-RPC only.
+
+`load_rom(path, system?)` opens a ROM using the app's normal loading path and leaves
+it paused. If identical ROM content is already loaded (including another path or symlink), it preserves the current game state and running/paused state and returns `already_loaded: true`. A new load returns `already_loaded: false`. Paths must be absolute. Missing/unsupported files fail before closing
+the current game. Ambiguous identification returns the system choices instead of
+opening a dialog; supply `system` to choose. `close_rom()` returns to the empty
+synthetic display. Both invalidate old native sessions, memory regions and captures.
+Refresh `emu_status` and `memory_regions` after loading; stale writes are never replayed.
+
+DMA provenance remains separately opt-in. Enable it before loading a ROM to
+capture boot transfers. CLI helpers preserve unrelated commands and should be
+reinstalled after moving the app.
 
 ## Compatibility and current bounds
 
@@ -698,7 +685,7 @@ The visible MCP configuration preview and Copy button use `/bin/sh` to expand
 when an executable Ares-managed helper is installed, so reinstalling helpers
 from a moved app preserves the configured command. Before helper installation,
 it falls back to the current bundle path. Install helpers before copying the
-configuration for a stable setup. Choose a stable instance name as well to keep
+configuration for a stable setup. Automatic app discovery keeps
 the connection selection valid across app restarts.
 
 The Agent Integration page shows the exact JSON before copying, including while
@@ -706,3 +693,38 @@ access is disabled. It refreshes after settings changes or helper installation.
 Copy is available when access is enabled. Home paths use tilde notation through
 an explicit shell launch, because direct process launching does not reliably
 expand a tilde in a command path. All shell arguments are individually quoted.
+
+## Input timelines and memory recording in a batch
+
+`input` accepts the same complete controller state as `controller_set`, including
+port (default 1), buttons, axes and optional leases. An empty input step holds
+neutral input. Changes latch at the next VI or run start. The batch owns each port
+it changes and releases its holds on completion, error, timeout, cancellation,
+human takeover or disconnect. Existing holds from another owner return `busy`.
+
+Start a recorder after `state_load`, since loading invalidates old capture handles.
+Recorder names are local to the batch; returned native handles belong to the MCP
+connection and remain readable afterward. Every recorder started by the batch
+stops when the batch exits, including an interrupted exit. Use a capacity large
+enough for the timeline to avoid overwriting early samples.
+
+```json
+{
+  "steps": [
+    {"kind":"state_load", "path":"/absolute/baseline.bs1"},
+    {"kind":"memory_record_start", "name":"timeline", "reads":[{"region":"RDRAM", "offset":0, "length":64}], "capacity":256},
+    {"kind":"input", "right":true},
+    {"kind":"run", "n":30},
+    {"kind":"input", "right":true, "b":true},
+    {"kind":"run", "n":4},
+    {"kind":"input"},
+    {"kind":"run", "n":166},
+    {"kind":"memory_record_stop", "name":"timeline"}
+  ]
+}
+```
+
+Recorder reads accept current region IDs or exact region names, resolved after
+the state load. Read the handle in the start/stop step result with
+`memory_capture_status` and `memory_capture_read`; release it with
+`memory_capture_release` when finished. Duplicate recorder names reject.

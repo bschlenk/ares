@@ -37,7 +37,7 @@ module.exports = async function checkSignals(bundle) {
     await until(async()=>{const r=await client.request('session.status');return r.result?.operation_id},'active mutation');
     await stopped(a,'SIGTERM');const interrupted=await mutation;assert.ok(interrupted.error,JSON.stringify(interrupted));
     assert.equal(fs.existsSync(namedFile),false,'SIGTERM removes the owned named claim');
-    const absent=await peer.tool('emu_status');assert.ok(['instance_not_running','app_disconnected','app_not_running'].includes(absent.error),JSON.stringify(absent));
+    await assert.rejects(client.request('session.status'), /instance_not_running|app_disconnected|app_not_running/);
     const b=launch('profile');
     const second=await until(async()=>{const r=await peer.tool('emu_status');return r.session&&r.session!==first.session?r:undefined},'same saved MCP configuration reconnects');
     const fresh=JSON.parse(fs.readFileSync(namedFile));assert.notEqual(fresh.instance,old.instance);assert.notEqual(fresh.token,old.token);assert.equal(second.operation_id,null,'interrupted mutation is not replayed');

@@ -1,3 +1,5 @@
+import { encodeInput, type InputServiceMap } from './input-contracts.js';
+import { encodeMemoryTools, type MemoryToolsMap } from './memory-tools-contracts.js';
 import type { ScreenshotParams } from './screenshot-contracts.js';
 import { validScreenshotRequest } from './screenshot-contracts.js';
 import { encodeN64 } from './n64-contracts.js';
@@ -5,6 +7,9 @@ export const NATIVE_BATCH_METHODS = ['execution.batchBegin', 'execution.batchChe
 export type BatchStep = { kind: 'state_load'; path: string }
   | { kind: 'write'; address: string; hex: string; view: 'cpu' | 'rdram' }
   | { kind: 'read'; address: string; length: number; view: 'cpu' | 'rdram' }
+  | ({ kind: 'input' } & InputServiceMap['n64.input.set']['params'])
+  | ({ kind: 'memory_record_start'; name: string } & MemoryToolsMap['memory.recorder.start']['params'])
+  | { kind: 'memory_record_stop'; name: string }
   | { kind: 'run'; n: number }
   | ({ kind: 'screenshot' } & ScreenshotParams);
 export interface BatchParams { steps: BatchStep[]; timeoutMs: number; stopOnError: boolean; cancellationToken?: string }
@@ -29,6 +34,14 @@ export function encodeBatch(method: string, p: any): string | undefined {
       const { kind, ...memory } = s;
       if (encodeN64(kind === 'write' ? 'n64.memory.write' : 'n64.memory.read', memory) === undefined) return;
       bytes += kind === 'write' ? s.hex.length / 2 : s.length;
+    } else if (s?.kind === 'input') {
+      const { kind, ...input } = s;
+      if (encodeInput('n64.input.set', input) === undefined) return;
+    } else if (s?.kind === 'memory_record_start') {
+      const { kind, name, ...record } = s;
+      if (typeof name !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(name) || encodeMemoryTools('memory.recorder.start', record) === undefined) return;
+    } else if (s?.kind === 'memory_record_stop') {
+      if (!keys(s, 'kind,name') || typeof s.name !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(s.name)) return;
     } else if (s?.kind === 'run') {
       if (!keys(s, 'kind,n') || !integer(s.n, 1000000)) return;
       frames += s.n;
@@ -47,6 +60,6 @@ export function validBatchResult(s: any): s is BatchResult {
   return !!s && integer(s.batch_id) && s.batch_id > 0 && s.state === 'done' && s.stopped === true && typeof s.stop_reason === 'string' &&
     integer(s.start_epoch) && s.start_epoch > 0 && integer(s.epoch) && s.epoch > 0 && integer(s.frame) && s.side_effects_rolled_back === false &&
     Array.isArray(s.results) && s.results.length <= 256 && s.steps_attempted === s.results.length && s.steps_completed === s.results.filter((r: any) => r?.ok === true).length && s.results.every((r: any, i: number) => !!r && r.step === i &&
-      ['state_load', 'write', 'read', 'run', 'screenshot'].includes(r.kind) && typeof r.ok === 'boolean' && integer(r.epoch) && integer(r.frame) &&
+      ['state_load', 'write', 'read', 'run', 'screenshot', 'input', 'memory_record_start', 'memory_record_stop'].includes(r.kind) && typeof r.ok === 'boolean' && integer(r.epoch) && integer(r.frame) &&
       (r.ok ? r.data !== undefined && r.error === undefined : typeof r.error === 'string')) && new TextEncoder().encode(JSON.stringify(s)).byteLength <= 131072;
 }

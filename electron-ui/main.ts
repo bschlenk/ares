@@ -26,9 +26,9 @@ import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 import { FrameParser, type NativeFrame } from './protocol.js'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { NativeSessionClient } from './services/native-client.js'
-import { LocalServiceHost, defaultServiceDirectory } from './services/local-endpoint.js'
+import { LocalServiceHost } from './services/local-endpoint.js'
 import { installCliHelpers, mcpConfiguration, isBundledCliRuntime } from './agent-integration.js'
 import { SessionRouter } from './services/session-router.js'
 import type { NativeCommand, StartOptions } from './bridge.js'
@@ -72,6 +72,7 @@ const saveDirectory = (() => {
 interface NativeSession {
   child: ChildProcessByStdio<Writable, Readable, Readable>
   system: string
+  romHash?: string
   generation: number
   outstanding: boolean
   lastSequence: number
@@ -172,11 +173,32 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
           'generation',
           'path',
           'panel',
+          'system',
         ].includes(key),
     )
   )
     throw new Error('invalid_plugin_request')
   switch (params.operation) {
+    case 'app_status': return { ready: sessions.identity !== undefined, pid: process.pid }
+    case 'load_rom': {
+      if (Object.keys(params).some(key => !['operation', 'path', 'system'].includes(key)) || typeof params.path !== 'string' || !path.isAbsolute(params.path) || params.path.includes('\0') || (params.system !== undefined && typeof params.system !== 'string')) throw new Error('invalid_rom_request')
+      return queueOperation(async () => {
+        const stat = await fs.promises.stat(params.path)
+        if (!stat.isFile()) throw new Error('rom_requires_file')
+        const romHash = await hashRom(params.path)
+        const alreadyLoaded = !!active?.romHash && active.romHash === romHash
+        if (!alreadyLoaded) await start({ rom: params.path, system: params.system, agent: true, romHash })
+        const reply = await sessions.request('session.status')
+        if (!reply.ok) throw new Error(reply.error)
+        return { ...reply.result, session: reply.session, epoch: reply.epoch, already_loaded: alreadyLoaded }
+      })
+    }
+    case 'close_rom': {
+      if (Object.keys(params).join(',') !== 'operation') throw new Error('invalid_rom_request')
+      await queueOperation(() => start({ agent: true }))
+      return { loaded: false, session: sessions.identity?.session, epoch: sessions.identity?.epoch }
+    }
+
     case 'provenance': {
       if (Object.keys(params).sort().join(',') !== 'operation' && Object.keys(params).sort().join(',') !== 'enabled,operation') throw new Error('invalid_provenance_request')
       if (params.enabled !== undefined && typeof params.enabled !== 'boolean') throw new Error('invalid_provenance_request')
@@ -263,16 +285,6 @@ export const preferences = new SettingsStore(
   },
   async (id, value) => {
     if (id === 'agent.enabled') { await configureServices(value === true); return }
-    if (id === 'agent.name') {
-      if (value && !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$/.test(String(value))) throw new Error('Use letters, numbers, underscores or hyphens for the instance name')
-      if (serviceHost.info) {
-        const previousName = String(preferences.catalog().entries.find(entry => entry.descriptor.id === 'agent.name')!.applied)
-        await serviceHost.close()
-        try { await configureServices(true, String(value)) }
-        catch (error) { await configureServices(true, previousName); throw error }
-      }
-      return
-    }
     if (id === 'debug.provenance') {
       if (sessions.identity) {
         const reply = await sessions.request('runtime.provenance', sessions.identity, { enabled: value === true })
@@ -307,11 +319,11 @@ function serviceLaunchOverride(): boolean | undefined {
   if (process.env.ARES_ENABLE_SERVICES === '1' || process.argv.includes('--instance-name')) return true
   return undefined
 }
-async function configureServices(enabled: boolean, selectedName?: string) {
+async function configureServices(enabled: boolean) {
   if (!enabled) { await serviceHost.close(); return }
   if (serviceHost.info) return
   const index = process.argv.indexOf('--instance-name')
-  const name = index < 0 ? (selectedName ?? String(preferences.catalog().entries.find(entry => entry.descriptor.id === 'agent.name')!.applied)) || undefined : process.argv[index + 1]
+  const name = index < 0 ? undefined : process.argv[index + 1]
   if (index >= 0 && (!name || name.startsWith('--'))) throw new Error('invalid_instance_name')
   const file = await serviceHost.listen(process.env.ARES_SERVICE_DIR, name, hostPath)
   console.error(`ares service instance ${serviceHost.instance}: ${file}`)
@@ -329,7 +341,6 @@ async function refreshNativeSettings() {
   preferences.inherit(importedValues(info, preferences.catalog().entries.map(entry => entry.descriptor)))
 }
 async function setPreference(id: string, value: unknown, reset = false, guard: () => void = () => {}) {
-  if (id === 'agent.name' && !reset && value !== '' && (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$/.test(value))) throw new Error('Use letters, numbers, underscores or hyphens for the instance name')
   if (reset) await preferences.reset(id, guard); else await preferences.set(id, value, guard)
   if (id === 'paths.importBml') await refreshNativeSettings()
   return preferences.catalog()
@@ -368,7 +379,13 @@ async function stop() {
   await old.closed
   clearTimeout(timer)
 }
-async function start(options: StartOptions) {
+async function hashRom(file: string) {
+  const hash = createHash('sha256')
+  for await (const bytes of fs.createReadStream(file)) hash.update(bytes)
+  return hash.digest('hex')
+}
+async function start(options: StartOptions & { agent?: boolean; romHash?: string }) {
+  const romHash = options.rom ? options.romHash ?? await hashRom(options.rom) : undefined
   let system = 'Synthetic'
   await refreshNativeSettings()
   const startupSettings = preferences.catalog()
@@ -385,7 +402,9 @@ async function start(options: StartOptions) {
     if (settingsFile) identifyArgs.push('--settings', settingsFile)
     const matches = (await probe(identifyArgs)).split('\n').filter(Boolean)
     system = matches[0]
+    if (!matches.length) throw new Error('unsupported_rom')
     if (matches.length > 1) {
+      if (options.agent) throw new Error('ambiguous_system: supply system; choices: ' + matches.join(', '))
       const choice = await dialog.showMessageBox(window, {
         type: 'question',
         title: 'Choose system',
@@ -400,6 +419,7 @@ async function start(options: StartOptions) {
   await stop()
   const args = options.rom ? ['--rom', options.rom] : ['--synthetic']
   if (options.rom) args.push('--system', system)
+  if (options.agent) args.push('--paused')
   if (startupSettings.entries.find(entry => entry.descriptor.id === 'debug.provenance')!.value) args.push('--debug-provenance')
   for (const media of options.media || []) args.push('--media', media)
   if (settingsFile) args.push('--settings', settingsFile)
@@ -420,6 +440,7 @@ async function start(options: StartOptions) {
   const session: NativeSession = {
     child,
     system,
+    romHash,
     generation: ++generation,
     outstanding: false,
     lastSequence: 0,
@@ -496,13 +517,21 @@ async function start(options: StartOptions) {
   })
   port?.postMessage({ reset: true, system })
   command('ack')
+  if (options.agent) {
+    const reply = await client.request('session.pause');
+    if (!reply.ok) throw new Error(reply.error)
+  }
+}
+function queueOperation<T>(task: () => Promise<T>) {
+  const result = operation.then(task)
+  operation = result.then(() => {}, () => {})
+  return result
 }
 function enqueue(task: () => Promise<void>) {
-  operation = operation.then(task).catch((error) => {
+  return queueOperation(task).catch((error) => {
     status(error.message)
     console.error(error)
   })
-  return operation
 }
 app
   .whenReady()
@@ -741,11 +770,7 @@ app
       if (action === 'install') return installCliHelpers(appRoot, bundled, process.execPath)
       if (action === 'copy' || action === 'preview') {
         if (action === 'copy' && (!serviceHost.info || !serviceHost.metadataFile)) throw new Error('Enable MCP and CLI access first')
-        const directory = process.env.ARES_SERVICE_DIR || defaultServiceDirectory()
-        const connection = serviceHost.metadataFile || path.join(directory, `${serviceHost.instance}.json`)
-        const configuration = await mcpConfiguration(appRoot, bundled, process.execPath, connection, serviceHost.instance,
-          process.argv.includes('--instance-name') ? process.argv[process.argv.indexOf('--instance-name') + 1] : String(preferences.catalog().entries.find(entry => entry.descriptor.id === 'agent.name')!.applied) || undefined,
-          directory)
+        const configuration = await mcpConfiguration(appRoot, bundled, process.execPath)
         const json = JSON.stringify(configuration, null, 2)
         if (action === 'preview') return json
         await clipboard.writeText(json)
