@@ -475,6 +475,7 @@ app
             'ares.examples.memory',
             'ares.tools.debugger',
             'ares.tools.settings',
+            'ares.tools.controls',
             'ares.examples.kirby',
           ],
       process.argv.includes('--disable-plugins') ||
@@ -531,6 +532,8 @@ app
         { label: 'Reset', accelerator: 'CmdOrCtrl+Shift+R', click: action('reset') },
       ] },
       { label: 'View', submenu: [
+        { id: 'reload-interface', label: 'Reload Interface', accelerator: 'CmdOrCtrl+R', click: () => window.webContents.reload() },
+        { type: 'separator' },
         { label: 'Customize Workspace', accelerator: 'CmdOrCtrl+Shift+L', click: action('edit-workspace') },
         { label: 'Video Only', click: action('reset-workspace') },
         { type: 'separator' }, { role: 'togglefullscreen' },

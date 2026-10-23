@@ -1,0 +1,33 @@
+.controls-editor { font:13px system-ui; padding:4px 0 12px; }
+.controls-editor .controls-toolbar { display:flex; flex-wrap:wrap; gap:16px; }
+.controls-editor label { display:flex; align-items:center; gap:8px; }
+.controls-editor select { max-width:240px; }
+.controls-editor .controls-help { opacity:.7; line-height:1.5; }
+.controls-editor .controls-layout { display:grid; grid-template-columns:minmax(220px,1fr) minmax(150px,200px); align-items:center; gap:12px; }
+.controls-editor .controls-picture { position:relative; width:100%; max-width:330px; margin:auto; }
+.controls-editor .controls-picture img { display:block; width:100%; height:auto; }
+.controls-editor .controls-point { position:absolute; transform:translate(-50%,-50%); width:24px; height:24px; padding:0; border:2px solid #fff9; border-radius:50%; background:#1115; box-shadow:0 1px 5px #0005; }
+.controls-editor .controls-point:hover,.controls-editor .controls-point[data-preview=true],.controls-editor .controls-point[aria-pressed=true] { width:38px; height:38px; border:3px solid #fff; background:#64a9ff88; box-shadow:0 0 0 5px #4b9aff55; z-index:1; }
+.controls-editor .controls-bindings { position:relative; display:grid; gap:4px; max-height:300px; overflow:auto; padding:4px; scroll-padding:4px; min-width:0; }
+.controls-editor .controls-binding { display:flex; gap:4px; }
+.controls-editor .controls-binding button:first-child { flex:1; text-align:left; font:inherit; padding:7px 9px; }
+.controls-editor button[aria-pressed=true] { background:#387acb; color:white; }
+.controls-editor .controls-footer { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:14px; }
+.controls-editor small { opacity:.6; font-size:10px; }
+@media(max-width:550px) { .controls-editor .controls-layout { grid-template-columns:1fr; } .controls-editor .controls-picture { max-width:380px; margin:auto; } }
+
+.controls-editor .controls-toolbar label { margin:0; }
+.controls-editor .controls-toolbar select { width:auto; }
+
+.controls-editor :is([data-system],[data-device]),.controls-editor :is([data-system],[data-device])::picker(select) { appearance:base-select; }
+.controls-editor :is([data-system],[data-device]) { min-width:190px; }
+.controls-editor :is([data-system],[data-device]) > button { all:unset; display:flex; align-items:center; }
+.controls-editor :is([data-system],[data-device]) selectedcontent .system-icon { display:none; }
+.controls-editor :is([data-system],[data-device])::picker(select) { max-height:65vh; min-width:320px; overflow:auto; padding:4px; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; }
+.controls-editor :is([data-system],[data-device]) option { display:flex; align-items:center; gap:12px; min-height:36px; padding:4px 12px; border-radius:5px; }
+.controls-editor :is([data-system],[data-device]) option:hover,.controls-editor :is([data-system],[data-device]) option:focus-visible { background:color-mix(in srgb,var(--accent) 20%,var(--panel)); }
+.controls-editor :is([data-system],[data-device]) option:checked { font-weight:600; }
+.controls-editor :is([data-system],[data-device]) option::checkmark { order:-1; margin-left:0; margin-right:0; }
+.controls-editor .system-icon { display:block; width:36px; height:36px; flex:0 0 36px; image-rendering:pixelated; }
+.controls-editor :is([data-system],[data-device]) option:not(:has(.system-icon)) { min-height:48px; }
+.controls-editor :is([data-system],[data-device]) { display:flex; align-items:center; justify-content:space-between; gap:12px; }

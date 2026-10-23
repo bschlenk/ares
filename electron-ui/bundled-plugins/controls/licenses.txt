@@ -1,0 +1,57 @@
+CONTROLLER MAPPING PLUGIN — THIRD-PARTY ARTWORK
+
+Keyboard icon: assets/devices/keyboard.png
+Source: user-supplied Vecteezy download, asset 35153224
+Title: Pixel art illustration keyboard pixelated keyboard
+Attribution: Vecteezy.com — https://www.vecteezy.com/
+Original file: vecteezy_pixel-art-illustration-keyboard-pixelated-keyboard_35153224.jpg
+Modifications: cropped, exterior gray background removed, centered on a transparent
+square canvas; displayed at 36×36 CSS pixels. Source RGB artwork is not resampled.
+The download does not identify an individual artist or include a Pro license proof.
+We retain the attribution requested in its supplied Free License instructions.
+Original supplied license PDF: assets/licenses/Vecteezy-License-Information.pdf
+
+Supplied license information (English page, verbatim):
+
+License information
+Thank you for downloading from Vecteezy!
+
+
+The license agreement outlines how the resource may be used in various settings.
+Different rules apply based on whether you’re using a resource in a digital project
+versus a print project. In addition, you will have different responsibilities if you
+downloaded this resource under our Free License versus our Pro License.
+
+
+If you downloaded this resource under the Free License, remember to always
+attribute the author which can be done by adding “Vecteezy.com” to your design and
+linking to vecteezy.com where possible. If you don’t want to give attribution, upgrade
+to a Pro License for additional benefits.
+
+
+For detailed insight into how this resource may be used in your project, head over to
+the licensing section of our website or contact our support team.
+
+
+As always, the Vecteezy Terms of Use supersede any terms outlined in this
+document.
+
+
+Thanks again!
+Vecteezy
+
+
+
+
+    © Eezy Inc. All rights reserved
+
+
+Gamepad icon: assets/devices/gamepad.png
+Source: user-supplied screenshot, Screenshot 2026-10-22 at 21.46.47.png.
+Modifications: removed the connected green exterior background, cropped the
+controller, reduced with nearest-neighbor sampling to 128×91 pixels, and centered
+on a transparent 144×144 canvas; displayed at 36×36 CSS pixels.
+The screenshot did not include artist attribution or license information.
+
+System pixel-art icons: assets/systems/*.png
+See assets/systems/README.md for the supplied sheet and extraction provenance.

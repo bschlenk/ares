@@ -6,7 +6,6 @@ body[data-theme=green] { --bg:#07130c; --panel:#102217; --text:#c0efca; --muted:
 body { margin:0; height:100vh; overflow:hidden; background:#000; color:var(--text); font:13px system-ui,sans-serif; }
 button,select,input,textarea { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:5px; padding:7px 10px; }
 button { cursor:pointer; } button:hover { border-color:var(--accent); } button:disabled { opacity:.45; cursor:default; }
-button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 select { max-width:100%; } input[type=checkbox] { accent-color:var(--accent); width:auto; }
 label { display:block; margin:12px 0; } label select,label input:not([type=checkbox]) { display:block; width:100%; margin-top:6px; }
 p,pre { line-height:1.6; } pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; } h1,h2 { margin:0; font-weight:550; } h1 { font-size:18px; } h2 { font-size:14px; margin-bottom:14px; }
@@ -26,7 +25,7 @@ p,pre { line-height:1.6; } pre { white-space:pre-wrap; overflow-wrap:anywhere; f
 .split-divider:hover,.split-divider:focus-visible { background:var(--accent); }
 .empty-area { display:flex; align-items:center; justify-content:center; color:var(--muted); text-align:center; padding:24px; }
 #viewport { width:100%; height:100%; position:relative; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-#screen { display:block; outline:none; } #screen:focus-visible { outline:none; }
+#screen { display:block; }
 #empty-state { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:12px; background:#000; color:var(--muted); }
 #empty-state button { border:0; background:transparent; color:var(--muted); padding:16px 0; } #empty-state button:hover { color:var(--text); }
 #empty-state span { font-size:11px; opacity:.6; }
@@ -66,3 +65,7 @@ details > summary { cursor:pointer; font-weight:550; padding:12px 0; }
 @media(max-width:650px) { #settings-dialog { max-width:calc(100vw - 16px); max-height:calc(100vh - 16px); } #settings-tabs { flex-basis:110px; padding:8px 4px; } .settings-pages { padding:14px; } }
 
 #settings-feedback { position:absolute; bottom:14px; left:170px; right:24px; padding:10px; font-size:12px; border:1px solid var(--line); border-radius:6px; background:var(--panel); box-shadow:0 8px 24px #0004; z-index:1; }
+
+/* Pointer focus stays quiet; keyboard focus is visible on every focusable control. */
+:focus:not(:focus-visible) { outline:none; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }

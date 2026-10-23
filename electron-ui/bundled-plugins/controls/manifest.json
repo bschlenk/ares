@@ -1,0 +1,24 @@
+{
+  "id": "ares.tools.controls",
+  "name": "Controller mapping",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "entry": "plugin.js",
+  "build": {
+    "entry": "src.ts"
+  },
+  "capabilities": [
+    "settings.read",
+    "settings.write"
+  ],
+  "contributes": {
+    "panels": [
+      {
+        "id": "controls",
+        "title": "Controller mapping",
+        "placement": "input-settings"
+      }
+    ]
+  },
+  "styles": "style.css"
+}

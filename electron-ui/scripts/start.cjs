@@ -1,5 +1,6 @@
 'use strict'
-// Each launch owns its compiled JS, bundled plugins and native executable.
+// Each launch owns its compiled JS and native executable.
+// Bundled plugin sources stay live so their existing watchers support authoring.
 // Tests/package builds can clean dist and rebuild C++ while this app is running.
 const fs = require('node:fs')
 const path = require('node:path')
@@ -12,9 +13,10 @@ const copy = (from, to) => fs.cpSync(from, to, { recursive: true, mode: fs.const
 let child
 try {
   for (const entry of fs.readdirSync(root)) {
-    if (/\.(?:ts|cts|json|html|css)$/.test(entry) || ['plugins', 'services', 'settings', 'workspace', 'scripts', 'mcp', 'bundled-plugins', 'templates'].includes(entry))
+    if (/\.(?:ts|cts|json|html|css)$/.test(entry) || ['plugins', 'services', 'settings', 'workspace', 'scripts', 'mcp', 'templates'].includes(entry))
       copy(path.join(root, entry), path.join(snapshot, entry))
   }
+  fs.symlinkSync(path.join(root, 'bundled-plugins'), path.join(snapshot, 'bundled-plugins'), 'dir')
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(snapshot, 'node_modules'), 'dir')
   execFileSync('npm', ['run', 'build'], { cwd: snapshot, stdio: 'inherit' })
   const sourceHost = path.resolve(process.env.ARES_HOST || path.join(root, '../build-electron-make/bin/ares-electron-host'))

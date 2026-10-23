@@ -547,7 +547,13 @@ export class PluginRegistry {
       candidates.push({ source, bundled: false })
     const records: Record[] = []
     const ids = new Set<string>()
+    const sources = new Set<string>()
     for (const c of candidates) {
+      // A bundled source can also appear in ARES_PLUGIN_DIRS, including through
+      // the development launch symlink. Watch one record per physical directory.
+      const source = await fs.realpath(c.source).catch(() => c.source)
+      if (sources.has(source)) continue
+      sources.add(source)
       let r: Record
       const existing = oldRecords.find((r) => r.source === c.source)
       if (existing?.manifest) {

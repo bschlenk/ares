@@ -37,7 +37,7 @@ export interface PluginManifest {
   capabilities: Capability[]
   contributes: {
     settings?: { id: string; title: string }[]
-    panels?: { id: string; title: string }[]
+    panels?: { id: string; title: string; placement?: 'input-settings' }[]
     commands?: { id: string; title: string }[]
   }
 }

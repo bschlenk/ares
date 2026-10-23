@@ -32,7 +32,7 @@ export function jsonState(value: unknown): unknown {
 }
 export interface Dock {
   commands: HTMLElement
-  registerPanel(id: string, title: string, mount: (context: import('../workspace/runtime.js').PanelMount) => void | Disposer): Disposer
+  registerPanel(id: string, title: string, mount: (context: import('../workspace/runtime.js').PanelMount) => void | Disposer, placement?: 'input-settings'): Disposer
   openPanel(id: string, automatic?: boolean): void
   changed(): void
   error(error: unknown): void
@@ -315,7 +315,7 @@ export class PluginScope {
               const failed = settled.find(result => result.status === 'rejected')
               if (failed?.status === 'rejected') throw failed.reason
             }
-          }))
+          }, contribution.placement))
           this.panels.set(id, { instances, open: automatic => this.dock.openPanel(id, automatic) })
           return add(() => { this.panels.delete(id); return install() })
         },
