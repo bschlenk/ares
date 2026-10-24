@@ -54,10 +54,13 @@ struct ScriptService {
     auto& s=*static_cast<ScriptService*>(opaque);
     return Clock::now()>=s.deadline || Clock::now()>=s.budget || (s.cancelled && s.cancelled());
   }
+  std::string valueText(JSValueConst value,const char* fallback) {
+    size_t length=0;const char* text=JS_ToCStringLen(context,&length,value);if(!text)return fallback;
+    size_t end=std::min(length,size_t(4096));while(end<length&&end&&(uint8_t(text[end])&0xc0)==0x80)--end;
+    std::string out(text,end);JS_FreeCString(context,text);return out;
+  }
   std::string exception() {
-    JSValue value=JS_GetException(context);
-    const char* text=JS_ToCString(context,value);std::string out=text?text:"script_exception";
-    if(text)JS_FreeCString(context,text);JS_FreeValue(context,value);return out;
+    JSValue value=JS_GetException(context);auto out=valueText(value,"script_exception");JS_FreeValue(context,value);return out;
   }
   static JSValue fail(JSContext* c,const std::string& message) { return JS_ThrowInternalError(c,"%s",message.c_str()); }
   static bool number(JSContext* c,JSValueConst v,uint64_t& n,uint64_t max=0xffffffffull) {
@@ -116,13 +119,16 @@ struct ScriptService {
     auto& s=self(c);if(argc!=1)return fail(c,"invalid_log");
     size_t length;const char* text=JS_ToCStringLen(c,&length,argv[0]);if(!text)return JS_EXCEPTION;
     if(length>4096 || s.logBytes+length>16384){JS_FreeCString(c,text);return fail(c,"log_limit");}
-    s.logBytes+=length;if(s.logs.size()>2)s.logs.insert(s.logs.size()-1,",");
-    JSValue string=JS_NewStringLen(c,text,length);JS_FreeCString(c,text);
-    JSValue json=JS_JSONStringify(c,string,JS_UNDEFINED,JS_UNDEFINED);JS_FreeValue(c,string);
-    const char* encoded=JS_ToCString(c,json);if(encoded){s.logs.insert(s.logs.size()-1,encoded);JS_FreeCString(c,encoded);}JS_FreeValue(c,json);return JS_UNDEFINED;
+    JSValue string=JS_NewStringLen(c,text,length);JS_FreeCString(c,text);if(JS_IsException(string))return string;
+    JSValue json=JS_JSONStringify(c,string,JS_UNDEFINED,JS_UNDEFINED);JS_FreeValue(c,string);if(JS_IsException(json))return json;
+    size_t encodedLength;const char* encoded=JS_ToCStringLen(c,&encodedLength,json);
+    if(!encoded){JS_FreeValue(c,json);return JS_EXCEPTION;}
+    if(s.logs.size()+encodedLength+1>16384){JS_FreeCString(c,encoded);JS_FreeValue(c,json);return fail(c,"log_limit");}
+    if(s.logs.size()>2)s.logs.insert(s.logs.size()-1,",");s.logs.insert(s.logs.size()-1,std::string(encoded,encodedLength));s.logBytes+=length;
+    JS_FreeCString(c,encoded);JS_FreeValue(c,json);return JS_UNDEFINED;
   }
   static JSValue host(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
-    auto& s=self(c);if(s.readOnly||s.waiting||s.hostWaiting||argc!=2||s.hostId>=64)return fail(c,"invalid_host_work");
+    auto& s=self(c);if(s.readOnly||s.waiting||s.hostWaiting||argc!=2||s.hostId>=64||!JS_IsString(argv[1]))return fail(c,"invalid_host_work");
     size_t kindLength;const char* kind=JS_ToCStringLen(c,&kindLength,argv[0]);if(!kind)return JS_EXCEPTION;if(kindLength>32){JS_FreeCString(c,kind);return fail(c,"invalid_host_work");}s.hostKind.assign(kind,kindLength);JS_FreeCString(c,kind);
     if(s.hostKind!="state_load"&&s.hostKind!="state_save"&&s.hostKind!="screenshot")return fail(c,"invalid_host_work");
     if(s.hostKind!="state_load"&&s.artifactCount>=8)return fail(c,"artifact_limit");
@@ -203,7 +209,7 @@ struct ScriptService {
       if(JS_ExecutePendingJob(runtime,&jobContext)<0){error=exception();finish("script_failed");return;}
     }
     int state=JS_PromiseState(context,promise);
-    if(state==JS_PROMISE_REJECTED){JSValue v=JS_PromiseResult(context,promise);const char* text=JS_ToCString(context,v);error=text?text:"script_rejected";if(text)JS_FreeCString(context,text);JS_FreeValue(context,v);finish("script_failed");return;}
+    if(state==JS_PROMISE_REJECTED){JSValue v=JS_PromiseResult(context,promise);error=valueText(v,"script_rejected");JS_FreeValue(context,v);finish("script_failed");return;}
     if(state==JS_PROMISE_FULFILLED) {
       JSValue v=JS_PromiseResult(context,promise);
       JSValue json=JS_JSONStringify(context,v,JS_UNDEFINED,JS_UNDEFINED);JS_FreeValue(context,v);

@@ -71,7 +71,7 @@ test('registry scopes capabilities, resources, storage and pending work across l
   const calls = []
   const client = {
     request: async (method, id, params, owner) => {
-      calls.push({ method, id, owner })
+      calls.push({ method, id, owner, params })
       if (method === 'memory.read' && pending) return pending
       return {
         protocol: 1,
@@ -112,6 +112,12 @@ test('registry scopes capabilities, resources, storage and pending work across l
     /plugin_capability_denied/,
   )
   registry.finish(token)
+  await assert.rejects(registry.request(token,'scripts.run',{source:'export default()=>1',args:{},timeoutMs:1000,maxFrames:0}),/plugin_capability_denied/);
+  await assert.rejects(registry.request(token,'scripts.observe',{path:'.',args:{},timeoutMs:1000,maxFrames:0}),/plugin_capability_denied/);
+  await assert.rejects(registry.request(token,'scripts.observe',{source:'export default()=>1',args:{},timeoutMs:1000,maxFrames:0,outputPath:'/tmp/forbidden.json'}),/plugin_capability_denied/);
+  await registry.request(token,'scripts.observe',{path:'plugin.js',args:{},timeoutMs:1000,maxFrames:0,projectRoot:'/tmp/untrusted'});
+  const scripted=calls.at(-1),scriptRoot=await fs.realpath(path.join(root,'data/artifacts',registry.catalog().plugins[0].artifact));assert.equal(scripted.method,'scripts.observe');assert.equal(scripted.params.projectRoot,scriptRoot);assert.equal(scripted.params.path,path.join(scriptRoot,'plugin.js'));
+
   await registry.storage(token, 'set', 'answer', 42)
   assert.equal(await registry.storage(token, 'get', 'answer'), 42)
   await assert.rejects(registry.storage(token, 'set', '__proto__', {}))

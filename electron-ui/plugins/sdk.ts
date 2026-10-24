@@ -30,9 +30,9 @@ export interface PluginContext {
   }
   scripts: {
     /** Read-only latest-value observation; synchronous module callback, disposed with the plugin. */
-    observe(params: Omit<import('../services/script-contracts.js').ScriptRunParams, 'statePaths' | 'outputPaths' | 'outputPath'>, callback: (value: unknown) => void): Promise<Disposer>
+    observe(params: Omit<import('../services/script-contracts.js').ScriptRunParams, 'statePaths' | 'outputPaths' | 'outputPath' | 'projectRoot'>, callback: (value: unknown) => void): Promise<Disposer>
     /** Native exclusive job; requires session.control, memory.read, memory.write and debug.read. */
-    run(params: Omit<import('../services/script-contracts.js').ScriptRunParams, 'statePaths' | 'outputPaths' | 'outputPath'>): Promise<SessionReply<import('../services/contracts.js').ExecutionOperation>>
+    run(params: Omit<import('../services/script-contracts.js').ScriptRunParams, 'statePaths' | 'outputPaths' | 'outputPath' | 'projectRoot'>): Promise<SessionReply<import('../services/contracts.js').ExecutionOperation>>
   }
   services: {
     request<M extends ServiceMethod>(

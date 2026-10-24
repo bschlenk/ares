@@ -10,6 +10,10 @@ test('confined TS module graphs reject node, remote, parent and symlink escapes'
   fs.writeFileSync(path.join(dir,'main.ts'),"import {decode} from './decoder';export default ({args})=>decode(args.n)");
   const p={path:path.join(dir,'main.ts'),args:{n:1},timeoutMs:1000,maxFrames:0};
   const built=await prepareScript(p);assert.equal(Object.keys(built.hashes).length,2);
+  const nested=path.join(dir,'scripts');fs.mkdirSync(nested);fs.writeFileSync(path.join(nested,'record.ts'),"import {decode} from '../decoder';export default()=>decode(1)");
+  const project=await prepareScript({...p,path:path.join(nested,'record.ts'),projectRoot:fs.realpathSync(dir)});assert.equal(Object.keys(project.hashes).length,2);
+  await assert.rejects(prepareScript({...p,projectRoot:fs.realpathSync(nested)}));
+
   for(const spec of ['node:fs','https://example.com/a.js','../escape.js']){
    fs.writeFileSync(path.join(dir,'main.ts'),`import x from '${spec}';export default()=>x;`);await assert.rejects(prepareScript(p));
   }
@@ -38,8 +42,13 @@ test('native script VI waits, zero frames, promise storm, OOM, loops and cleanup
    'export default()=>{const a=[];for(;;)a.push(new Uint8Array(1024*1024))}',
    'export default()=>new Promise(()=>{})',
    'export default({frames})=>Promise.all([frames(1),frames(1)])',
-   'export default()=>1n'
-  ]){const failed=await run(source);assert.equal(failed.op.stop_reason,'script_failed',JSON.stringify(failed));assert(failed.result.error);const status=await request('session.status');assert.equal(status.batch_id,null);}
+   'export default()=>1n',
+   'export default({emu})=>emu.saveState()',
+   'export default()=>({toJSON(){while(true){}}})',
+   'export default()=>"x".repeat(5*1024*1024)',
+   'export default()=>{throw "abc"+"😀".repeat(2000)}',
+   'export default()=>{for(let i=0;i<8;i++)__log(String.fromCharCode(1).repeat(4096));return 1}'
+  ]){const failed=await run(source);assert.equal(failed.op.stop_reason,'script_failed',JSON.stringify(failed));assert(failed.result.error);assert(Buffer.byteLength(failed.result.error)<=4096);assert(Buffer.byteLength(JSON.stringify(failed.result.logs))<=16384);const status=await request('session.status');assert.equal(status.batch_id,null);}
   const bounded=await run('export default({frames})=>frames(2)',{},1);assert.equal(bounded.op.stop_reason,'script_failed');
   const cancellable=await request('scripts.run',{source:'export default async({frames})=>{await frames(1000000)}',args:{},timeoutMs:10000,maxFrames:1000000});
   const foreign=await router.request('scripts.run',undefined,{source:'export default()=>1',args:{},timeoutMs:1000,maxFrames:0},'foreign');assert.equal(foreign.error,'busy');

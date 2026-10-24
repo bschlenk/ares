@@ -833,8 +833,10 @@ export class PluginRegistry {
       if(params?.outputPath!==undefined||(params?.statePaths?.length??0)>0||(params?.outputPaths?.length??0)>0)throw new ServiceError('plugin_capability_denied');
       if(params?.path!==undefined) {
         if(typeof params.path!=='string'||path.isAbsolute(params.path)||params.source!==undefined)throw new ServiceError('plugin_capability_denied');
-        params={...params,path:await this.within(r.root,params.path)};
+        const file=await this.within(r.root,params.path);if(!(await fs.stat(file)).isFile())throw new ServiceError('plugin_capability_denied');
+        params={...params,path:file};
       } else if(typeof params?.source!=='string')throw new ServiceError('plugin_capability_denied');
+      params={...params,projectRoot:r.root};
       if(method==='scripts.run'&&!['session.control','memory.read','memory.write','debug.read'].every(c=>r.manifest!.capabilities.includes(c as Capability)))throw new ServiceError('plugin_capability_denied');
     }
     let capability: Capability | undefined
