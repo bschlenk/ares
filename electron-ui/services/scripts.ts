@@ -30,11 +30,13 @@ export async function prepareScript(p: ScriptRunParams, observe=false) {
 }
 async function bundleScript(p: ScriptRunParams, observe=false) {
   const entry = p.path ? await fs.realpath(path.resolve(p.path)) : undefined;
-  const root = entry ? path.dirname(entry) : undefined;
+  const root = p.projectRoot ? path.resolve(p.projectRoot) : entry ? path.dirname(entry) : undefined;
+  if(root && await fs.realpath(root)!==root)throw new ServiceError('script_import_escape');
+  if(entry && (!root || !entry.startsWith(root+path.sep) || !(await fs.stat(entry)).isFile()))throw new ServiceError('script_import_type');
   let bytes = 0, count = 0;
   const hashes: Record<string,string> = {};
   const output = await build({
-    ...(entry ? {entryPoints:[entry]} : {stdin:{contents:p.source!,sourcefile:'inline.ts',loader:'ts'}}),
+    ...(entry ? {entryPoints:[entry]} : {stdin:{contents:p.source!,sourcefile:'inline.ts',loader:'ts',...(root?{resolveDir:root}:{})}}),
     tsconfigRaw:{compilerOptions:{}},bundle:true,write:false,platform:'neutral',format:'iife',globalName:'__aresModule',target:'es2020',logLevel:'silent',
     plugins:[{name:'confined-script',setup(b){
       b.onResolve({filter:/.*/},async args=>{
