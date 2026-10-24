@@ -748,3 +748,91 @@ first. The `ares-memory-capture-v1` file contains capture metadata and ordered
 split a large range; concatenate by sequence/range/offset. `first_sequence`,
 `next_sequence` and `dropped` make ring wrap explicit. Export preserves the native
 handle, rejects stale epochs/disconnects, and limits JSON output to 64 MiB.
+
+### Native JavaScript / TypeScript jobs
+
+`run_script` accepts exactly one of `path` and `source`, JSON `args`,
+`max_seconds` (1 ms–600 s), `max_frames` (0–1,000,000), and `wait_ms` (0–1000).
+It returns an operation handle immediately by default. Poll `operation_status`,
+cancel with `cancel_operation`, and page `script_result` using its optional
+`operation_id` to reject replacement results. The most recent result is retained;
+starting another job invalidates that result. `output_path` streams JSON to a
+new file in main; `operation_status.script_output` reports pending, committed
+(path/bytes/SHA-256), or failed. Runtime completion and file publication are
+reported separately. A failure or cancellation retains earlier guest effects.
+
+```ts
+export default async function ({args, emu, mem, input, frames, cpu, log}) {
+  await emu.loadState(args.state);
+  mem.writeHex(0x80002000, '12345678', 'cpu');
+  input.set(1, {right: true});
+  await frames(200);
+  return {frame: emu.frame, value: mem.u32(0x80002000, 'cpu')};
+}
+```
+
+File capabilities are explicit: `state_paths` grants specific state inputs;
+`output_paths` grants specific destinations for `emu.saveState(path)` and
+`emu.screenshot(path)`. These functions return promises. Undeclared destinations
+reject, existing files are preserved, and main revalidates native ownership
+before publication. Loads update the job epoch and invalidate memory captures
+and hooks. Other callers' reset, pause, takeover and disconnect interrupt jobs.
+`emu.info()` includes frame, epoch, executor, ROM hash and N64-memory availability.
+The initial handle includes source/module, argument and configuration hashes.
+
+Memory methods use big-endian guest order. `u8/i8/s8`, `u16/i16/s16`,
+`u32/i32/s32`, `u64/i64/s64`, `f32/f64` read typed values; `writeU32`,
+`writeI32`, etc. write them. `bytes`, `hex`, `writeBytes`, `writeHex` transfer
+copies. Typed operations reject unaligned addresses; all operations validate
+ranges and CPU/RDRAM views through the native memory service. N64 addresses
+accept 32-bit numbers or lossless strings/BigInts, including canonical KSEG
+aliases. `mem.region(nameOrId, offset, length)` reads supported debugger regions
+on other systems; pure region-reading jobs work there, while positive VI waits
+and live observation report `frame_boundary_unavailable`. `u64/i64` return BigInt; convert to strings before returning
+JSON. JSON nonfinite floats become null; unsupported/cyclic/BigInt results fail.
+
+`frames(0)` advances nothing; positive waits count completed VI boundaries,
+including a partial initial frame. Concurrent advances reject. Input replaces
+the whole port and latches at run start/next VI. Completion releases all script
+input and hooks and leaves execution paused.
+
+Modules are bundled once, with TypeScript stripping. Imports must be local and
+remain within the entry file's directory (or the granted plugin root) after realpath resolution. No Node,
+remote imports, build configuration or project plugins execute. Inline MCP source
+cannot import files; plugin source can import only within its granted root. Scripts have no filesystem, process, network, `std` or `os`
+APIs. Date is disabled and Math.random uses a fixed seed. Determinism still
+requires identical ROM/state, configuration, build, module graph and input.
+
+Bounds: 128 KiB module inputs, 64 modules, 256 KiB prepared source, 16 MiB JS
+heap, 512 KiB stack, 25 ms per resumption, 4096 promise jobs per resumption,
+64 KiB/read, 1024 bytes/write, 16 KiB logs and 4 MiB JSON result. There are at
+most 64 sequential host requests and 8 file artifacts per job. Unsupported
+pending promises, recursion, promise storms and limit failures tear down the
+runtime and release native ownership.
+
+`cpu.onExecute(address, callback)` installs up to 64 aligned physical-address
+matches (KSEG aliases match the same instruction). Callbacks run synchronously
+before execution, including delay slots, in registration order. Stopping breakpoint
+gates run first; an instruction stopped before execution does not invoke a hook. Registers are
+immutable copies; 64-bit fields are hex strings in `gpr`, `pc`, `hi`, `lo`, etc.
+The returned function disposes that hook outside callbacks. Awaiting, queued
+promise jobs, guest writes, input, file work and frame advances are forbidden
+inside callbacks. Limits are 4096 hits and 25 ms aggregate callback time per VI.
+The interpreter is selected for the entire hook lifetime and the configured
+executor is restored afterward. Sparse JIT instrumentation is not implemented.
+
+`ares run FILE --args scenario.json --output result.json` waits for completion.
+Use repeated `--state FILE` / `--artifact FILE` for script file capabilities.
+JSON goes to stdout; logs/errors go to stderr. SIGINT cancels only that job and
+exits 130. `examples/scripts/record.ts` and `observe.ts` share a decoder and take
+all address/type/clip tables through arguments.
+
+Plugins can call `ctx.scripts.run(params)` and
+`ctx.scripts.observe(params, value => ...)`. Relative paths resolve inside the
+plugin root; source can also be supplied. Runs require session.control,
+memory.read, memory.write and debug.read. Observation requires memory.read and
+cannot mutate or advance the guest. File capabilities are unavailable to plugins.
+One observer is supported initially; it publishes a latest value every fourth
+VI, with a 5 ms callback budget and an 8 KiB result limit. It suspends during
+exclusive runs, coalesces updates for slow panels, and is disposed on plugin
+unload/reset. Observers must return synchronously.
