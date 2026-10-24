@@ -157,9 +157,9 @@ export class PluginScope {
               const r=await this.context.services.request('script.observerRead',{offset:0,length:16384});
               if(!closed&&r.ok&&r.result){
                 if(r.result.error)throw new Error(r.result.error);
-                if(r.result.bytes&&r.result.frame!==last){last=r.result.frame??-1;const bytes=Uint8Array.from(r.result.hex.match(/../g)??[],b=>parseInt(b,16));callback(JSON.parse(new TextDecoder().decode(bytes)));}
+                if(r.result.bytes&&r.result.frame!==last){last=r.result.frame??-1;const bytes=Uint8Array.from(r.result.hex.match(/../g)??[],b=>parseInt(b,16));await callback(JSON.parse(new TextDecoder().decode(bytes)));}
               }
-            }catch(error){if(!closed){closed=true;clearInterval(timer);this.context.log.error(`Observer stopped: ${error}`);}}
+            }catch(error){if(!closed){closed=true;clearInterval(timer);this.context.log.error(`Observer stopped: ${error}`);void window.ares.plugins.request(this.token,'script.observerStop').catch(()=>{});}}
             finally{pending=false;}
           },100);
           return add(()=>{closed=true;clearInterval(timer);return window.ares.plugins.request(this.token,'script.observerStop').then(()=>{},()=>{});});
