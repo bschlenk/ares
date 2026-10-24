@@ -104,6 +104,7 @@ struct ScriptService {
     auto& s=self(c);uint64_t n;
     if(s.readOnly)return fail(c,"read_only_callback");
     if(argc!=1||!number(c,argv[0],n,1000000)||s.waiting||s.hostWaiting||n>s.frameLimit-s.framesUsed)return fail(c,"invalid_frame_advance");
+    if(n&&!s.execution->supported)return fail(c,"frame_boundary_unavailable");
     JSValue functions[2];JSValue p=JS_NewPromiseCapability(c,functions);if(JS_IsException(p))return p;
     JS_FreeValue(c,functions[1]);s.resolve=functions[0];s.waiting=true;s.framesUsed+=n;s.target=s.execution->frame+n;
     if(n){*s.paused=false;if(s.execution->onStart)s.execution->onStart();}
@@ -257,7 +258,7 @@ struct ScriptService {
     uint64_t milliseconds,limit;if(!ExecutionService::number(a[0],milliseconds)||!milliseconds||milliseconds>600000||!ExecutionService::number(a[1],limit)||limit>1000000)return {"invalid_request",{}};
     if(execution->active)return {"busy",{}};
     if(!execution->reservation||execution->reservation->owner!=owner)return {"script_preparation_revoked",{}};
-    if(!execution->supported)return {"unavailable",{}};
+    if(method=="script.observe"&&!execution->supported){execution->reservation.reset();return {"frame_boundary_unavailable",{}};}
     auto now=Clock::now();deadline=now+std::chrono::milliseconds(milliseconds);budget=now+std::chrono::milliseconds(25);
     readCalls=readBytes=readNs=0;frameLimit=limit;framesUsed=0;result.clear();error.clear();logs="[]";artifacts="[]";artifactCount=0;hostId=0;logBytes=0;destroy();
     runtime=JS_NewRuntime();if(!runtime){execution->reservation.reset();return {"script_oom",{}};}

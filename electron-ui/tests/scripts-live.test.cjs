@@ -68,3 +68,15 @@ test('native script VI waits, zero frames, promise storm, OOM, loops and cleanup
 
  }finally{router.detach();child.stdin.end('quit\n');const timer=setTimeout(()=>child.kill('SIGKILL'),1000);await closed;clearTimeout(timer);fs.rmSync(dir,{recursive:true,force:true})}
 });
+
+test('non-N64 scripts can read debugger regions and report unsupported VI stepping',{timeout:10000},async()=>{
+ const dir=fs.mkdtempSync('/tmp/ares-script-gb-'),rom=path.join(dir,'fixture.gb');fs.writeFileSync(rom,require('../fixture.cjs').makeFixture());
+ const child=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),['--rom',rom,'--system','Game Boy','--paused','--silent','--save-dir',dir,'--control-session','script-gb'],{stdio:['pipe','pipe','pipe','pipe']});child.stdout.resume();child.stderr.resume();const closed=once(child,'close');const native=new NativeSessionClient(child.stdin,child.stdio[3],{session:'script-gb',epoch:1},()=>{}),router=new SessionRouter();router.attach(native);
+ const request=async(m,p)=>{const r=await router.request(m,undefined,p,'owner');assert(r.ok,r.error);return r.result};
+ async function run(source,args={}){let op=await request('scripts.run',{source,args,timeoutMs:1000,maxFrames:1});while(op.state==='running'){await sleep(5);op=await request('execution.status',{operationId:op.operation_id})}return {op,page:await request('script.read',{offset:0,length:16384,operationId:op.operation_id})};}
+ try{
+  const region=(await request('memory.regions')).regions.find(r=>r.readable&&r.size>=4);const direct=await request('memory.read',{region:region.id,offset:0,length:4});
+  const result=await run('export default({args,mem,emu})=>({n64:emu.info().n64_memory,bytes:Array.from(mem.region(args.region,0,4))})',{region:region.id});assert.equal(result.op.stop_reason,'script_done');const value=JSON.parse(Buffer.from(result.page.hex,'hex'));assert.equal(value.n64,false);assert.equal(Buffer.from(value.bytes).toString('hex'),direct.hex);
+  const unsupported=await run('export default({frames})=>frames(1)');assert.equal(unsupported.op.stop_reason,'script_failed');assert.match(unsupported.page.error,/frame_boundary_unavailable/);
+ }finally{router.detach();child.stdin.end('quit\n');const timer=setTimeout(()=>child.kill('SIGKILL'),1000);await closed;clearTimeout(timer);fs.rmSync(dir,{recursive:true,force:true})}
+});
