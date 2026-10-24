@@ -1,6 +1,6 @@
 # Native scripting and CLI implementation plan
 
-Proposed 2026-10-23. Planning only; no runtime changes implemented.
+Proposed 2026-10-23. Implementation and acceptance are recorded below.
 
 Sources: [issue #12](https://github.com/bschlenk/ares/issues/12) and
 `~/Developer/kirby/docs/ares-electron-feedback.md`.
@@ -176,3 +176,73 @@ a seeded random source, or disable ambient clock/random APIs. Wall deadlines are
 safety bounds and can interrupt differently under load; do not claim identical
 completion across deadline failures or different renderer/core configurations.
 Include input/config/source hashes in recording metadata so results are comparable.
+
+## Implementation record (2026-10-23)
+
+Implemented slices 1–6, with the scoped interpreter-first hook implementation and
+sparse-JIT investigation in `SCRIPTING-JIT-NOTES.md`. Runtime usage, limits,
+compatibility migration and plugin contracts are in `mcp/README.md`.
+
+- Capture export streams bounded native pages into an atomic JSON artifact;
+  sequence wrap/drop metadata is preserved. Batch `steps` is now an explicit
+  `legacy_results` opt-in.
+- MCP and direct CLI use one registry. Existing tools remain available. The
+  installed helper dispatches tools/call/run and preserves ordinary app launch.
+- QuickJS 2026-06-04 is pinned to official commit
+  `7d1c13c5d8f8c6b32893786ed35cdcebd88194d2`; no libc/std/os bindings are linked.
+- Native jobs implement typed/region reads, bounded writes, VI waits, input,
+  promise draining, cancellation, state/file capabilities and result paging.
+  Main bundles confined modules/TS and handles state/artifact I/O. Script-owned
+  loads rebase the job epoch and invalidate hooks/captures.
+- Plugin run/observe APIs enforce capability and lifetime checks. Observation is
+  initially one read-only runtime, with throttled latest-value publication and
+  suspension during exclusive runs.
+- Execute hooks match normalized physical instruction addresses, preserve
+  pre-instruction/delay-slot registers, reject async/mutating callbacks, bound
+  aggregate work, and restore the configured executor after disposal.
+
+Fixture evidence includes 200 VIs × seven fields compared byte-for-byte with the
+native recorder, actual entry/delay-slot tuples, ownership/executor restoration,
+module escapes, loop/promise/OOM failure cleanup, state/artifact round trips,
+CLI discovery/output/SIGINT and SDK compilation. The fixture measured 1,403
+native reads (three initial typed reads plus 1,400 recording reads), 1,407 bytes,
+and approximately 19.9 ms inside native read functions in one run. The recording
+used no per-field memory transport requests. These are observations, not a
+cross-core or Kirby speedup guarantee.
+
+The private Kirby scenario was also run from its existing save state in an
+isolated native instance using `examples/scripts/record.ts`: 200 rows × seven
+fields, 10 settle VIs, right input for 40 rows then release. Repeating from the
+same state produced identical rows. Observed wall times were 6.17 s initially
+and 2.25 s warm, including state loading, bundling, execution and result transfer.
+No private ROM/state/output is committed. The shared example decoder accepts
+project-supplied clip ranges; no game addresses or lookup tables were added to
+native tools.
+
+Explicit initial limits: one observer; one retained native script result (use
+`script_result.operation_id` to detect replacement); 4 MiB result; interpreter
+for the entire execute-hook lifetime. Output publication has a separate
+`script_output` pending/committed/failed state. Sparse JIT optimization and write
+watches remain future work, as allowed by this plan.
+
+Final verification: the complete service suite passed (132 passed, one skipped),
+with an additional targeted pending-file ownership test passing. The direct CLI
+integration passed discovery, JSON/stderr discipline, output files and SIGINT.
+The copied signed macOS app passed its real MCP/plugin/CLI checks with checkout
+reads denied. A 100-VI private Kirby hook-versus-trace comparison observed 44
+entries in each mode and equivalent interpreter timings; details and limits are
+in `SCRIPTING-JIT-NOTES.md`.
+
+The standalone packaged TypeScript/native scripting check also passed with all
+checkout reads denied (`PACKAGED_SCRIPT_OK`), using only the bundled Node,
+esbuild, QuickJS, native host and copied runtime libraries.
+
+Final hardening tests also cover escaped-log serialization limits, bounded UTF-8
+errors, invalid host-work paths, plugin artifact-root pinning, and pure region
+reads on Game Boy with explicit rejection of unsupported VI stepping. The rebuilt
+CPU fixture completed with `CPU_DEBUG_FIXTURE_PASS`.
+
+The renderer observer consumer also has a deterministic slow-callback test:
+updates arriving while an asynchronous callback is pending are coalesced, then
+the next delivery reads the newest native value. Callback failure stops delivery
+and requests native observer cleanup.
