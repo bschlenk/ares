@@ -118,6 +118,7 @@ for (const file of ['SDL', 'MoltenVK'])
     path.resolve(libraryRoot, '../licenses', file),
     path.join(resources, 'licenses', file),
   )
+copy(path.resolve(__dirname, '../../thirdparty/quickjs/LICENSE'), path.join(resources, 'licenses/QuickJS'))
 const runtime = path.join(destination, 'Contents/MacOS/Ares')
 const nodeVersion = execFileSync(runtime, ['-p', 'process.versions.node'], {
   encoding: 'utf8',

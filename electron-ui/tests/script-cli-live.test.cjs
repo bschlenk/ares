@@ -1,0 +1,22 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {spawn}=require('node:child_process');const {once}=require('node:events');const fs=require('node:fs');const path=require('node:path');
+const {NativeSessionClient}=require('../dist/services/native-client.js');const {SessionRouter}=require('../dist/services/session-router.js');const {LocalServiceHost}=require('../dist/services/local-endpoint.js');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+test('direct CLI uses discovery, preserves stdout JSON, writes output and owns SIGINT cancellation',{timeout:20000},async()=>{
+ const dir=fs.mkdtempSync('/tmp/ares-script-cli-'),identity={session:'cli-test',epoch:1};
+ const nativeProcess=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),['--synthetic','--paused','--silent','--save-dir',dir,'--control-session',identity.session],{stdio:['pipe','pipe','pipe','pipe']});nativeProcess.stdout.resume();nativeProcess.stderr.resume();const closed=once(nativeProcess,'close');
+ const native=new NativeSessionClient(nativeProcess.stdin,nativeProcess.stdio[3],identity,()=>{});const router=new SessionRouter();router.attach(native);const host=new LocalServiceHost(router,async()=>({ready:true}));
+ function cli(args){const child=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),...args],{env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc')}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);return {child,done:once(child,'close').then(([code])=>({code,out,err}))};}
+ try{
+  await host.listen(path.join(dir,'ipc'));
+  const source=path.join(dir,'record.ts');fs.writeFileSync(source,'export default async({args,frames,log})=>{await frames(4);log("hello");return {answer:args.n}}');
+  const args=path.join(dir,'args.json'),output=path.join(dir,'output.json');fs.writeFileSync(args,'{"n":42}');
+  const r=await cli(['run',source,'--args',args,'--output',output]).done;
+  assert.equal(r.code,0,r.err);assert.deepEqual(JSON.parse(r.out),{answer:42});assert.equal(fs.readFileSync(output,'utf8'),r.out);assert.match(r.err,/hello/);
+  const invalid=await cli(['call','run_frames','--n','-1']).done;assert.equal(invalid.code,1);assert.equal(invalid.out,'');assert.match(invalid.err,/too_small/);
+  const failed=await cli(['call','read_memory','--region','missing','--addr','0','--length','1']).done;assert.equal(failed.code,1);assert.equal(failed.out,'');assert.match(failed.err,/unknown_region/);
+  fs.writeFileSync(source,'export default({frames})=>frames(1000000)');const interrupt=cli(['run',source]);
+  let operation;for(let i=0;i<200;i++){const s=await native.request('session.status');if(s.result?.operation_id){operation=s.result.operation_id;break;}await sleep(5)}assert(operation);
+  interrupt.child.kill('SIGINT');const cancelled=await interrupt.done;assert.equal(cancelled.code,130,cancelled.err);assert.equal(cancelled.out,'');assert.match(cancelled.err,/cancelled|script_interrupted/);
+  const final=await native.request('execution.status',undefined,{operationId:operation});assert.equal(final.result.state,'done');
+ }finally{await host.close();router.detach();nativeProcess.stdin.end('quit\n');const timer=setTimeout(()=>nativeProcess.kill('SIGKILL'),1000);await closed;clearTimeout(timer);fs.rmSync(dir,{recursive:true,force:true})}
+});

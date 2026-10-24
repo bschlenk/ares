@@ -4,14 +4,73 @@
     "sha256": "28db87365993793d6844bf05894372fe3f19b30a64a856f06aaabd249ed0465c",
     "mcp_version": "1.30.0"
   },
-  "signature_matching": 68,
-  "signature_differences": [],
+  "signature_matching": 67,
+  "signature_differences": [
+    {
+      "name": "batch",
+      "reference": {
+        "properties": {
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "steps": {
+            "types": [
+              "array"
+            ]
+          },
+          "stop_on_error": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "steps"
+        ]
+      },
+      "current": {
+        "properties": {
+          "legacy_results": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "steps": {
+            "types": [
+              "array"
+            ]
+          },
+          "stop_on_error": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "steps"
+        ]
+      }
+    }
+  ],
   "reference_count": 68,
-  "current_count": 88,
+  "current_count": 91,
   "missing": [],
   "added": [
     "close_rom",
     "load_rom",
+    "memory_capture_export",
     "memory_capture_freeze",
     "memory_capture_read",
     "memory_capture_release",
@@ -29,6 +88,8 @@
     "provenance_control",
     "read_memory_many",
     "read_memory_many_va",
+    "run_script",
+    "script_result",
     "ui_screenshot"
   ],
   "matching": 0,
@@ -122,6 +183,14 @@
         }
       },
       "fields": [
+        {
+          "field": "legacy_results",
+          "reference": null,
+          "current": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
         {
           "field": "max_seconds",
           "reference": {

@@ -156,7 +156,11 @@ async function run() {
     const inventory = (await peer.request('tools/list', {})).result.tools.map(
       (t) => t.name,
     )
-    assert.equal(inventory.length, 86)
+    const {ToolRegistry}=require('../dist/tools/registry.js');
+    const {registerTools}=require('../dist/mcp/register-tools.js');
+    const {LocalServiceClient}=require('../dist/services/local-endpoint.js');
+    const registry=new ToolRegistry(),schemaClient=new LocalServiceClient('/tmp/ares-package-schema-only.json','schema');registerTools(registry,schemaClient);
+    assert.deepEqual([...inventory].sort(),registry.list().map(t=>t.name).sort());schemaClient.close();
     for (const name of [
       'profiler_control',
       'profiler_clear',

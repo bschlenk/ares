@@ -17,6 +17,9 @@ export async function exercise(ctx: PluginContext) {
   await ctx.services.request('n64.memory.read', {address:'0x80000000', view:'cpu', length:4});
   const settings: ServiceResult<'runtime.settings'> = {volume:0.4,mute:false,luminance:1,saturation:1,gamma:1};
   await ctx.services.request('runtime.configure', settings);
+  await ctx.scripts.run({source:'export default()=>1', args:{}, timeoutMs:1000, maxFrames:0});
+  const stopObserver=await ctx.scripts.observe({path:'scripts/observe.ts', args:{}, timeoutMs:1000, maxFrames:0}, value=>console.log(value));
+  ctx.scope.add(stopObserver);
   const saved = await ctx.storage.get<{count:number}>('state');
   ctx.ui.registerPanel('typed', panel => panel.onVisibility(visible => console.log(visible, saved?.count)));
   ctx.scope.listen(document.body, 'click', () => console.log(ctx.signal.aborted));

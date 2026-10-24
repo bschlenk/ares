@@ -38,3 +38,13 @@ set_target_properties(ares-electron-cpu-fixture PROPERTIES RUNTIME_OUTPUT_DIRECT
 if(APPLE)
   target_link_options(ares-electron-cpu-fixture PRIVATE "LINKER:-dead_strip")
 endif()
+
+# Pinned embedded engine; never link the QuickJS filesystem/process standard library.
+add_library(ares-quickjs STATIC
+  ../thirdparty/quickjs/quickjs.c ../thirdparty/quickjs/dtoa.c
+  ../thirdparty/quickjs/libregexp.c ../thirdparty/quickjs/libunicode.c
+  ../thirdparty/quickjs/cutils.c)
+target_compile_definitions(ares-quickjs PRIVATE _GNU_SOURCE CONFIG_VERSION="2026-06-04")
+target_include_directories(ares-quickjs PUBLIC ../thirdparty/quickjs)
+set_target_properties(ares-quickjs PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
+target_link_libraries(ares-electron-host PRIVATE ares-quickjs)

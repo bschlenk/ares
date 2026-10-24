@@ -829,12 +829,22 @@ export class PluginRegistry {
   }
   async request(token: string, method: ServiceMethod, params: any) {
     const r = this.lease(token)
+    if(method==='scripts.run'||method==='scripts.observe') {
+      if(params?.outputPath!==undefined||(params?.statePaths?.length??0)>0||(params?.outputPaths?.length??0)>0)throw new ServiceError('plugin_capability_denied');
+      if(params?.path!==undefined) {
+        if(typeof params.path!=='string'||path.isAbsolute(params.path)||params.source!==undefined)throw new ServiceError('plugin_capability_denied');
+        params={...params,path:await this.within(r.root,params.path)};
+      } else if(typeof params?.source!=='string')throw new ServiceError('plugin_capability_denied');
+      if(method==='scripts.run'&&!['session.control','memory.read','memory.write','debug.read'].every(c=>r.manifest!.capabilities.includes(c as Capability)))throw new ServiceError('plugin_capability_denied');
+    }
     let capability: Capability | undefined
     if (['n64.debug.lastStop', 'n64.debug.registers'].includes(method))
       capability = 'debug.read'
+    if (['scripts.observe','script.observerRead','script.observerStop'].includes(method)) capability = 'memory.read'
+    if (method === 'script.read') capability = 'session.control'
     if (method === 'session.status') capability = 'session.read'
     if (['memory.regions', 'memory.read',
-              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes', 'n64.memory.readMany', 'n64.memory.read'].includes(method))
+              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes', 'n64.memory.readMany', 'n64.memory.read'].includes(method))
       capability = 'memory.read'
     if (
       ['memory.write', 'n64.memory.write', 'n64.memory.writeMany'].includes(
@@ -844,6 +854,7 @@ export class PluginRegistry {
       capability = 'memory.write'
     if (
       [
+        'scripts.run',
         'session.pause',
         'session.resume',
         'execution.runFrames',
@@ -862,7 +873,7 @@ export class PluginRegistry {
         'session.status',
         'memory.regions',
         'memory.read',
-              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
+              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
         'n64.memory.readMany', 'n64.memory.read',
         'n64.debug.lastStop',
         'n64.debug.registers',

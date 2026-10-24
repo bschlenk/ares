@@ -158,7 +158,7 @@ struct N64Service {
     }
     return {"unavailable", {}};
   }
-  static ControlResult memory(const std::string& method, const std::vector<std::string>& args, bool busy, bool dryRun = false, uint32_t readLimit = MemoryService::maxTransfer) {
+  static ControlResult memory(const std::string& method, const std::vector<std::string>& args, bool busy, bool dryRun = false, uint32_t readLimit = MemoryService::maxTransfer, std::vector<uint8_t>* readBytes = nullptr) {
     using namespace ares::Nintendo64;
     bool write = method == "n64.memory.write";
     if(write && (busy || nall::GDB::server.hasClient())) return {"busy", {}};
@@ -188,11 +188,11 @@ struct N64Service {
     bool kseg1 = (addr >= 0xa0000000ull && addr < 0xc0000000ull) || (addr >= 0xffffffffa0000000ull && addr < 0xffffffffc0000000ull);
     bool cached = args[1] == "cpu" && !kseg1;
     unsigned dirty = 0, resident = 0;
-    for(auto& line : cpu.dcache.lines) {
+    if(write)for(auto& line : cpu.dcache.lines) {
       uint32_t pa = (line.tagKey & ~0xfffu) | line.index;
       if(line.valid() && line.dirty && pa < paddr + length && pa + 16 > paddr) ++dirty;
     }
-    for(auto& line : cpu.icache.lines) {
+    if(write)for(auto& line : cpu.icache.lines) {
       uint32_t pa = (line.tagKey & ~0xfffu) | line.index;
       if(line.valid() && pa < paddr + length && pa + 32 > paddr) ++resident;
     }
@@ -204,10 +204,12 @@ struct N64Service {
         else rdram.ram.write<Byte>(p, bytes[i], RBusDevice::ARES_DEBUGGER);
       } else {
         uint8_t byte = cached ? cpu.dcache.readDebug<Byte>(va, p) : rdram.ram.read<Byte>(p, RBusDevice::ARES_DEBUGGER);
-        encoded += digits[byte >> 4]; encoded += digits[byte & 15];
+        if(readBytes) readBytes->push_back(byte);
+        else { encoded += digits[byte >> 4]; encoded += digits[byte & 15]; }
       }
     }
     if(write && Accuracy::CPU::Recompiler) cpu.recompiler.invalidateRange(paddr, length);
+    if(readBytes && !write)return {{}, "{}"};
     std::string out = "{\"addr\":" + controlQuote(hex(addr)) + ",\"paddr\":" + controlQuote(hex(paddr)) + ",\"view\":" + controlQuote(args[1]) + ",\"cache_aware\":" + (cached ? "true" : "false");
     if(!write) return {{}, out + ",\"length\":" + std::to_string(length) + ",\"hex\":" + controlQuote(encoded) + "}"};
     std::string hazards = "[";

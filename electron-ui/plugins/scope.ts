@@ -145,15 +145,36 @@ export class PluginScope {
           return effect(() => mountSettingsForm(element, this.context.settings))
         },
       },
+      scripts: {
+        run: params => this.context.services.request('scripts.run', params),
+        observe: async (params, callback) => {
+          const reply=await this.context.services.request('scripts.observe',params);
+          if(!reply.ok)throw new Error(reply.error);
+          let pending=false,closed=false,last=-1;
+          const timer=setInterval(async()=>{
+            if(pending||closed)return;pending=true;
+            try {
+              const r=await this.context.services.request('script.observerRead',{offset:0,length:16384});
+              if(!closed&&r.ok&&r.result){
+                if(r.result.error)throw new Error(r.result.error);
+                if(r.result.bytes&&r.result.frame!==last){last=r.result.frame??-1;const bytes=Uint8Array.from(r.result.hex.match(/../g)??[],b=>parseInt(b,16));callback(JSON.parse(new TextDecoder().decode(bytes)));}
+              }
+            }catch(error){if(!closed){closed=true;clearInterval(timer);this.context.log.error(`Observer stopped: ${error}`);}}
+            finally{pending=false;}
+          },100);
+          return add(()=>{closed=true;clearInterval(timer);return window.ares.plugins.request(this.token,'script.observerStop').then(()=>{},()=>{});});
+        },
+      },
       services: {
         request: async (method, params) => {
           alive()
           if (
             ![
+              'scripts.observe','script.observerRead','script.observerStop',
               'session.status',
               'memory.regions',
               'memory.read',
-              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
+              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
               'n64.memory.readMany', 'n64.memory.read',
               'n64.debug.lastStop',
               'n64.debug.registers',

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { ServiceError, type SessionClient, type SessionIdentity, type SessionReply } from './contracts.js';
@@ -44,7 +45,7 @@ export class StateLoading {
       }
       guard(); const result: StateServiceMap['n64.state.loadCommit']['result'] = unwrap(await client.request('n64.state.loadCommit', identity, { uploadId, resume: p.resume, keepOverrides: p.keepOverrides }, owner));
       // Commit starts a new epoch. Never apply the old-epoch guard after it.
-      uploadId = undefined; return { ...result, path: file };
+      uploadId = undefined; return { ...result, path: file, state_sha256: createHash('sha256').update(data.bytes).digest('hex') };
     } catch (error) { if (error instanceof ServiceError) throw error; throw new ServiceError('state_read_failed'); }
     finally {
       if (uploadId !== undefined) await client.request('n64.state.loadAbort', identity, { uploadId }, owner).catch(() => {});

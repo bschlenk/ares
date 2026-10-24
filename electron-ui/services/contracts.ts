@@ -1,3 +1,4 @@
+import { SCRIPT_NATIVE_METHODS, encodeScript, validScriptRun, type ScriptServiceMap } from './script-contracts.js';
 import { MEMORY_TOOL_METHODS, encodeMemoryTools, validMemoryTools, type MemoryToolsMap } from './memory-tools-contracts.js';
 import { RUNTIME_METHODS, encodeRuntime, validRuntimeSettings, type RuntimeServiceMap } from './runtime-contracts.js';
 import { VIEWER_METHODS, encodeViewer, validViewer, type ViewerServiceMap } from './viewer-contracts.js';
@@ -21,8 +22,8 @@ import { validMemoryVerification, type MemoryVerification, N64_METHODS, encodeN6
 /** Shared contract for Electron routing, the inspector and the future MCP adapter. */
 export const PROTOCOL = 1 as const;
 export const MAX_TRANSFER = 1024;
-export const NATIVE_METHODS = ['session.status', 'session.pause', 'session.resume', 'session.reset', 'memory.regions', 'memory.read', 'memory.readMany', 'memory.write', 'execution.runFrames', 'execution.runUntilFrame', 'execution.status', 'execution.cancel', 'execution.release', 'execution.stepInstructions', ...N64_METHODS, ...INPUT_METHODS.filter(m => m !== 'n64.input.tap'), ...TRACE_METHODS, 'n64.dma.log', ...PROFILER_METHODS, 'n64.input.tap', ...FRAME_METHODS, ...AUDIO_METHODS, ...RECORDING_METHODS, ...NATIVE_STATE_METHODS, ...NATIVE_BATCH_METHODS, ...MACHINE_METHODS, ...RSP_METHODS, ...RDP_CAPTURE_METHODS, ...INSPECTION_METHODS, ...CALL_METHODS, ...VIEWER_METHODS, ...RUNTIME_METHODS, ...MEMORY_TOOL_METHODS] as const;
-export const METHODS = [...NATIVE_METHODS, ...ARTIFACT_METHODS, 'artifact.rdpExport', 'artifact.dump', ...SCREENSHOT_METHODS, 'artifact.audioSave', 'artifact.videoStop', ...STATE_METHODS, 'experiment.batch', 'experiment.cancelBatch'] as const;
+export const NATIVE_METHODS = ['session.status', 'session.pause', 'session.resume', 'session.reset', 'memory.regions', 'memory.read', 'memory.readMany', 'memory.write', 'execution.runFrames', 'execution.runUntilFrame', 'execution.status', 'execution.cancel', 'execution.release', 'execution.stepInstructions', ...N64_METHODS, ...INPUT_METHODS.filter(m => m !== 'n64.input.tap'), ...TRACE_METHODS, 'n64.dma.log', ...PROFILER_METHODS, 'n64.input.tap', ...FRAME_METHODS, ...AUDIO_METHODS, ...RECORDING_METHODS, ...NATIVE_STATE_METHODS, ...NATIVE_BATCH_METHODS, ...MACHINE_METHODS, ...RSP_METHODS, ...RDP_CAPTURE_METHODS, ...INSPECTION_METHODS, ...CALL_METHODS, ...VIEWER_METHODS, ...RUNTIME_METHODS, ...MEMORY_TOOL_METHODS, ...SCRIPT_NATIVE_METHODS] as const;
+export const METHODS = [...NATIVE_METHODS, ...ARTIFACT_METHODS, 'artifact.rdpExport', 'artifact.dump', ...SCREENSHOT_METHODS, 'artifact.audioSave', 'artifact.videoStop', ...STATE_METHODS, 'experiment.batch', 'experiment.cancelBatch', 'scripts.run','scripts.observe'] as const;
 export type ServiceMethod = typeof METHODS[number];
 export type SessionMethod = Extract<ServiceMethod, `session.${string}`>;
 export interface SessionIdentity { session: string; epoch: number }
@@ -42,7 +43,7 @@ export interface MemoryRead { region: string; offset: number; length: number; he
 export interface MemoryRange { region: string; offset: number; length: number }
 export interface MemorySample { reads: MemoryRead[]; epoch: number; frame: number; frame_kind: string; sample_id: number; at_frame_boundary: boolean }
 export interface MemoryWritten { region: string; offset: number; written: number }
-export interface ServiceMap extends MemoryToolsMap, RuntimeServiceMap, ViewerServiceMap, CallServiceMap, InspectionServiceMap, RdpCaptureServiceMap, RspServiceMap, MachineServiceMap, BatchServiceMap, StateServiceMap, RecordingServiceMap, AudioServiceMap, N64ServiceMap, InputServiceMap, TraceServiceMap, DmaServiceMap, ProfilerServiceMap, ArtifactServiceMap, FrameServiceMap, ScreenshotServiceMap {
+export interface ServiceMap extends ScriptServiceMap, MemoryToolsMap, RuntimeServiceMap, ViewerServiceMap, CallServiceMap, InspectionServiceMap, RdpCaptureServiceMap, RspServiceMap, MachineServiceMap, BatchServiceMap, StateServiceMap, RecordingServiceMap, AudioServiceMap, N64ServiceMap, InputServiceMap, TraceServiceMap, DmaServiceMap, ProfilerServiceMap, ArtifactServiceMap, FrameServiceMap, ScreenshotServiceMap {
   'execution.stepInstructions': { params: { count: number; timeoutMs: number }; result: ExecutionOperation };
   'session.status': { params: undefined; result: SessionStatus };
   'session.pause': { params: undefined; result: SessionStatus };
@@ -82,6 +83,8 @@ export function encodeRequest<M extends ServiceMethod>(id: string, identity: Ses
     if (!keys(p, ['handle','path','overwrite']) || !integer(p.handle) || !p.handle || typeof p.path !== 'string' || !p.path.length || p.path.length > 4096 || p.path.includes('\0') || typeof p.overwrite !== 'boolean') throw new ServiceError('invalid_request');
     return '';
   }
+  if ((method === 'scripts.run' || method === 'scripts.observe')) { if (!validScriptRun(params)) throw new ServiceError('invalid_request'); return ''; }
+  if (SCRIPT_NATIVE_METHODS.includes(method as any)) {const encoded=encodeScript(method,params);if(encoded===undefined)throw new ServiceError('invalid_request');return `control 1 ${id} ${identity.session} ${identity.epoch} ${method}${encoded} owner=${owner}\n`;}
   // Main-only methods use this validator but never enter the native wire.
   if (MEMORY_TOOL_METHODS.includes(method as typeof MEMORY_TOOL_METHODS[number])) {
     const encoded = encodeMemoryTools(method, params);
@@ -216,6 +219,14 @@ export function decodeReply<M extends ServiceMethod = 'session.status'>(line: st
     if (method.startsWith('n64.input.') && method !== 'n64.input.tap') valid = validInput(s);
     if (method === 'n64.input.tap') { decodeReply(JSON.stringify(r), 'execution.status'); valid = s.kind === 'controller_tap'; }
     if (method.startsWith('session.')) valid = !!s && typeof s.paused === 'boolean' && typeof s.system === 'string' && typeof s.synthetic === 'boolean' && Array.isArray(s.capabilities) && s.capabilities.every((m: ServiceMethod) => METHODS.includes(m)) && (s.game == null || typeof s.game === 'object' && /^[a-f0-9]{64}$/.test(s.game.sha256) && integer(s.game.size) && s.game.kind === 'program.rom');
+    if (method === 'script.resolve') valid = s?.resolved === true;
+    if (method === 'script.pending') valid = typeof s?.running==='boolean' && (s.pending===null || integer(s.pending?.id) && ['state_load','state_save','screenshot'].includes(s.pending.kind) && typeof s.pending.path==='string');
+    if (method === 'script.observerStop') valid = s?.stopped === true;
+    if (method === 'script.observerStart' || method === 'scripts.observe') valid = integer(s?.observer_id) && s.observer_id>0;
+    if (method === 'script.prepare' || method === 'script.observerPrepare') valid = s?.ready === true;
+    if (method === 'script.write' || method === 'script.observerWrite') valid = s?.written === true;
+    if (method === 'script.read' || method === 'script.observerRead') valid = !!s && integer(s.operation_id) && typeof s.hex === 'string' && /^(?:[0-9a-f]{2}){0,16384}$/.test(s.hex) && integer(s.bytes) && s.bytes<=4194304 && typeof s.error==='string' && Array.isArray(s.logs);
+    if (method === 'scripts.run' || method === 'script.start') valid = !!s && integer(s.operation_id) && s.operation_id>0 && ['running','done'].includes(s.state) && s.kind==='script' && integer(s.epoch) && typeof s.stop_reason==='string';
     if (method === 'execution.release') valid = !!s && s.released === true;
     if (method.startsWith('execution.') && !['execution.release', 'execution.batchBegin', 'execution.batchCheck'].includes(method)) valid = !!s && integer(s.operation_id) && s.operation_id > 0 && token(s.owner) && typeof s.kind === 'string' && ['running', 'done'].includes(s.state) && s.stopped === (s.state === 'done') && typeof s.stop_reason === 'string' && integer(s.epoch) && integer(s.start_epoch) && integer(s.start_frame) && integer(s.target_frame) && integer(s.frame) && integer(s.elapsed_frames) && typeof s.start_at_frame_boundary === 'boolean' && typeof s.at_frame_boundary === 'boolean' && typeof s.frame_kind === 'string' && typeof s.executor === 'string' && integer(s.slices) && Number.isFinite(s.elapsed_seconds) && s.elapsed_seconds >= 0 && (s.executed === undefined || integer(s.executed)) && (s.debug_stop === undefined || validStop(s.debug_stop)) && (s.completion_registers === undefined || validRegisters(s.completion_registers)) && (s.memory_verification === undefined || validMemoryVerification(s.memory_verification)) && (s.rsp === undefined || validRspProgress(s.rsp)) && (s.call === undefined || s.kind === 'call_function' && validCallProgress(s.call));
     if (VIEWER_METHODS.includes(method as typeof VIEWER_METHODS[number])) valid = validViewer(method, s) && (s.epoch === undefined || s.epoch === r.epoch);

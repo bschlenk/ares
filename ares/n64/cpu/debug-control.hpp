@@ -125,6 +125,9 @@ struct DebugControl {
     u64 count;
   };
 
+  // Host-owned synchronous pre-instruction observer; false requests a safe stop.
+  std::function<bool(u64, u32)> executeObserver;
+
   //debug-control.cpp
   auto power() -> void;
   auto normalizeAddress(u64 address, u32 length, u32& paddr, string& error) const -> bool;

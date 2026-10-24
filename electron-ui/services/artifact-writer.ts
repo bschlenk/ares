@@ -1,3 +1,4 @@
+import { artifactGuard } from './artifact-guard.js';
 import fs from 'node:fs/promises';
 import { linkSync, renameSync } from 'node:fs';
 import path from 'node:path';
@@ -30,6 +31,7 @@ export async function publishArtifact(destination: string, overwrite: boolean,
     await handle.sync(); await handle.close(); handle = undefined;
     // The tiny publication step is synchronous so detach/revocation cannot
     // interleave between the final main-thread guard and publication.
+    await artifactGuard.getStore()?.();
     guard();
     if (overwrite) renameSync(temporary, target);
     else linkSync(temporary, target);
