@@ -1,0 +1,169 @@
+import { constants } from 'node:fs';
+import { publishArtifact } from './artifact-writer.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { build } from 'esbuild';
+import { ServiceError, type SessionIdentity, type ExecutionOperation } from './contracts.js';
+import type { NativeSessionClient } from './native-client.js';
+import type { ScriptRunParams } from './script-contracts.js';
+
+const bootstrap = `
+const aligned=(a,n)=>typeof a==='number'?a%n:BigInt(a)%BigInt(n);
+const mem={writeHex:(a,hex,v='cpu')=>{if(typeof hex!=='string'||!/^(?:[0-9a-f]{2}){1,1024}$/i.test(hex))throw Error('invalid_hex');__write(a,Uint8Array.from(hex.match(/../g),b=>parseInt(b,16)).buffer,v)},region:(name,offset,length)=>new Uint8Array(__region(name,offset,length)),bytes:(a,n,v='cpu')=>new Uint8Array(__read(a,n,v)),hex:(a,n,v='cpu')=>Array.from(new Uint8Array(__read(a,n,v)),b=>b.toString(16).padStart(2,'0')).join(''),writeBytes:(a,b,v='cpu')=>__write(a,new Uint8Array(b).buffer,v)};
+for(const [type,width,get,set] of [['u8',1,'getUint8','setUint8'],['i8',1,'getInt8','setInt8'],['u16',2,'getUint16','setUint16'],['i16',2,'getInt16','setInt16'],['u32',4,'getUint32','setUint32'],['i32',4,'getInt32','setInt32'],['u64',8,'getBigUint64','setBigUint64'],['i64',8,'getBigInt64','setBigInt64'],['f32',4,'getFloat32','setFloat32'],['f64',8,'getFloat64','setFloat64']]){
+  mem[type]=(a,v='cpu')=>{if(aligned(a,width)!=0)throw Error('unaligned_address');return new DataView(__read(a,width,v))[get](0,false)};
+  mem['write'+type[0].toUpperCase()+type.slice(1)]=(a,value,v='cpu')=>{if(aligned(a,width)!=0)throw Error('unaligned_address');const b=new ArrayBuffer(width);new DataView(b)[set](0,value,false);__write(a,b,v)};
+}
+const input=(state={})=>{const names=['a','b','z','start','up','down','left','right','c_up','c_down','c_left','c_right','l','r'];return __input(state.port??1,names.reduce((m,k,i)=>m|(state[k]?1<<i:0),0),state.x??0,state.y??0)};
+input.set=(port,state={},stick={})=>input({...state,...stick,port});
+for(const n of [8,16,32,64]){mem['s'+n]=mem['i'+n];mem['writeS'+n]=mem['writeI'+n]}
+let seed=1;Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};globalThis.Date=undefined;
+`;
+
+/** Bundle once with a confined file loader. No project configuration or plugins run. */
+let preparations = 0;
+export async function prepareScript(p: ScriptRunParams, observe=false) {
+  if(preparations>=2)throw new ServiceError('busy');
+  ++preparations;
+  try{return await bundleScript(p,observe);}finally{--preparations;}
+}
+async function bundleScript(p: ScriptRunParams, observe=false) {
+  const entry = p.path ? await fs.realpath(path.resolve(p.path)) : undefined;
+  const root = entry ? path.dirname(entry) : undefined;
+  let bytes = 0, count = 0;
+  const hashes: Record<string,string> = {};
+  const output = await build({
+    ...(entry ? {entryPoints:[entry]} : {stdin:{contents:p.source!,sourcefile:'inline.ts',loader:'ts'}}),
+    tsconfigRaw:{compilerOptions:{}},bundle:true,write:false,platform:'neutral',format:'iife',globalName:'__aresModule',target:'es2020',logLevel:'silent',
+    plugins:[{name:'confined-script',setup(b){
+      b.onResolve({filter:/.*/},async args=>{
+        if(!root || (!args.kind.startsWith('entry') && !args.path.startsWith('.')))throw new Error('script_import_denied');
+        const base=path.resolve(args.resolveDir,args.path);
+        if(base!==root&&!base.startsWith(root+path.sep))throw new Error('script_import_escape');
+        const candidates=path.extname(base)?[base,...(base.endsWith('.js')?[base.slice(0,-3)+'.ts']:[])]:[base+'.ts',base+'.mts',base+'.js',base+'.mjs',base+'.json',path.join(base,'index.ts'),path.join(base,'index.js')];
+        for(const candidate of candidates){
+          let real:string;
+          try{real=await fs.realpath(candidate);}catch(error){if(['ENOENT','ENOTDIR'].includes((error as NodeJS.ErrnoException).code??''))continue;throw error;}
+          if(!real.startsWith(root+path.sep))throw new Error('script_import_escape');
+          if(!(await fs.stat(real)).isFile())throw new Error('script_import_type');
+          return {path:real};
+        }
+        throw new Error('script_import_not_found');
+      });
+      b.onLoad({filter:/.*/},async args=>{
+        if(++count>64)throw new Error('script_import_limit');
+        const real=await fs.realpath(args.path);
+        if(!root || !real.startsWith(root+path.sep))throw new Error('script_import_escape');
+        const file=await fs.open(real,constants.O_RDONLY|(constants.O_NOFOLLOW??0)|(constants.O_NONBLOCK??0));
+        let contents:Buffer;
+        try {
+          const before=await file.stat();
+          if(!before.isFile()||before.size>131072-bytes)throw new Error('script_source_limit');
+          const buffer=Buffer.alloc(before.size+1),read=await file.read(buffer,0,buffer.length,0),after=await file.stat();
+          const pinned=await fs.realpath(args.path),named=await fs.stat(pinned);
+          if(!pinned.startsWith(root+path.sep)||named.ino!==before.ino||named.dev!==before.dev||before.size!==after.size||before.mtimeMs!==after.mtimeMs||read.bytesRead!==before.size)throw new Error('script_module_changed');
+          contents=buffer.subarray(0,read.bytesRead);
+        } finally {await file.close();}
+        bytes+=contents.length;if(bytes>131072)throw new Error('script_source_limit');
+        hashes[path.relative(root!,args.path)]=createHash('sha256').update(contents).digest('hex');
+        const ext=path.extname(args.path);if(!['.js','.mjs','.ts','.mts','.json'].includes(ext))throw new Error('script_import_type');
+        return {contents:contents.toString('utf8'),loader:['.ts','.mts'].includes(ext)?'ts':ext==='.json'?'json':'js'};
+      });
+    }}]
+  });
+  const bundled=output.outputFiles[0].text;
+  if(/\bimport\s*\(/.test(bundled))throw new ServiceError('script_dynamic_import_denied');
+  const args=JSON.stringify(p.args);
+  const source=bootstrap+bundled+`\n${observe?'(()=>':'Promise.resolve().then(()=>'}__aresModule.default({args:${args},emu:Object.freeze({get frame(){return __info().frame},info:__info,loadState:path=>__host('state_load',path),saveState:path=>__host('state_save',path),screenshot:path=>__host('screenshot',path)}),mem,input,frames:__frames,cpu:Object.freeze({onExecute:(address,callback)=>{const id=__hook(address,r=>{Object.freeze(r.gpr);Object.freeze(r.cop0);Object.freeze(r.fpr);return callback(Object.freeze(r))});return ()=>__unhook(id)}}),log:(...v)=>__log(JSON.stringify(v))}));`;
+  if(Buffer.byteLength(source)>262144)throw new ServiceError('script_source_limit');
+  return {source,hashes,sha256:createHash('sha256').update(source).digest('hex')};
+}
+export async function startScript(client:NativeSessionClient,identity:SessionIdentity,p:ScriptRunParams,owner:string,current:()=>boolean,observe=false):Promise<any> {
+  const prepared=await prepareScript(p,observe);
+  const guard=()=>{if(!current())throw new ServiceError('disconnected');if(client.identity.session!==identity.session||client.identity.epoch!==identity.epoch)throw new ServiceError('stale_epoch');};
+  const request=async(method:any,params:any)=>{guard();const r=await client.request(observe?method.replace('script.prepare','script.observerPrepare').replace('script.write','script.observerWrite').replace('script.start','script.observerStart'):method,identity,params,owner);if(!r.ok||!r.result)throw new ServiceError(r.error??'invalid_reply');return r.result as any;};
+  const data=Buffer.from(prepared.source);
+  await request('script.prepare',{bytes:data.length});
+  const status=await request('session.status',undefined);
+  const config=await request('runtime.settings',undefined);
+  for(let offset=0;offset<data.length;offset+=1024)await request('script.write',{hex:data.subarray(offset,offset+1024).toString('hex')});
+  const op=await request('script.start',{timeoutMs:p.timeoutMs,maxFrames:p.maxFrames});
+  return {...op,script_metadata:{rom_sha256:status.game?.sha256??null,runtime_settings_sha256:createHash('sha256').update(JSON.stringify(config)).digest('hex'),source_sha256:prepared.sha256,module_sha256:prepared.hashes,args_sha256:createHash('sha256').update(JSON.stringify(p.args)).digest('hex')}};
+}
+
+/** File work runs in main; the native job retains the reservation while suspended. */
+export class ScriptJobs {
+  private generation=0;
+  readonly outputs = new Map<number, Record<string, unknown>>();
+  private jobs = new Map<string, { cancelled: boolean; id?: number }>();
+  release(owner:string) { const job=this.jobs.get(owner);if(job)job.cancelled=true; }
+  close() { ++this.generation;for(const job of this.jobs.values())job.cancelled=true;this.jobs.clear();this.outputs.clear(); }
+  async start(client:NativeSessionClient,invoke:import('./contracts.js').SessionClient,identity:SessionIdentity,p:ScriptRunParams,owner:string,current:()=>boolean) {
+    const generation=this.generation;
+    const previous=this.jobs.get(owner);
+    if(previous){
+      if(!previous.id||this.outputs.get(previous.id)?.state==='pending')throw new ServiceError('busy');
+      const status=await client.request('execution.status',client.identity,{operationId:previous.id},owner);
+      if(!status.ok||status.result?.state!=='done')throw new ServiceError('busy');
+      previous.cancelled=true;
+    }
+    const job:{cancelled:boolean;id?:number}={cancelled:false};this.jobs.set(owner,job);
+    try {
+      const op=await startScript(client,identity,p,owner,()=>current()&&!job.cancelled);job.id=op.operation_id;
+      if(generation!==this.generation){await client.request('execution.cancel',client.identity,{operationId:op.operation_id},owner).catch(()=>{});throw new ServiceError('native_host_disconnected');}
+      if(p.outputPath)this.outputs.set(op.operation_id,{state:'pending',path:path.resolve(p.outputPath)});
+      while(this.outputs.size>32)this.outputs.delete(this.outputs.keys().next().value!);
+      void this.drive(client,invoke,op.operation_id,p,owner,()=>current()&&!job.cancelled,generation).finally(()=>{if(this.jobs.get(owner)===job)this.jobs.delete(owner);});
+      return op;
+    } catch(error){if(this.jobs.get(owner)===job)this.jobs.delete(owner);throw error;}
+  }
+  private async drive(client:NativeSessionClient,invoke:import('./contracts.js').SessionClient,id:number,p:ScriptRunParams,owner:string,current:()=>boolean,generation:number) {
+    const inputs=new Set((p.statePaths??[]).map(v=>path.resolve(v))),outputs=new Set((p.outputPaths??[]).map(v=>path.resolve(v)));
+    const pending=async()=>{
+      if(!current())throw new ServiceError('script_interrupted');
+      const r=await client.request('script.pending',client.identity,undefined,owner);
+      if(!r.ok||!r.result)throw new ServiceError(r.error??'invalid_reply');return r.result;
+    };
+    try {
+      while(current()) {
+        const state=await pending();if(!state.running){
+          if(p.outputPath){
+            const completed=await client.request('execution.status',client.identity,{operationId:id},owner);
+            if(!completed.ok||completed.result?.stop_reason!=='script_done')throw new ServiceError('script_output_interrupted');
+            const identity={...client.identity};
+            const guard=()=>{if(!current()||client.identity.session!==identity.session||client.identity.epoch!==identity.epoch)throw new ServiceError('script_output_interrupted');};
+            const page=async(offset:number)=>{guard();const r=await client.request('script.read',identity,{offset,length:16384,operationId:id},owner);if(!r.ok||!r.result)throw new ServiceError(r.error??'invalid_reply');return r.result;};
+            const {artifactGuard}=await import('./artifact-guard.js');
+            const artifact=await artifactGuard.run(async()=>{await page(0);},()=>publishArtifact(p.outputPath!,false,async write=>{
+              let offset=0,total=0;do{const r=await page(offset);if(r.error)throw new ServiceError(r.error);const bytes=Buffer.from(r.hex,'hex');if(!bytes.length&&offset<r.bytes)throw new ServiceError('invalid_reply');await write(bytes);offset+=bytes.length;total=r.bytes;}while(offset<total);await write('\n');
+            },guard));
+            if(generation===this.generation)this.outputs.set(id,{state:'committed',...artifact});
+          }
+          return;
+        }
+        const work=state.pending;
+        if(work) {
+          let ok=true,value:unknown;
+          try {
+            if(typeof work.path!=='string'||!(work.kind==='state_load'?inputs:outputs).has(path.resolve(work.path)))throw new ServiceError('script_file_capability_denied');
+            const revalidate=async()=>{const state=await pending();if(!state.running||state.pending?.id!==work.id)throw new ServiceError('script_interrupted');};
+            const {artifactGuard}=await import('./artifact-guard.js');
+            const reply=await artifactGuard.run(revalidate,()=>work.kind==='state_load'?
+              invoke.request('state.load',client.identity,{path:work.path,resume:false,keepOverrides:false},owner):work.kind==='state_save'?
+              invoke.request('state.save',client.identity,{path:work.path,overwrite:false,metadata:true},owner):
+              invoke.request('artifact.screenshot',client.identity,{path:work.path,inline:false,overwrite:false,source:'framebuffer',region:null,scale:1},owner));
+            if(!reply.ok)throw new ServiceError(reply.error??'script_host_work_failed');
+            // Native replies carry the new epoch following an intentional load.
+            value={epoch:reply.epoch,committed:true,...(work.kind==='state_load'?{state_sha256:(reply.result as any)?.state_sha256}:{})};
+          } catch(error){ok=false;value=error instanceof Error?error.message:String(error);}
+          const reply=await client.request('script.resolve',client.identity,{id:work.id,ok,hex:Buffer.from(JSON.stringify(value)).toString('hex')},owner);
+          if(!reply.ok)throw new ServiceError(reply.error??'script_interrupted');
+        } else await new Promise(resolve=>setTimeout(resolve,10));
+      }
+    } catch(error) {
+      if(p.outputPath&&generation===this.generation)this.outputs.set(id,{state:'failed',error:error instanceof Error?error.message:String(error)});
+      await client.request('execution.cancel',client.identity,{operationId:id},owner).catch(()=>{});
+    }
+  }
+}

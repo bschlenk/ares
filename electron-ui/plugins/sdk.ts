@@ -28,6 +28,12 @@ export interface PluginContext {
     registerSection(id: string, descriptors: PluginSettingDescriptor[]): Promise<Disposer>
     mount(element: HTMLElement): Disposer
   }
+  scripts: {
+    /** Read-only latest-value observation; synchronous module callback, disposed with the plugin. */
+    observe(params: Omit<import('../services/script-contracts.js').ScriptRunParams, 'statePaths' | 'outputPaths' | 'outputPath'>, callback: (value: unknown) => void): Promise<Disposer>
+    /** Native exclusive job; requires session.control, memory.read, memory.write and debug.read. */
+    run(params: Omit<import('../services/script-contracts.js').ScriptRunParams, 'statePaths' | 'outputPaths' | 'outputPath'>): Promise<SessionReply<import('../services/contracts.js').ExecutionOperation>>
+  }
   services: {
     request<M extends ServiceMethod>(
       method: M,

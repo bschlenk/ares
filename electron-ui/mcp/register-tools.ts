@@ -30,7 +30,8 @@ const memory = new MemoryClient(local);
 let regions: RegionHandle[] | undefined;
 // Retain identity with recent operation handles, just as region handles do.
 const operationIdentities = new Map<number, SessionIdentity>();
-local.onDisconnect = () => { regions = undefined; operationIdentities.clear(); };
+const scriptOperations = new Set<number>();
+local.onDisconnect = () => { regions = undefined; operationIdentities.clear(); scriptOperations.clear(); };
 function unwrap<T>(r: SessionReply<T>): T { if (!r.ok || !r.result) throw new ServiceError(r.error || 'invalid_reply'); return r.result; }
 function address(value: number | string): number {
   const text = typeof value === 'string' ? value.trim().replace(/_/g, '') : String(value);
@@ -48,8 +49,21 @@ async function region(name: string): Promise<RegionHandle> {
 const output = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
 const failure = (error: unknown) => ({ ...output({ error: error instanceof ServiceError ? error.code : 'request_failed', message: error instanceof Error ? error.message : String(error) }), isError: true });
 
-  const status = async () => { const reply = await local.request('session.status'); return { ...unwrap(reply), session: reply.session, epoch: reply.epoch }; };
+  const status = async () => { let reply = await local.request('session.status');for(let i=0;!reply.ok&&reply.error==='stale_epoch'&&i<2;i++)reply=await local.request('session.status'); return { ...unwrap(reply), session: reply.session, epoch: reply.epoch }; };
   const call = (fn: () => Promise<unknown>) => fn().then(output, failure);
+  server.registerTool('run_script', {description:'Run a confined JavaScript/TypeScript module on the native emulation thread. Exactly one of path/source. Returns an operation handle promptly; poll operation_status and use script_result after completion. frames(n) advances exact VIs; memory uses explicit CPU/RDRAM views and big-endian types. Completion leaves paused; cancellation retains earlier effects. No filesystem/network/Node globals.',inputSchema:z.object({path:z.string().min(1).max(4096).optional(),source:z.string().min(1).max(131072).optional(),args:z.unknown().default({}),max_seconds:z.number().min(0.001).max(600).default(60),wait_ms:z.number().int().min(0).max(1000).default(0),output_path:z.string().min(1).max(4096).optional(),state_paths:z.array(z.string().min(1).max(4096)).max(32).default([]),output_paths:z.array(z.string().min(1).max(4096)).max(32).default([]),max_frames:z.number().int().min(0).max(1000000).default(1000000)}).strict().refine(p=>(p.path===undefined)!==(p.source===undefined),'Supply exactly one of path/source')},p=>call(async()=>{
+    let r=unwrap(await local.request('scripts.run',await status(),{...(p.path?{path:p.path}:{source:p.source}),args:p.args,timeoutMs:Math.ceil(p.max_seconds*1000),maxFrames:p.max_frames,statePaths:p.state_paths,outputPaths:p.output_paths,...(p.output_path?{outputPath:p.output_path}:{})}));
+    rememberOperation(r.operation_id,local.identity!);scriptOperations.add(r.operation_id);
+    const until=Date.now()+p.wait_ms;
+    while(Date.now()<until&&(r.state==='running'||(r as any).script_output?.state==='pending')){
+      await new Promise(resolve=>setTimeout(resolve,10));const current=await status();
+      const poll=await local.request('execution.status',current,{operationId:r.operation_id});
+      if(poll.ok&&poll.result){r={...r,...poll.result};operationIdentities.set(r.operation_id,current);}
+      else if(poll.error!=='stale_epoch')throw new ServiceError(poll.error??'invalid_reply');
+    }
+    return r;
+  }));
+  server.registerTool('script_result',{description:'Read completed native script JSON in bounded UTF-8 hex pages. The most recent script result is retained on its owning connection. bytes is the full length; errors and bounded logs accompany every page.',inputSchema:z.object({operation_id:z.number().int().nonnegative().default(0),offset:z.number().int().min(0).max(4194304).default(0),length:z.number().int().min(1).max(16384).default(16384)}).strict()},p=>call(async()=>unwrap(await local.request('script.read',await status(),{offset:p.offset,length:p.length,operationId:p.operation_id}))));
   registerMemoryTools(server, local, status);
   server.registerTool('provenance_control', { description: 'Query or explicitly enable/disable bounded N64 ROM-to-RAM DMA provenance. Omit enabled to query. Applies immediately and to subsequent ROM loads, so enable before loading/resetting the ROM to capture boot transfers. Disabling frees the history. Reading overlay_log never enables recording.', inputSchema: z.object({ enabled: z.boolean().optional() }).strict() }, p => call(() => local.manage({ operation: 'provenance', ...p })));
   server.registerTool('plugin_logs', { description: 'Bounded plugin runtime logs with generation and loss counters.', inputSchema: z.object({ id: z.string(), cursor: z.number().int().nonnegative().default(0), limit: z.number().int().min(1).max(32).default(32), generation: z.string().optional() }).strict(), annotations: {readOnlyHint:true} }, p => call(() => local.manage({operation:'logs',...p})));
@@ -61,10 +75,10 @@ const failure = (error: unknown) => ({ ...output({ error: error instanceof Servi
     return { ...result, adapter_launched_app: local instanceof AutomaticServiceClient && local.launchedApp };
   }));
   server.registerTool('load_rom', { description: 'Open a ROM in the connected Ares app. If the same ROM content is already loaded, returns already_loaded=true without pausing, resetting or changing the current state. Otherwise returns already_loaded=false, replaces the current game, pauses it and invalidates old session/capture handles. Supply system when identification is ambiguous. Returns the new session status.', inputSchema: z.object({ path: z.string().min(1).max(4096), system: z.string().max(128).optional() }).strict() }, p => call(async () => {
-    const result = await local.manage({ operation: 'load_rom', ...p }); if (!result.already_loaded) { regions = undefined; operationIdentities.clear(); } await status(); return result;
+    const result = await local.manage({ operation: 'load_rom', ...p }); if (!result.already_loaded) { regions = undefined; operationIdentities.clear();scriptOperations.clear(); } await status(); return result;
   }));
   server.registerTool('close_rom', { description: 'Close the current ROM and return to the empty app. Invalidates session and capture handles.', inputSchema: z.object({}).strict() }, () => call(async () => {
-    const result = await local.manage({ operation: 'close_rom' }); regions = undefined; operationIdentities.clear(); return result;
+    const result = await local.manage({ operation: 'close_rom' }); regions = undefined; operationIdentities.clear();scriptOperations.clear(); return result;
   }));
   server.registerTool('pause', { description: 'Pause at a native slice boundary and finish an owned operation with reason paused.', inputSchema: z.object({}).strict() }, async () => call(async () => {
     if (!local.identity) await status(); const reply = await local.request('session.pause'); return { ...unwrap(reply), session: reply.session, epoch: reply.epoch };
@@ -96,7 +110,7 @@ const failure = (error: unknown) => ({ ...output({ error: error instanceof Servi
   const flags = { fpr: z.boolean().default(false), cop0: z.boolean().default(false), verbose: z.boolean().default(false) };
   function rememberOperation(id: number, identity: SessionIdentity) {
     operationIdentities.delete(id); operationIdentities.set(id, identity);
-    if (operationIdentities.size > 32) operationIdentities.delete(operationIdentities.keys().next().value!);
+    if (operationIdentities.size > 32) {const oldest=operationIdentities.keys().next().value!;operationIdentities.delete(oldest);scriptOperations.delete(oldest);}
   }
   async function operation(method: 'execution.runFrames' | 'execution.runUntilFrame' | 'execution.stepInstructions', amount: number, seconds: number): Promise<ExecutionOperation> {
     if (!local.identity) await status();
@@ -124,10 +138,14 @@ const failure = (error: unknown) => ({ ...output({ error: error instanceof Servi
   server.registerTool('operation_status', { description: 'Poll running state or the immutable final result. The last 16 completed operations are retained.', inputSchema: z.object({ operation_id: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), ...flags }).strict(), annotations: { readOnlyHint: true } }, async ({ operation_id, fpr, cop0, verbose }) => call(async () => {
     if ((fpr || cop0) && (await status()).system !== 'Nintendo 64') throw new ServiceError('unavailable');
     if (!local.identity) await status();
-    return formatOperation(unwrap(await local.request('execution.status', operationIdentities.get(operation_id), { operationId: operation_id })),fpr,cop0,verbose);
+    if(scriptOperations.has(operation_id)) {const current=await status();if(operationIdentities.get(operation_id)?.session!==current.session)throw new ServiceError('stale_session');operationIdentities.set(operation_id,current);}
+    let reply=await local.request('execution.status', operationIdentities.get(operation_id), { operationId: operation_id });
+    if(!reply.ok&&reply.error==='stale_epoch'&&scriptOperations.has(operation_id)){const current=await status();if(operationIdentities.get(operation_id)?.session!==current.session)throw new ServiceError('stale_session');operationIdentities.set(operation_id,current);reply=await local.request('execution.status',current,{operationId:operation_id});}
+    return formatOperation(unwrap(reply),fpr,cop0,verbose);
   }));
   server.registerTool('cancel_operation', { description: 'Cancel this connection’s current operation, or a specific ID. UI pause can interrupt any owner.', inputSchema: z.object({ operation_id: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).nullable().default(null) }).strict() }, async ({ operation_id }) => call(async () => {
     if (operation_id === null || !local.identity) await status();
+    if(operation_id!==null&&scriptOperations.has(operation_id)){const current=await status();if(operationIdentities.get(operation_id)?.session!==current.session)throw new ServiceError('stale_session');operationIdentities.set(operation_id,current);}
     return unwrap(await local.request('execution.cancel', operation_id === null ? undefined : operationIdentities.get(operation_id), { operationId: operation_id ?? 0 }));
   }));
   registerViewerTools(server, local, status);

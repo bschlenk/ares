@@ -47,6 +47,7 @@
 #include "native/state-snapshot.hpp"
 #include "native/state-loader.hpp"
 #include "native/settings-service.hpp"
+#include "native/script-service.hpp"
 
 using Clock = std::chrono::steady_clock;
 struct Host : ares::Platform {
@@ -461,6 +462,7 @@ int main(int argc, char** argv) {
   unsigned syntheticPhase = 0;
   bool n64 = !synthetic && host.root && host.root->name() == "Nintendo 64";
   auto& execution = host.service.execution;
+  ScriptService scriptService, observerService;
   N64Service n64Service; n64Service.available = n64;
   TraceService traceService; traceService.available = n64;
   TapService tapService;
@@ -551,7 +553,7 @@ int main(int argc, char** argv) {
   host.service.audioRequest = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
     return host.audioCapture.execute(method, args, owner, !host.streams.empty());
   };
-  host.service.onReleaseOwner = [&](const std::string& owner) { host.injectedInput.releaseOwner(owner); profilerService.releaseOwner(owner); host.captures.releaseOwner(owner); host.audioCapture.releaseOwner(owner); host.recording.releaseOwner(owner); host.stateSnapshot.releaseOwner(owner); host.stateLoader.releaseOwner(owner); rspDebugService.releaseOwner(owner); rdpCaptureService.releaseOwner(owner); inspectionService.releaseOwner(owner); callService.releaseOwner(owner); viewerService.releaseOwner(owner); };
+  host.service.onReleaseOwner = [&](const std::string& owner) { if(observerService.owner==owner)observerService.finish("disconnected"); host.injectedInput.releaseOwner(owner); profilerService.releaseOwner(owner); host.captures.releaseOwner(owner); host.audioCapture.releaseOwner(owner); host.recording.releaseOwner(owner); host.stateSnapshot.releaseOwner(owner); host.stateLoader.releaseOwner(owner); rspDebugService.releaseOwner(owner); rdpCaptureService.releaseOwner(owner); inspectionService.releaseOwner(owner); callService.releaseOwner(owner); viewerService.releaseOwner(owner); };
   host.service.beforeRequest = [&](const std::string& method, const std::string& owner) -> std::string {
     rspDebugService.service(execution, host.service.paused);
     if(!rspDebugService.permitted(method, owner, bool(execution.active))) return "busy";
@@ -589,7 +591,7 @@ int main(int argc, char** argv) {
         return ControlResult{"state_load_cancelled", {}};
       }
       auto savedInput = host.injectedInput.pending; auto oldFrame = execution.frame;
-      auto result = host.stateLoader.execute(method, args, owner, n64, bool(execution.active), host.service.paused, host.stateSnapshot);
+      auto result = host.stateLoader.execute(method, args, owner, n64, bool(execution.active) && !(scriptService.running && scriptService.hostWaiting && scriptService.hostKind=="state_load" && scriptService.owner==owner), host.service.paused, host.stateSnapshot);
       if(host.stateLoader.touched) {
         ++host.service.epoch; host.service.memoryTools.sync(host.service.epoch);
         host.injectedInput.releaseAll(); host.injectedInput.operationRunning = false;
@@ -600,6 +602,11 @@ int main(int argc, char** argv) {
         ares::Nintendo64::dmaProvenance.reset(host.service.epoch);
         ares::Nintendo64::cpu.debugControl.power();
         execution.frame = 0; execution.atBoundary = false; execution.finished.clear();
+        if(scriptService.running && scriptService.hostWaiting && scriptService.hostKind=="state_load" && scriptService.owner==owner && execution.active) {
+          if(scriptService.hooksChanged)scriptService.hooksChanged(false);
+          for(auto& hook:scriptService.hooks)JS_FreeValue(scriptService.context,hook.callback);scriptService.hooks.clear();
+          scriptService.epoch=host.service.epoch;execution.active->epoch=host.service.epoch;execution.active->start=0;
+        }
         host.output.clear();
         bool keep = result.error.empty() && args[2] == "1";
         if(keep) for(unsigned port = 0; port < 4; ++port) if(savedInput[port].owner == owner) {
@@ -618,7 +625,7 @@ int main(int argc, char** argv) {
       }
       return result;
     }
-    if(method == "n64.state.begin" || method == "n64.state.read" || method == "n64.state.release") return host.stateSnapshot.execute(method, args, owner, host.service.epoch, execution.frame, n64, bool(execution.active), host.service.paused);
+    if(method == "n64.state.begin" || method == "n64.state.read" || method == "n64.state.release") return host.stateSnapshot.execute(method, args, owner, host.service.epoch, execution.frame, n64, bool(execution.active) && !(scriptService.running && scriptService.hostWaiting && scriptService.hostKind=="state_save" && scriptService.owner==owner), host.service.paused);
     if(method == "n64.state.format" || method == "n64.state.layout") {
       if(!args.empty()) return ControlResult{"invalid_request", {}};
       if(method == "n64.state.layout" && !n64) return ControlResult{"unavailable", {}};
@@ -682,6 +689,59 @@ int main(int argc, char** argv) {
   // Yield even during ordinary N64 play so UI control stays serviceable if VI is
   // inactive. This is an outer CPU-loop budget, not an instruction-step count.
   if(n64) ares::Nintendo64::executionCoordinate.sliceBudget = 20000;
+  scriptService.execution=&execution;scriptService.paused=&host.service.paused;
+  scriptService.cancelled=[&] {
+    if(host.quit || host.takeoverRequested.load())return true;
+    std::lock_guard guard(host.service.lock);
+    for(auto& line:host.service.requests) {
+      std::istringstream in(line);std::string prefix,version,id,session,epoch,method,value,who="ui";
+      in>>prefix>>version>>id>>session>>epoch>>method;
+      while(in>>value)if(value.starts_with("owner="))who=value.substr(6);
+      if(prefix=="control" && version=="1" && session==host.service.session && epoch==std::to_string(host.service.epoch) && (who==scriptService.owner||who=="ui") && (method=="execution.cancel"||method=="execution.release"||method=="session.pause"||method=="session.reset"))return true;
+    }
+    return false;
+  };
+  const std::string scriptConfiguration=BML::serialize(settings).data();
+  auto scriptInfo=[&](const ScriptService& job){auto config=scriptConfiguration+host.service.runtimeRequest("runtime.settings",{}).json;auto configHash=nall::Hash::SHA256({reinterpret_cast<const uint8_t*>(config.data()),config.size()}).digest();auto sourceHash=nall::Hash::SHA256({reinterpret_cast<const uint8_t*>(job.source.data()),job.source.size()}).digest();return "{\"epoch\":"+std::to_string(host.service.epoch)+",\"frame\":"+std::to_string(execution.frame)+",\"frame_kind\":"+controlQuote(execution.frameKind)+",\"executor\":"+controlQuote(execution.executor)+",\"rom_sha256\":"+controlQuote(host.contentHash.data())+",\"config_sha256\":"+controlQuote(configHash.data())+",\"source_sha256\":"+controlQuote(sourceHash.data())+",\"n64_memory\":"+(n64?"true":"false")+"}";};
+  scriptService.info=[&]{return scriptInfo(scriptService);};
+  scriptService.regionRead=[&](const std::string& name,uint32_t offset,uint32_t length,std::vector<uint8_t>& bytes)->ControlResult {
+    MemoryService::Region* match=nullptr;
+    for(auto& region:host.memory.regions)if(region.id==name||region.node->name()==name.c_str()){if(match)return {"ambiguous_region",{}};match=&region;}
+    if(!match)return {"unknown_region",{}};
+    if(!match->supported||!match->node->readable())return {"region_not_readable",{}};
+    if(offset>match->node->size()||length>match->node->size()-offset)return {"out_of_bounds",{}};
+    bytes.reserve(length);for(uint32_t i=0;i<length;++i)bytes.push_back(match->read(offset+i));return {{},"{}"};
+  };
+  scriptService.read=[&](uint64_t address,const std::string& view,size_t length,std::vector<uint8_t>& bytes)->ControlResult {
+    if(!n64)return {"n64_memory_unavailable",{}};
+    return N64Service::memory("n64.memory.read",{N64Service::hex(address),view,std::to_string(length)},false,false,65536,&bytes);
+  };
+  scriptService.write=[&](uint64_t address,const std::string& view,const std::vector<uint8_t>& bytes)->ControlResult {
+    if(!n64)return {"n64_memory_unavailable",{}};
+    return N64Service::memory("n64.memory.write",{N64Service::hex(address),view,MemoryTools::hex(bytes,0,bytes.size())},false);
+  };
+  scriptService.input=[&](const std::vector<std::string>& values) {
+    auto args=values;args.push_back("0");args.push_back("0");
+    return host.injectedInput.execute("n64.input.set",args,scriptService.owner,host.service.epoch,execution.frame,scriptService.owner);
+  };
+  scriptService.normalizeHook=[&](uint64_t address,uint32_t& physical){nall::string error;return n64 && ares::Nintendo64::cpu.debugControl.normalizeAddress(address,4,physical,error);};
+  scriptService.hooksChanged=[&](bool enabled){
+    auto& debug=ares::Nintendo64::cpu.debugControl;
+    if(enabled)debug.executeObserver=[&](uint64_t pc,uint32_t physical){if(std::none_of(scriptService.hooks.begin(),scriptService.hooks.end(),[&](const auto& hook){return hook.active&&hook.address==physical;}))return true;return scriptService.executeHook(physical,N64Service::registers(ares::Nintendo64::cpu.debugControl.snapshot()));};
+    else {debug.executeObserver={};if(!scriptService.error.empty()&&debug.halted)debug.resume();}
+    debug.updateActive();
+  };
+  scriptService.cleanup=[&] {host.injectedInput.releaseOwner(scriptService.owner);};
+  observerService.execution=&execution;observerService.paused=&host.service.paused;
+  observerService.read=scriptService.read;observerService.regionRead=scriptService.regionRead;observerService.info=[&]{return scriptInfo(observerService);};
+  observerService.cancelled=[&]{return host.quit.load();};
+  host.service.scriptRequest=[&](const std::string& method,const std::vector<std::string>& args,const std::string& owner){
+    if(method.starts_with("script.observer")) {
+      auto suffix=method.substr(15);auto translated=suffix=="Start"?"script.observe":suffix=="Prepare"?"script.prepare":suffix=="Write"?"script.write":suffix=="Read"?"script.read":"script.stop";
+      return observerService.execute(translated,args,owner,host.service.epoch);
+    }
+    return scriptService.execute(method,args,owner,host.service.epoch);
+  };
   while(!host.quit) {
     if(n64) {
       execution.frame = ares::Nintendo64::executionCoordinate.frame;
@@ -719,7 +779,10 @@ int main(int argc, char** argv) {
       host.service.paused = false;
     }
     if(!wasControlled && execution.active && host.sound) host.output.clear();
-    if(host.service.paused && !execution.active) {
+    scriptService.pump();
+    if(observerService.running && observerService.epoch!=host.service.epoch)observerService.finish("reset");
+    observerService.pump();
+    if(host.service.paused && (!execution.active || scriptService.running)) {
       if(host.sound && !synthetic) host.output.clear();
       host.service.waitForRequest(std::chrono::milliseconds(10));
       deadline = Clock::now(); continue;
@@ -749,7 +812,7 @@ int main(int argc, char** argv) {
       execution.executor = N64Service::executor();
       callService.service(execution, host.service.paused);
       if(rspDebugService.active() && ares::Nintendo64::rsp.debugControl.stopped) { execution.complete(ares::Nintendo64::rsp.debugControl.reason, host.service.paused); host.service.paused = true; }
-      if(debug.halted) { execution.complete(N64Service::reason(debug.stop.reason), host.service.paused); host.service.paused = true; }
+      if(debug.halted) { execution.complete(scriptService.running && !scriptService.error.empty() ? "script_failed" : N64Service::reason(debug.stop.reason), host.service.paused); host.service.paused = true; }
     }
     execution.service(host.service.paused);
     if(controlled) { deadline = Clock::now(); continue; }
@@ -759,6 +822,8 @@ int main(int argc, char** argv) {
       if(Clock::now() - deadline > std::chrono::milliseconds(100)) deadline = Clock::now();
     }
   }
+  observerService.finish("shutdown");
+  scriptService.finish("shutdown");
   execution.complete("shutdown", host.service.paused);
   host.quit = true; host.wake.notify_all();
   host.service.close();

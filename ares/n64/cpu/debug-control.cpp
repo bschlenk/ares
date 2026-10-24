@@ -26,7 +26,7 @@ auto CPU::DebugControl::clearHits() -> void {
 
 auto CPU::DebugControl::updateActive() -> void {
   watchActive = !watchpoints.empty();
-  active = !breakpoints.empty() || watchActive || stepping || haltRequested || trace.pcs || trace.calls || callGate.active;
+  active = !breakpoints.empty() || watchActive || stepping || haltRequested || trace.pcs || trace.calls || callGate.active || bool(executeObserver);
   gate = active || halted || sliceBudget != 0;
 }
 
@@ -281,6 +281,10 @@ auto CPU::DebugControl::beforeInstruction(PhysAccess access) -> bool {
       return true;
     }
   }
+  if(executeObserver && !executeObserver(currentPc, access.paddr)) {
+    stop = {}; takeStop(StopReason::Requested); return true;
+  }
+
   return false;
 }
 

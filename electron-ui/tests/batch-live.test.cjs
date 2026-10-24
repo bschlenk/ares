@@ -59,6 +59,58 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     const initializedFile = path.join(dir, 'initialized.bs'); fs.writeFileSync(initializedFile, initialized);
     assert.equal((await peer.tool('state_load', { path: initializedFile })).error, undefined);
     const baseline = path.join(dir, 'baseline.bs'); assert.equal((await peer.tool('state_save', { path: baseline })).error, undefined);
+    const recorderRegions=await peer.tool('memory_regions');const rdramRegion=recorderRegions.regions.find(r=>r.name==='RDRAM');
+    const pairedRecorder=await peer.tool('memory_record_start',{reads:Array.from({length:7},(_,i)=>({region:rdramRegion.id,offset:0x2000+i,length:1})),capacity:200,duration:200});
+    const recordingSource=`export default async({mem,frames,input})=>{
+      mem.writeU32(0x2000,0x12345678,'rdram');
+      const typed={u8:mem.u8(0x2000,'rdram'),u16:mem.u16(0x2000,'rdram'),u32:mem.u32(0x2000,'rdram')};
+      input({right:true});const samples=[];
+      for(let i=0;i<200;i++){await frames(1);samples.push(Array.from({length:7},(_,j)=>mem.u8(0x2000+j,'rdram')))}
+      return {typed,samples};
+    }`;
+    const script = await peer.tool('run_script', {source:recordingSource});
+    assert.equal(script.error,undefined,JSON.stringify(script));
+    let job=script;for(let i=0;job.state==='running'&&i<500;i++){await sleep(10);job=await peer.tool('operation_status',{operation_id:script.operation_id});}
+    assert.equal(job.stop_reason,'script_done',JSON.stringify(job));
+    let scriptBytes=Buffer.alloc(0),scriptPage;
+    do {scriptPage=await peer.tool('script_result',{offset:scriptBytes.length});scriptBytes=Buffer.concat([scriptBytes,Buffer.from(scriptPage.hex,'hex')]);}while(scriptBytes.length<scriptPage.bytes);
+    assert.equal(scriptPage.native_reads,1403);assert.equal(scriptPage.native_read_bytes,1407);
+    console.log('SCRIPT_NATIVE_READ_COST_N64',JSON.stringify({reads:scriptPage.native_reads,bytes:scriptPage.native_read_bytes,native_read_ns:scriptPage.native_read_ns,elapsed_seconds:job.elapsed_seconds,result_bytes:scriptBytes.length}));
+    const scriptValue=JSON.parse(scriptBytes.toString());assert.deepEqual(scriptValue.typed,{u8:0x12,u16:0x1234,u32:0x12345678});assert.equal(scriptValue.samples.length,200);
+    await peer.tool('memory_record_stop',{handle:pairedRecorder.handle});
+    const pairedExport=await peer.tool('memory_capture_export',{handle:pairedRecorder.handle,path:path.join(dir,'paired.json')});assert.equal(pairedExport.error,undefined,JSON.stringify(pairedExport));
+    const paired=JSON.parse(fs.readFileSync(pairedExport.path,'utf8'));const pairedRows=Array.from({length:200},()=>[]);for(const c of paired.chunks)pairedRows[c.sequence][c.range]=parseInt(c.hex,16);
+    assert.deepEqual(pairedRows,scriptValue.samples);
+    await peer.tool('memory_capture_release',{handle:pairedRecorder.handle});
+
+    assert.equal((await peer.tool('controller_state')).ports[0].pending.overridden,false);
+    const clipJob=await peer.tool('run_script',{path:path.resolve(__dirname,'../examples/scripts/record.ts'),args:{frames:2,setup:[{address:0x2000,hex:'12345678',view:'rdram'}],fields:[{name:'clip',address:0x2000,type:'u32',view:'rdram',clip:true}],clips:[{start:0x12345600,end:0x12345700,name:'fixture:entry'}]}});
+    let clipStatus=clipJob;for(let i=0;clipStatus.state==='running'&&i<200;i++){await sleep(10);clipStatus=await peer.tool('operation_status',{operation_id:clipJob.operation_id});}
+    assert.equal(clipStatus.stop_reason,'script_done',JSON.stringify(clipStatus));
+    const clipPage=await peer.tool('script_result',{operation_id:clipJob.operation_id});const clipValue=JSON.parse(Buffer.from(clipPage.hex,'hex').toString());assert.equal(clipValue.rows.length,2);assert.deepEqual(clipValue.rows[0].clip,{pointer:0x12345678,clip:'fixture:entry'});
+    await peer.tool('state_load',{path:baseline});
+    await peer.tool('run_frames',{n:1});
+    const configuredExecutor=(await peer.tool('emu_status',{})).executor;
+    // Execute hooks see pre-instruction registers, including a branch delay slot.
+    assert.equal((await peer.tool('write_memory_va',{addr:'0x3000',view:'rdram',hex_bytes:'2508000110000001000000001000ffff00000000'})).error,undefined);
+    assert.equal((await peer.tool('cpu_set_registers',{pc:'0xffffffffa0003000',gpr:{t0:7}})).error,undefined);
+    const hooked=await peer.tool('run_script',{source:`export default async({cpu,frames,emu})=>{const hits=[];cpu.onExecute(0x3000,r=>hits.push([r.pc,r.gpr[8],r.delay_slot]));cpu.onExecute(0x80003008,r=>hits.push([r.pc,r.gpr[8],r.delay_slot]));await frames(1);return {hits,executor:emu.info().executor}}`});
+    let hookJob=hooked;for(let i=0;hookJob.state==='running'&&i<500;i++){await sleep(10);hookJob=await peer.tool('operation_status',{operation_id:hooked.operation_id});}
+    assert.equal(hookJob.stop_reason,'script_done',JSON.stringify(hookJob));
+    const hookResult=await peer.tool('script_result',{});const hookValue=JSON.parse(Buffer.from(hookResult.hex,'hex').toString());
+    assert.deepEqual(hookValue.hits,[['0xffffffffa0003000','0x7',false],['0xffffffffa0003008','0x8',true]]);
+    assert.equal(hookValue.executor,'interpreter');
+    assert.equal((await peer.tool('emu_status',{})).executor,configuredExecutor);
+    await peer.tool('state_load',{path:baseline});
+    const scriptState=path.join(dir,'script-state.bs'),scriptPng=path.join(dir,'script.png');
+    const ioJob=await peer.tool('run_script',{source:`export default async({args,emu,frames,mem})=>{await emu.loadState(args.baseline);await frames(1);await emu.saveState(args.state);await emu.screenshot(args.png);return {epoch:emu.info().epoch,value:mem.u32(0x2000,'rdram')}}`,args:{baseline,state:scriptState,png:scriptPng},state_paths:[baseline],output_paths:[scriptState,scriptPng],output_path:path.join(dir,'script-result.json')});
+    assert.equal(ioJob.error,undefined,JSON.stringify(ioJob));let ioStatus=ioJob;
+    for(let i=0;ioStatus.state==='running'&&i<1000;i++){await sleep(10);ioStatus=await peer.tool('operation_status',{operation_id:ioJob.operation_id});}
+    assert.equal(ioStatus.stop_reason,'script_done',JSON.stringify({ioStatus,result:await peer.tool('script_result',{})}));
+    for(let i=0;i<100&&ioStatus.script_output?.state==='pending';i++){await sleep(10);ioStatus=await peer.tool('operation_status',{operation_id:ioJob.operation_id});}
+    assert.equal(ioStatus.script_output?.state,'committed',JSON.stringify(ioStatus));
+    const ioResult=await peer.tool('script_result',{});assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'script-result.json'),'utf8')),JSON.parse(Buffer.from(ioResult.hex,'hex').toString()));assert.equal(ioResult.artifacts.length,2);assert(fs.existsSync(scriptState));assert(fs.existsSync(scriptPng));
+    await peer.tool('state_load',{path:baseline});
     const timeline = await peer.tool('batch', { steps: [
       { kind: 'state_load', path: baseline },
       { kind: 'memory_record_start', name: 'timeline', reads: [{ region: 'RDRAM', offset: 0x2000, length: 2 }], capacity: 8 },
