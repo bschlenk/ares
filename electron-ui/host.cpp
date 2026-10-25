@@ -604,7 +604,7 @@ int main(int argc, char** argv) {
     host.demonstration.tick(host.service.epoch,execution.frame);
     if(host.demonstration.state=="armed"&&method!="execution.release"&&method!="session.reset"&&!method.starts_with("n64.demo.")&&method!="session.status"&&method!="runtime.settings"&&!method.starts_with("n64.state.")&&!method.starts_with("memory.read"))return "demonstration_armed";
     if(host.demonstration.state=="replaying"&&method=="n64.input.set")return "busy";
-    if(host.demonstration.state=="replaying"&&(method=="n64.input.release"||method=="session.pause"||method=="execution.cancel"))host.demonstration.finish("cancelled",execution.frame);
+    if(host.demonstration.state=="replaying"&&(owner=="ui"||owner==host.demonstration.owner)&&(method=="n64.input.release"||method=="session.pause"||method=="execution.cancel"))host.demonstration.finish("cancelled",execution.frame);
     if(host.demonstration.state=="recording"&&host.demonstration.source=="human"&&(method.starts_with("n64.input.")&&method!="n64.input.state"||method.starts_with("execution.run")||method=="execution.stepInstructions"||method.starts_with("script.start")))return "demonstration_human_only";
     rspDebugService.service(execution, host.service.paused);
     if(!rspDebugService.permitted(method, owner, bool(execution.active))) return "busy";
