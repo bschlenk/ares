@@ -24,17 +24,18 @@ export async function main(argv = process.argv.slice(2)) {
       process.stdout.write(JSON.stringify(registry.list()) + '\n'); return;
     }
     if (command === 'run' && tool) {
-      let args: unknown = {}, outputPath: string | undefined; let retain=false;const state_paths:string[]=[],output_paths:string[]=[];
+      let args: unknown = {}, outputPath: string | undefined; let retain=false;let video_path:string|undefined;const state_paths:string[]=[],output_paths:string[]=[];
       for (let i=0;i<flags.length;i+=2) {
         if(flags[i]==='--retain-result'){retain=true;--i;continue;}
         if (!flags[i+1]) throw new Error('Expected --args FILE or --output FILE');
         if (flags[i]==='--args') args=JSON.parse(await fs.readFile(flags[i+1],'utf8'));
         else if (flags[i]==='--state') state_paths.push(path.resolve(flags[i+1]));
         else if (flags[i]==='--artifact') output_paths.push(path.resolve(flags[i+1]));
+        else if (flags[i]==='--video') video_path=path.resolve(flags[i+1]);
         else if (flags[i]==='--output') outputPath=flags[i+1];
         else throw new Error(`Unknown flag: ${flags[i]}`);
       }
-      const started=await registry.call('run_script',{path:path.resolve(tool),args,state_paths,output_paths,file_base:process.cwd()},abort.signal);
+      const started=await registry.call('run_script',{path:path.resolve(tool),args,state_paths,output_paths,file_base:process.cwd(),...(video_path?{video_path}:{})},abort.signal);
       const operation=JSON.parse(started.content[0].text);
       if(started.isError)throw new Error(JSON.stringify(operation));
       const identity={...client.identity!};

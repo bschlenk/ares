@@ -945,3 +945,14 @@ incompatible schemas return `adapter_stale` with app/adapter provenance and
 instructions to restart the MCP adapter from the rebuilt app. Different builds
 with the same schema may reconnect; pending mutations are never replayed.
 Adapter-only `build_info` remains usable without contacting the app.
+
+`ares run scenario.ts --video capture.avi` (MCP `run_script.video_path`) owns a
+bounded raw BGR24 AVI capture for the script. One image is sampled from the N64
+framebuffer at each advanced VI boundary; synthetic runs capture their generated
+frame. This is independent of presentation credits and the eight script artifact
+limit. The capture is limited to 36,000 frames, 256 MiB and the script deadline;
+a limit, blank/invalid framebuffer, frame gap, cancellation or failed script fails
+publication. A successful script atomically publishes a new AVI, with metadata in
+`operation_status.script_output.video`. No audio is captured; playback is 60 fps.
+An intentional `emu.loadState` discards pre-load pictures and restarts the capture
+interval at frame zero in the new owned epoch. External loads/reset invalidate it.

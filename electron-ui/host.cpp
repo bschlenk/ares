@@ -639,7 +639,7 @@ int main(int argc, char** argv) {
         ++host.service.epoch; host.service.memoryTools.sync(host.service.epoch);
         host.injectedInput.releaseAll(); host.injectedInput.operationRunning = false;
         traceService.reset(); profilerService.reset(); rdpCaptureService.reset(); inspectionService.reset(); callService.reset(); viewerService.reset(); host.captures.reset(host.service.epoch);
-        host.audioCapture.reset(); host.recording.reset(); host.stateSnapshot.reset();
+        host.audioCapture.reset(); host.recording.rebase(owner,host.service.epoch); host.stateSnapshot.reset();
         ares::Nintendo64::executionCoordinate.reset();
         ares::Nintendo64::executionCoordinate.atBoundary = false; // restored VI phase is not an observed boundary
         ares::Nintendo64::dmaProvenance.reset(host.service.epoch);
@@ -899,6 +899,10 @@ int main(int argc, char** argv) {
     if(n64) {
       execution.frame = ares::Nintendo64::executionCoordinate.frame;
       execution.atBoundary = ares::Nintendo64::executionCoordinate.atBoundary;
+    }
+    if(execution.atBoundary && execution.frame != frameBefore && host.recording.exact) {
+      if(synthetic){auto& image=host.captures.presented;if(image.packet)host.recording.capture(image.data(),image.width,image.height,host.service.epoch,execution.frame,execution.frameKind,true);}
+      else if(n64){std::shared_ptr<const FrameService::Image> image;auto result=FrameService::framebuffer(image,host.service.epoch,execution.frame);if(result.error.empty())host.recording.capture(image->data(),image->width,image->height,host.service.epoch,execution.frame,execution.frameKind,true);else {std::lock_guard lock(host.recording.mutex);host.recording.finish("capture_unavailable");}}
     }
     if(execution.atBoundary && execution.frame != frameBefore) host.service.memoryTools.boundary(host.service.epoch, execution.frame);
     if(n64) {
