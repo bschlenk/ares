@@ -17,6 +17,7 @@ struct ScriptService {
   JSValue promise = JS_UNDEFINED, resolve = JS_UNDEFINED, hostResolve=JS_UNDEFINED, hostReject=JS_UNDEFINED;
   std::string hostRequest, hostKind, artifacts="[]";
   unsigned artifactCount=0;
+  std::function<ControlResult(const std::string&,const std::vector<std::string>&)> demonstration;
   uint64_t hostId=0;
   bool hostWaiting=false;
   ExecutionService* execution = nullptr;
@@ -137,10 +138,18 @@ struct ScriptService {
     if(s.logs.size()>2)s.logs.insert(s.logs.size()-1,",");s.logs.insert(s.logs.size()-1,std::string(encoded,encodedLength));s.logBytes+=length;
     JS_FreeCString(c,encoded);JS_FreeValue(c,json);return JS_UNDEFINED;
   }
+  static JSValue demo(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
+    auto& s=self(c);if(s.readOnly||!s.demonstration||argc!=2)return fail(c,"invalid_demonstration");
+    const char* method=JS_ToCString(c,argv[0]);const char* words=JS_ToCString(c,argv[1]);if(!method||!words){if(method)JS_FreeCString(c,method);if(words)JS_FreeCString(c,words);return JS_EXCEPTION;}
+    std::string name=method,text=words;JS_FreeCString(c,method);JS_FreeCString(c,words);
+    if(text.size()>4096||name!="request"&&name!="status"&&name!="start"&&name!="stop"&&name!="cancel"&&name!="replay")return fail(c,"invalid_demonstration");
+    std::istringstream stream(text);std::vector<std::string> args;std::string word;while(stream>>word)args.push_back(word);
+    auto result=s.demonstration("n64.demo."+name,args);if(!result.error.empty())return fail(c,result.error.c_str());return JS_ParseJSON(c,result.json.data(),result.json.size(),"demonstration");
+  }
   static JSValue host(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
     auto& s=self(c);if(s.readOnly||s.waiting||s.hostWaiting||argc!=2||s.hostId>=64||!JS_IsString(argv[1]))return fail(c,"invalid_host_work");
     size_t kindLength;const char* kind=JS_ToCStringLen(c,&kindLength,argv[0]);if(!kind)return JS_EXCEPTION;if(kindLength>32){JS_FreeCString(c,kind);return fail(c,"invalid_host_work");}s.hostKind.assign(kind,kindLength);JS_FreeCString(c,kind);
-    if(s.hostKind!="state_load"&&s.hostKind!="state_save"&&s.hostKind!="screenshot")return fail(c,"invalid_host_work");
+    if(s.hostKind!="state_load"&&s.hostKind!="state_save"&&s.hostKind!="screenshot"&&s.hostKind!="input_export"&&s.hostKind!="input_import")return fail(c,"invalid_host_work");
     if(s.hostKind!="state_load"&&s.artifactCount>=8)return fail(c,"artifact_limit");
     JSValue encoded=JS_JSONStringify(c,argv[1],JS_UNDEFINED,JS_UNDEFINED);if(JS_IsException(encoded))return encoded;
     size_t length;const char* text=JS_ToCStringLen(c,&length,encoded);if(!text||length>8192){if(text)JS_FreeCString(c,text);JS_FreeValue(c,encoded);return fail(c,"invalid_path");}
@@ -298,7 +307,7 @@ struct ScriptService {
     JS_SetMemoryLimit(runtime,16*1024*1024);JS_SetMaxStackSize(runtime,512*1024);JS_SetInterruptHandler(runtime,interrupt,this);
     context=JS_NewContext(runtime);if(!context){destroy();execution->reservation.reset();return {"script_oom",{}};}JS_SetContextOpaque(context,this);
     JSValue global=JS_GetGlobalObject(context);
-    for(auto entry:std::vector<std::pair<const char*,JSCFunction*>>{{"__host",host},{"__region",region},{"__info",position},{"__hook",hook},{"__unhook",unhook},{"__read",memoryRead},{"__write",memoryWrite},{"__frames",advance},{"__input",setInput},{"__log",log}})JS_SetPropertyStr(context,global,entry.first,JS_NewCFunction(context,entry.second,entry.first,4));
+    for(auto entry:std::vector<std::pair<const char*,JSCFunction*>>{{"__demo",demo},{"__host",host},{"__region",region},{"__info",position},{"__hook",hook},{"__unhook",unhook},{"__read",memoryRead},{"__write",memoryWrite},{"__frames",advance},{"__input",setInput},{"__log",log}})JS_SetPropertyStr(context,global,entry.first,JS_NewCFunction(context,entry.second,entry.first,4));
     JS_FreeValue(context,global);
     execution->reservation=ExecutionService::Reservation{execution->nextId++,owner,deadline};
     execution->active=ExecutionService::Operation{execution->nextId++,e,execution->frame,ExecutionService::maxInteger,0,owner,"script",execution->atBoundary,now,deadline};

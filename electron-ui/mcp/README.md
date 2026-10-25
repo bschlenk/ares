@@ -956,3 +956,60 @@ publication. A successful script atomically publishes a new AVI, with metadata i
 `operation_status.script_output.video`. No audio is captured; playback is 60 fps.
 An intentional `emu.loadState` discards pre-load pictures and restarts the capture
 interval at frame zero in the new owned epoch. External loads/reset invalidate it.
+
+### Human controller demonstrations
+
+`demonstration_request` arms a job and pauses the game. The in-app nonmodal banner
+shows its prompt and Start/Stop/Cancel buttons; requesting does not start the
+recorded interval. `demonstration_start` begins and resumes; `demonstration_stop`
+pauses and completes it. Status polling is nonblocking. Cancellation, timeout,
+reset/load, owner release and replay takeover invalidate the active interval.
+A lease bounds abandonment even after the requesting CLI exits.
+
+```sh
+ares call owner_lease --action create --name attack-demo --seconds 300
+export ARES_OWNER_LEASE=THE_RETURNED_LEASE_ID
+ares call demonstration_request --prompt 'Show Kirby attacking once' --state_path /tmp/attack.state
+# Human clicks Start, performs the action, and clicks Stop in the app.
+ares call demonstration_status
+ares call demonstration_export --path /tmp/attack.input.json
+# Later: load the associated state, import the clip, and replay.
+ares call state_load --path /tmp/attack.state
+ares call demonstration_import --path /tmp/attack.input.json
+ares call demonstration_replay
+ares call demonstration_status
+ares call owner_lease --action release --lease_id "$ARES_OWNER_LEASE"
+```
+
+The version-1 `ares-input-clip` records the actual standard N64 Gamepad data
+returned at each SI read: port, sequence, relative VI, raw 32-bit controller word,
+button bits (N64 wire order), and signed 8-bit axes **after** shaping/deadzone/gate.
+Several reads in one VI remain separate ordered events; VIs with no reads remain
+empty. This is the `n64_si_gamepad_read` boundary and
+`vi_relative_variable_latches` rate convention. It records one selected port.
+Other controller types are outside this version's scope.
+
+Human source rejects injected controller mutations/controlled runs while recording.
+Merged source includes injected input. Replay bypasses axis shaping using the saved
+wire values and owns a neutral override on its selected port. Different latch
+counts, port order or relative VI timing fail as `replay_diverged`; completion,
+cancel, failure and human takeover release the override. Replay is an owned native
+frame operation (or participates in the owning JS script's frame advances).
+`demonstration_status` exposes replay cursor, completion and stop reason.
+
+Jobs default to 600 VIs and 300 seconds and permit at most 36,000 VIs, 600 seconds,
+120,000 latches and a 24 MiB JSON artifact. Exceeding a recording bound marks
+overflow/incomplete and prevents export. Export publishes atomically; import validates
+event order, wire/decoded values and ROM identity before admitting playback.
+Optional `state_path` saves the paused pre-demonstration state; its path and SHA-256
+are associated with the clip. Restore that state explicitly before replay. Exact
+inputs alone cannot guarantee the same outcome from an arbitrary starting state.
+
+Native JS uses `input.demonstration.request({prompt,port,source,maxFrames,timeoutMs})`,
+`status()`, `start()`, `stop()`, `cancel()`, `replay()`, `export(path)` and
+`import(path)`. The two file methods are promises and require script output/state
+capabilities respectively. Scripts advance playback with `await frames(duration_frames)`.
+A request may return from its script to await the human's later Start interaction.
+
+Physical keyboard and physical gamepad demonstration/replay are manual acceptance
+gates; automated synthetic traces and UI button tests do not establish them.

@@ -12,6 +12,7 @@ struct ExecutionCoordinate {
   bool atBoundary = true, boundaryLatched = false, livenessYield = false;
   uint32_t sliceBudget = 0;
   std::function<void()> originObserver;
+  std::function<uint32_t(unsigned,uint32_t)> inputLatch;
   auto boundary() -> void { ++frame; boundaryLatched = true; }
   auto reset() -> void { frame = 0; originCommit = 0; atBoundary = true; boundaryLatched = false; livenessYield = false; }
 };
