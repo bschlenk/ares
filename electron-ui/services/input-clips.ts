@@ -5,6 +5,7 @@ import {validDemonstration,type InputEvent} from './demonstration-contracts.js';
 import {publishArtifact} from './artifact-writer.js';
 export class InputClips {
  private states=new Map<number,{path:string;sha256:string}>();
+ close(){this.states.clear();}
  async run(client:SessionClient,identity:SessionIdentity,method:string,p:any,owner:string,current:()=>boolean){
   const deadline=Date.now()+25000;
   const request=async(method:any,params?:any)=>{if(Date.now()>deadline)throw new ServiceError('input_clip_timeout');if(!current())throw new ServiceError('disconnected');const r=await client.request(method,identity,params,owner);if(!r.ok||!r.result)throw new ServiceError(r.error??'invalid_reply');return r.result as any;};
