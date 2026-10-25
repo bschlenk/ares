@@ -627,3 +627,18 @@ all delivered/skipped samples and verifies owner cleanup. Existing live observer
 fixtures cover native offender isolation and immutable VI/origin boundaries.
 
 Final Node regression for these slices: **180 passed, 0 failures, 0 skips**.
+
+## Completed plan handoff
+
+The final installed build is **609ee560967bbeb3** at `build_macos/Ares.app`, with
+no backup created. Copied-package checks, the exact installed helper's 80-VI
+Kirby recorder/results, OS-stopped packaged main health/recovery, deployed plugin
+with installed native, generic overlay composition and scoped export UI all pass.
+The original private ROM/state hashes are unchanged, and canonical/deployed plugin
+hashes match. The new packaged fixture checks that a fresh installed CLI can
+retrieve independent health during an actual main SIGSTOP and that SIGCONT
+restores the heartbeat. All 180 Node tests passed with zero failures/skips.
+
+See `KIRBY-FEEDBACK-2026-10-24-ACCEPTANCE.md` for the final A–H acceptance index,
+measurements, exact payload provenance and supported capability limits. This
+supersedes the earlier chronological remaining-work notes for this plan.

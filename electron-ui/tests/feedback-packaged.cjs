@@ -23,10 +23,21 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const explicit=JSON.parse(await cli(['call','script_result','--result_handle',page.result_handle]));assert.equal(explicit.sha256,page.sha256);
   const build=JSON.parse(await cli(['call','build_info','--app','true']));assert.equal(build.adapter.build_id,build.app.build_id);
   const health=JSON.parse(await cli(['call','app_health'])),logs=JSON.parse(await cli(['call','app_logs']));assert(health.native.connected);assert(logs.directory);
+  // The copied/installed package must include the independent worker, and a
+  // fresh installed CLI must answer even while Electron main cannot handshake.
+  let stalledHealth;
+  app.kill('SIGSTOP');
+  try{
+   for(let n=0;n<50;n++){stalledHealth=await client.manage({operation:'app_health'});if(stalledHealth.watchdog?.main==='unresponsive')break;await sleep(50);}
+   assert.equal(stalledHealth.watchdog?.main,'unresponsive');
+   const began=Date.now();stalledHealth=JSON.parse(await cli(['call','app_health']));assert(Date.now()-began<2000,'fresh installed CLI stall health must remain bounded');
+   assert.equal(stalledHealth.watchdog.main,'unresponsive');assert.equal(stalledHealth.watchdog.observer,'responsive');assert.equal(stalledHealth.observation,'cached');
+  }finally{app.kill('SIGCONT');}
+  let recovered=false;for(let n=0;n<100;n++){const h=await client.manage({operation:'app_health'});if(h.watchdog?.main==='responsive'){recovered=true;break;}await sleep(25);}assert(recovered,'installed main heartbeat recovers');
   const tasks=JSON.parse(await cli(['call','rsp_last_task']));assert.equal(tasks.interpreter_required,false);assert.equal(tasks.matrix_state.available,false);assert(tasks.task,'Kirby must dispatch a conventional graphics-task candidate');assert.equal(tasks.task.classification,'declared_graphics_candidate');assert.equal(tasks.task.header.length,128);assert(tasks.scanouts.every(s=>s.mapping==='candidate_only'));
   const matrix=JSON.parse(await cli(['call','matrix_capture']));assert.equal(matrix.capacity,512);assert.equal(matrix.retained,0);
   const exports=JSON.parse(await cli(['call','plugin_exports']));assert.deepEqual(exports.jobs,[]);
   assert.deepEqual([hash(rom),hash(state)],before);
-  fs.writeFileSync(path.join(out,'result.json'),value);fs.writeFileSync(path.join(out,'summary.json'),JSON.stringify({build,result_handle:page.result_handle,result_sha256:page.sha256,epoch:result.info.epoch,frames:recording.fields.sample.length,tasks,exports,health,logs_directory:logs.directory},null,2));console.log('FEEDBACK_PACKAGED_PASS',out);
+  fs.writeFileSync(path.join(out,'result.json'),value);fs.writeFileSync(path.join(out,'summary.json'),JSON.stringify({build,result_handle:page.result_handle,result_sha256:page.sha256,epoch:result.info.epoch,frames:recording.fields.sample.length,tasks,exports,health,stalled_health:stalledHealth,logs_directory:logs.directory},null,2));console.log('FEEDBACK_PACKAGED_PASS',out);
  }finally{client?.close();app.kill('SIGTERM');await Promise.race([closed,sleep(3000)]);if(app.exitCode===null){app.kill('SIGKILL');await closed;}fs.writeFileSync(path.join(out,'stderr.log'),diagnostics);fs.rmSync(dir,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});
