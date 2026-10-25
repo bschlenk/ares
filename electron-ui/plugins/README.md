@@ -459,7 +459,17 @@ overflow is explicit. Reset invalidates retained tasks.
 `scanouts` and boundary `task_candidates` match target addresses to VI origins.
 They are explicitly candidates: DPC submission identifies the submitting task,
 not every author of command memory or proof of displayed pixel contribution.
-Repeated descriptor bytes link identities but do not prove yield/resume. Both
+Repeated descriptor bytes link identities but do not prove yield/resume.
+For the verified F3DEX2 FIFO 2.04H profile, `resume_mapping` can instead be
+`verified_f3dex2_yield_dma`: an actual 3072-byte DMEM yield DMA, architectural
+BREAK/signals, byte-identical restore DMA, unchanged entry context and matching
+resumed command DMA were observed. `logical_task_id`, `resume_from` and
+`resumed_by` link the distinct dispatch IDs; `yield_capture` preserves the
+profile, address and SHA-256. `resume_reason` explains unverified submissions.
+A consumed yield cannot be reused as proof for another dispatch. Altered, evicted,
+ambiguous or unsupported contexts stay unverified. Retention is 64 dispatches;
+each retains at most two 3072-byte contexts and one bounded matrix/vertex shadow.
+These links do not strengthen the scanout's candidate-only pixel association. Both
 RSP executors are covered by generated submission/DMA fixtures. Snapshot timing
 reports only descriptor/IMEM capture cost, not total graphics overhead.
 

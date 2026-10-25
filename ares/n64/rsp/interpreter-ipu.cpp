@@ -52,7 +52,7 @@ auto RSP::BNE(cr32& rs, cr32& rt, s16 imm) -> void {
 }
 
 auto RSP::BREAK() -> void {
-  uint32_t signals=0;for(unsigned n=0;n<8;++n)signals|=uint32_t(status.signal[n])<<n;taskProvenance.stopped(signals);
+  uint32_t signals=0;for(unsigned n=0;n<8;++n)signals|=uint32_t(status.signal[n])<<n;taskProvenance.stopped(signals,true);
   status.halted = 1;
   status.broken = 1;
   if(status.interruptOnBreak) mi.raise(MI::IRQ::SP);
