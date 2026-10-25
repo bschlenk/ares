@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
       frame=32;demo.tick(1,frame);check(demo.overflow&&!demo.complete&&demo.reason=="frames_limit","overflow is explicit incomplete output");
       frame=40;replay.frame=frame;replay.atBoundary=false;
       check(call("request",{"600","10000","1","human","-","-"}).error.empty()&&call("start").error.empty(),"mid-frame start is permitted for an associated state");
-      uint32_t partial=gamepad.read();check(call("stop").error.empty()&&demo.stopPending&&demo.state=="recording","mid-frame stop queues the next VI boundary");
+      uint32_t partial=gamepad.read();paused=true;check(call("stop").error.empty()&&demo.stopPending&&demo.state=="recording"&&!paused,"mid-frame stop queues the next VI boundary");
       frame=41;replay.frame=frame;demo.tick(1,frame);check(demo.complete&&demo.duration==1&&paused,"queued stop completes before next interval input");
       frame=50;replay.frame=frame;check(call("replay").error.empty(),"associated mid-frame state can start replay");check(uint32_t(gamepad.read())==partial,"partial first interval replays its actual saved-state input");frame=51;replay.frame=frame;demo.tick(1,frame);check(demo.complete&&!controls.hasOverrides(),"partial start replay completes and releases");
       executionCoordinate.inputLatch={};

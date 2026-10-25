@@ -833,7 +833,7 @@ CLI file capabilities resolve against the caller directory, including relative p
 inside `emu.loadState/saveState/screenshot`; user argument strings stay unchanged.
 Successful CLI consumption acknowledges the result: fresh clients may still retrieve it,
 but it becomes evictable under retention pressure. Use `--retain-result` to pin it for
-the normal 15-minute retention window. Failed CLI runs release their results.
+the normal 15-minute retention window. Failed CLI runs release their results unless `--retain-result` is set.
 Unconsumed MCP results remain pinned until release or expiry.
 Use repeated `--state FILE` / `--artifact FILE` for script file capabilities.
 JSON goes to stdout; logs/errors go to stderr. SIGINT cancels only that job and

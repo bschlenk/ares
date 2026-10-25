@@ -62,7 +62,7 @@ struct DemonstrationService {
     }
     if(method=="n64.demo.stop"||method=="n64.demo.cancel"){
       if(!a.empty()||!active())return {"invalid_request",{}};
-      if(method=="n64.demo.stop"&&state=="recording"&&!execution->atBoundary){if(!stopPending){stopPending=true;stopFrame=f;}return {{},status()};}
+      if(method=="n64.demo.stop"&&state=="recording"&&!execution->atBoundary){if(!stopPending){stopPending=true;stopFrame=f;}*paused=false;return {{},status()};}
       finish(method=="n64.demo.stop"&&state=="recording"?"requested":"cancelled",f);*paused=true;return {{},status()};
     }
     if(method=="n64.demo.read"){
