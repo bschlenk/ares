@@ -10,8 +10,9 @@ test('CLI discovers shared schemas without launching an app; defaults and valida
   const client = new LocalServiceClient('/tmp/nonexistent-ares-tools.json', 'unused');
   const registry = new ToolRegistry(); registerTools(registry, client);
   const list = registry.list();
-  const cli = JSON.parse(execFileSync(process.execPath, [path.resolve(__dirname, '../dist/cli.js'), 'tools'], {encoding:'utf8'}));
+  const cli = JSON.parse(execFileSync(process.execPath, [path.resolve(__dirname, '../dist/cli.js'), 'tools'], {encoding:'utf8',env:{...process.env,ARES_OWNER_LEASE:'expired-lease',ARES_SERVICE_DIR:'/tmp/nonexistent-ares-tools-directory'}}));
   assert.deepEqual(cli, list);
+  const provenance=JSON.parse(execFileSync(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),'call','build_info'],{encoding:'utf8',env:{...process.env,ARES_OWNER_LEASE:'expired-lease',ARES_SERVICE_DIR:'/tmp/nonexistent-ares-tools-directory'}}));assert(provenance.adapter.build_id);
   assert.equal(list.find(t => t.name === 'batch').inputSchema.properties.legacy_results.default, false);
   assert(list.some(t => t.name === 'memory_capture_export'));
   await assert.rejects(registry.call('run_frames', {n:-1}));
