@@ -97,6 +97,7 @@ auto RSP::ioWrite(u32 address, u32 data_, Thread& thread) -> void {
     dma.pending.length.bit(3,11) = data.bit( 3,11);
     dma.pending.count            = data.bit(12,19);
     dma.pending.skip.bit(3,11)   = data.bit(23,31);
+    taskProvenance.dmaPendingTask=taskProvenance.active;
     dma.pending.originCpu = &thread != this;
     dma.pending.originPc = dma.pending.originCpu ? cpu.ipu.pc : (u64)rsp.ipu.r[31].u32;
     dma.full.read  = 1;
@@ -110,6 +111,7 @@ auto RSP::ioWrite(u32 address, u32 data_, Thread& thread) -> void {
     dma.pending.length.bit(3,11) = data.bit( 3,11);
     dma.pending.count            = data.bit(12,19);
     dma.pending.skip.bit(3,11)   = data.bit(23,31);
+    taskProvenance.dmaPendingTask=taskProvenance.active;
     dma.pending.originCpu = &thread != this;
     dma.pending.originPc = dma.pending.originCpu ? cpu.ipu.pc : (u64)rsp.ipu.r[31].u32;
     dma.full.write = 1;

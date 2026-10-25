@@ -52,6 +52,7 @@ auto RSP::main() -> void {
 
 auto RSP::instruction() -> void {
   if(!debugControl.before(ipu.pc)) return;
+  if(ipu.pc==0x80)taskProvenance.resumeEntry();
   if(!debugControl.active && Accuracy::RSP::Recompiler && recompiler.enabled) {
     auto block = recompiler.block(ipu.pc);
     block->execute(*this);

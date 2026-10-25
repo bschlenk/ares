@@ -567,3 +567,30 @@ the independently responsive main-stall reporting gap from A.
 Watchdog acceptance: **175 tests passed, 0 failures, 0 skips**, including the
 real stopped-Electron/fresh-MCP case and normal recovery/cleanup. This independent
 slice is committed before graphics provenance work continues.
+
+
+## Verified F3DEX2 yield/resume
+
+Actual 3072-byte yield/restore SP DMAs are tagged with the submitting dispatch,
+including queued transfers. Verification requires the full supported IMEM hash
+and static DMEM tables, the live yield descriptor and saved microcode pointer,
+architectural BREAK with yielded/task-done signals, one unconsumed matching
+historical context, unchanged restored entry bytes and the actual resumed command
+DMA from its saved list pointer. Conventional yielded descriptors follow the
+[OS task-loading ABI](https://github.com/n64decomp/libreultra/blob/master/src/io/sptask.c).
+Dispatch IDs remain distinct; explicit logical-task links appear only after the
+resume evidence completes. Unknown/altered/ambiguous/evicted contexts remain
+unverified. Exact saved matrix-stack and transformed-vertex shadows continue
+across a verified restore, without reconstructing them from later RDRAM.
+
+The genuine CC0 microcode fixture requests yield after a pushed matrix, restores
+through real SP DMA and finishes the nested draw under interpreter and JIT.
+Both produce identical yield SHA-256 and rendered pixels; existing stack,
+rounding, viewport, frozen-history and quota assertions still pass. Negative
+fixtures alter saved RAM or restored DMEM; both still render but cannot claim a
+verified resume. A second dispatch replaying the consumed context is rejected.
+Six focused tests pass with zero skips. Full-suite result follows below.
+
+Yield/resume full regression: **178 passed, 0 failures, 0 skips**. This closes
+verified resume for the supported F3DEX2 profile; arbitrary microcode remains
+explicitly unverified, and displayed-pixel association remains candidate-only.

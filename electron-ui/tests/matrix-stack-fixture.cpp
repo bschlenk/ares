@@ -1,6 +1,7 @@
 #include <n64/n64.hpp>
 #include "../native/matrix-service.hpp"
 #include "../native/transform-service.hpp"
+#include "../native/task-service.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -11,7 +12,7 @@ static void check(bool value,const char* message){if(!value){std::fprintf(stderr
 static std::vector<uint8_t> readFixture(const std::filesystem::path& path){std::ifstream in(path,std::ios::binary);check(bool(in),"fixture file exists");return {std::istreambuf_iterator<char>(in),{}};}
 static int32_t fixed(const RspMatrixBytes& raw,unsigned n){return int32_t((uint32_t(raw[n*2])<<24)|(uint32_t(raw[n*2+1])<<16)|(uint32_t(raw[32+n*2])<<8)|raw[33+n*2]);}
 int main(int argc,char**argv){
- check(argc==2,"fixture directory argument");const auto code=readFixture(std::filesystem::path(argv[1])/"code.bin"),data=readFixture(std::filesystem::path(argv[1])/"data.bin");
+ check(argc==2||argc==3,"fixture directory argument");const std::string yieldMode=argc==3?argv[2]:"";const bool exerciseYield=!yieldMode.empty();const auto code=readFixture(std::filesystem::path(argv[1])/"code.bin"),data=readFixture(std::filesystem::path(argv[1])/"data.bin");
  ares::Platform platform;ares::platform=&platform;auto root=std::make_shared<ares::Core::Object>("Matrix fixture");
  std::vector<uint8_t> hidden(2*1024*1024);rdram.hidden.data=hidden.data();cpu.load(root);cpu.power(false);rdram.ram.allocate(4*1024*1024);rdram.mapIdentity=1;
  #if defined(VULKAN)
@@ -42,13 +43,41 @@ int main(int argc,char**argv){
   uint32_t task[16]={1,0,0,0,0x10000,0x1000,0x11000,uint32_t(data.size()),0x20000,0x800,0x30000,0x34000,0x40000,0,0x70000,0xc00};
   for(unsigned n=0;n<16;++n)rsp.dmem.write<Word>(0xfc0+n*4,task[n]);
   auto pending=translation;pending[12]=99;matrix(0x50080,pending);
-  bool updatedOperand=false,updatedSaved=false;
+  bool updatedOperand=false,updatedSaved=false,requestedYield=false,resumed=false;uint64_t yieldedTask=0,resumedTask=0;
   commandCapture.annotate=[&](CommandCapture::RspRecord& row){
     if(row.opcode==0xda&&row.word1==0x01000080){matrix(0x50080,translation);updatedOperand=true;}
+    if(exerciseYield&&!requestedYield&&row.opcode==0xdc){requestedYield=true;rsp.writeWord(0x04040010,1<<10,cpu);}
     if(row.opcode==0xd8&&!updatedSaved){auto changedSaved=scale;changedSaved[0]=2;matrix(0x20000,changedSaved);updatedSaved=true;}
   };
   rsp.ipu.pc=0x80;rsp.branch.setPc(0x80);commandCapture.rspEnabled=true;commandCapture.rdpEnabled=true;rsp.writeWord(0x04040010,1,cpu);
-  unsigned count=0;for(;count<1000000&&!rsp.status.halted;++count){rsp.instruction();rsp.dmaStep(128);}
+  unsigned count=0;for(;count<1000000;++count){
+    if(rsp.status.halted){
+      if(!exerciseYield||!requestedYield||resumed)break;
+      for(unsigned n=0;n<512&&rsp.dma.busy.any();++n)rsp.dmaTransferStep();
+      yieldedTask=taskProvenance.active;const auto* yielded=taskProvenance.find(yieldedTask);
+      check(yielded&&yielded->yieldVerified&&yielded->yieldBytes,"real profiled microcode writes and signals its yield context");
+      if(yieldMode=="--yield-mutated")rdram.ram.write<Byte>(0x70800,rdram.ram.read<Byte>(0x70800,RBusDevice::ARES_DEBUGGER)^1,RBusDevice::ARES_DEBUGGER);
+      for(unsigned n=0;n<0xc00;++n)rsp.dmem.write<Byte>(n,0xa5);
+      task[1]=1;task[6]=0x70000;task[7]=0xc00;for(unsigned n=0;n<16;++n)rsp.dmem.write<Word>(0xfc0+n*4,task[n]);
+      // Simulate the OS boot transfer with actual SP DMA, then run the same
+      // genuine microcode entry. The OS substitutes yield data for ucode_data.
+      rsp.writeWord(0x04040000,0x1080,cpu);rsp.writeWord(0x04040004,0x10000,cpu);rsp.writeWord(0x04040008,0xf7f,cpu);
+      for(unsigned n=0;n<512&&rsp.dma.busy.any();++n)rsp.dmaTransferStep();
+      rsp.ipu.pc=0x80;rsp.branch.setPc(0x80);rsp.writeWord(0x04040010,1|(1<<9)|(1<<11)|(1<<13),cpu);resumedTask=taskProvenance.active;
+      rsp.writeWord(0x04040000,0,cpu);rsp.writeWord(0x04040004,0x70000,cpu);rsp.writeWord(0x04040008,0xbff,cpu);
+      for(unsigned n=0;n<512&&rsp.dma.busy.any();++n)rsp.dmaTransferStep();
+      if(yieldMode=="--yield-entry-mutated")rsp.dmem.write<Byte>(0x800,rsp.dmem.read<Byte>(0x800)^1);
+      resumed=true;
+    }
+    rsp.instruction();rsp.dmaStep(128);
+  }
+  if(exerciseYield){
+    const auto* current=taskProvenance.find(resumedTask);check(resumed&&current,"yield actually resumed");
+    check(current->resumeVerified==(yieldMode=="--yield"),"only unmodified consumed yield context is verified");
+    if(current->resumeVerified)check(current->resumeFrom==yieldedTask&&current->logicalId==yieldedTask&&taskProvenance.find(yieldedTask)->resumedBy==resumedTask,"verified dispatches retain a logical task chain");
+    std::printf("YIELDED_TASK_JSON %s\n",TaskService::execute({std::to_string(yieldedTask)},1,executionCoordinate.frame).json.c_str());
+    std::printf("RESUMED_TASK_JSON %s\n",TaskService::execute({std::to_string(resumedTask)},1,executionCoordinate.frame).json.c_str());
+  }
   std::fprintf(stderr,"matrix executor=%s instructions=%u pc=%x records=%zu known=%d\n",jit?"jit":"interpreter",count,unsigned(rsp.ipu.pc),commandCapture.rspLive.size(),commandCapture.matrices.known);
   check(rsp.status.halted,"real microcode task finishes");
   check(updatedOperand&&updatedSaved,"just-in-time operand and saved RAM updates execute before actual DMA reads");commandCapture.annotate={};
@@ -106,6 +135,13 @@ int main(int argc,char**argv){
   for(unsigned n=0;n<300;++n){commandCapture.segment={};commandCapture.segment.opcode=0xda;commandCapture.segment.word0=0xda380003;commandCapture.segment.seq=n;commandCapture.segment.taskId=taskProvenance.active;commandCapture.segmentOpen=true;commandCapture.rspFlush(false);}
   check(commandCapture.transformBatches.back().entries.size()==256&&commandCapture.transformBatches.back().observed>=300,"compact transforms have an independent bounded quota");
   vi.io.dramAddress=0x66000;++executionCoordinate.frame;auto* syntheticTask=taskProvenance.find(taskProvenance.active);syntheticTask->stoppedFrame=executionCoordinate.frame;syntheticTask->targets.push_back({0x66000,64,2,executionCoordinate.frame,0,1});taskProvenance.scanout(executionCoordinate.frame,executionCoordinate.originCommit,0x66000,64,64);commandCapture.afterRun();std::printf("TRANSFORM_LIMIT_JSON %s\n",TransformService::execute({"0","0","32"},1,"fixture").json.c_str());
+  if(exerciseYield&&yieldMode=="--yield"){
+    for(unsigned n=0;n<16;++n)rsp.dmem.write<Word>(0xfc0+n*4,task[n]);
+    rsp.ipu.pc=0x80;rsp.branch.setPc(0x80);rsp.writeWord(0x04040010,1|(1<<9)|(1<<11)|(1<<13),cpu);const auto replay=taskProvenance.active;
+    rsp.writeWord(0x04040000,0,cpu);rsp.writeWord(0x04040004,0x70000,cpu);rsp.writeWord(0x04040008,0xbff,cpu);for(unsigned n=0;n<512&&rsp.dma.busy.any();++n)rsp.dmaTransferStep();
+    check(!taskProvenance.find(replay)->pendingResume&&!taskProvenance.find(replay)->resumeVerified,"a consumed yield context cannot be replayed into a second logical resumption");
+    std::printf("REPLAY_TASK_JSON %s\n",TaskService::execute({std::to_string(replay)},1,executionCoordinate.frame).json.c_str());rsp.writeWord(0x04040010,2,cpu);
+  }
   #if defined(VULKAN)
   vulkan.unload();
   #endif
