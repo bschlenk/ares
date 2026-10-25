@@ -5,7 +5,7 @@ test('direct CLI uses discovery, preserves stdout JSON, writes output and owns S
  const dir=fs.mkdtempSync('/tmp/ares-script-cli-'),identity={session:'cli-test',epoch:1};
  const nativeProcess=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),['--synthetic','--paused','--silent','--save-dir',dir,'--control-session',identity.session],{stdio:['pipe','pipe','pipe','pipe']});nativeProcess.stdout.resume();nativeProcess.stderr.resume();const closed=once(nativeProcess,'close');
  const native=new NativeSessionClient(nativeProcess.stdin,nativeProcess.stdio[3],identity,()=>{});const router=new SessionRouter();router.attach(native);const host=new LocalServiceHost(router,async p=>p.operation==='script_result'?router.readScriptResult(p):({ready:true}));
- function cli(args,cwd){const child=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),...args],{cwd,env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc')}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);return {child,done:once(child,'close').then(([code])=>({code,out,err}))};}
+ function cli(args,cwd,lease){const child=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),...args],{cwd,env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc'),ARES_OWNER_LEASE:lease??''}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);return {child,done:once(child,'close').then(([code])=>({code,out,err}))};}
  try{
   await host.listen(path.join(dir,'ipc'));
   const source=path.join(dir,'record.ts');fs.writeFileSync(source,'export default async({args,frames,log})=>{await frames(4);log("hello");return {answer:args.n}}');
@@ -18,6 +18,12 @@ test('direct CLI uses discovery, preserves stdout JSON, writes output and owns S
   for(let n=0;n<20;n++){fs.writeFileSync(source,'export default()=>{throw Error("deliberate")}');const r=await cli(['run','record.ts'],dir).done;assert.equal(r.code,1);assert.match(r.err,/deliberate/);}
   const missing=await cli(['run','missing.ts'],dir).done;assert.match(missing.err,/ENOENT/);assert.doesNotMatch(missing.err,/write_failed/);
   fs.writeFileSync(source,'export default()=>{ invalid syntax');const broken=await cli(['run','record.ts'],dir).done;assert.match(broken.err,/Build failed/);
+  fs.writeFileSync(source,'export default async({frames})=>{await frames(4);return true}');
+  const leaseReply=await cli(['call','owner_lease','--action','create','--seconds','2']).done;assert.equal(leaseReply.code,0,leaseReply.err);const lease=JSON.parse(leaseReply.out).lease_id;
+  const startVideo=await cli(['call','video_start'],dir,lease).done;assert.equal(startVideo.code,0,startVideo.err);
+  const runVideo=await cli(['run','record.ts'],dir,lease).done;assert.equal(runVideo.code,0,runVideo.err);
+  const stopVideo=await cli(['call','video_stop','--path',path.join(dir,'leased.avi')],dir,lease).done;assert.equal(stopVideo.code,0,stopVideo.err);assert.equal(JSON.parse(stopVideo.out).frames,4);
+  await sleep(2200);const expired=await cli(['call','emu_status'],dir,lease).done;assert.match(expired.err,/owner_lease_expired/);
   const invalid=await cli(['call','run_frames','--n','-1']).done;assert.equal(invalid.code,1);assert.equal(invalid.out,'');assert.match(invalid.err,/too_small/);
   const failed=await cli(['call','read_memory','--region','missing','--addr','0','--length','1']).done;assert.equal(failed.code,1);assert.equal(failed.out,'');assert.match(failed.err,/unknown_region/);
   fs.writeFileSync(source,'export default({frames})=>frames(1000000)');const interrupt=cli(['run',source]);

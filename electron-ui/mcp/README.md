@@ -919,3 +919,29 @@ Transition history is retained in `logs_directory/watchdog.jsonl` and `.1`,
 separate from main's bounded app-log journal, so a killed main cannot erase the
 only observation of its stall. No automatic process kill or mutating retry is
 performed by the watchdog.
+
+Resources normally end when their local connection closes. For separate CLI
+start/run/stop commands, explicitly create a durable owner lease:
+
+```sh
+ares call owner_lease --action create --name capture --seconds 300
+# Copy lease_id from the reply into the environment for subsequent processes:
+export ARES_OWNER_LEASE=THE_LEASE_ID
+ares call video_start
+ares run scenario.ts
+ares call video_stop --path /tmp/capture.avi
+ares call owner_lease --action release --lease_id "$ARES_OWNER_LEASE"
+unset ARES_OWNER_LEASE
+```
+
+MCP clients use `owner_lease` with `action: "use"` on each new connection.
+`action: "list"` discovers live leases and deadlines. Up to eight leases live for
+1–600 seconds from creation; use/poll does not renew them. Release, timeout, app
+exit or native-session replacement invalidates their resources. Ordinary clients
+retain disconnect cleanup. CLI refuses known persistent starts without a lease.
+
+Local adapters negotiate a schema digest before sending requests. Missing or
+incompatible schemas return `adapter_stale` with app/adapter provenance and
+instructions to restart the MCP adapter from the rebuilt app. Different builds
+with the same schema may reconnect; pending mutations are never replayed.
+Adapter-only `build_info` remains usable without contacting the app.
