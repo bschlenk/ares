@@ -81,7 +81,7 @@ export class SessionRouter {
   }
   detach(): void {
     for(const entry of this.observerStarts.values())entry.cancelled=true;
-    this.scripts.close(); this.memoryArtifacts.close(); this.memoryDumps.close(); this.rdpArtifacts.close(); this.batches.close(); this.artifacts.close(); this.screenshots.close(); this.audio.close(); this.recording.close(); this.states.close(); this.stateArtifacts.close(); this.stateLoading.close();
+    this.inputClips.close();this.scripts.close(); this.memoryArtifacts.close(); this.memoryDumps.close(); this.rdpArtifacts.close(); this.batches.close(); this.artifacts.close(); this.screenshots.close(); this.audio.close(); this.recording.close(); this.states.close(); this.stateArtifacts.close(); this.stateLoading.close();
     clearInterval(this.stateTimer); this.stateTimer = undefined;
     this.client?.close(); this.client = undefined;
   }
