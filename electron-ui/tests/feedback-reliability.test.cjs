@@ -61,7 +61,7 @@ test('consumed CLI results remain readable until pressure; unconsumed results ar
  const store=new ScriptResults(),scope={session:'consumed',epoch:1};const pinned=store.reserve();store.publish(pinned,1,scope,Buffer.from('1'),{});
  let previous;
  for(let n=0;n<40;n++){const h=store.reserve();store.publish(h,n+2,scope,Buffer.from('2'),{});store.consume(h);assert.equal(store.read({handle:h}).hex,'32');previous=h;}
- assert.equal(store.read({handle:pinned}).hex,'31');assert.equal(store.read({handle:previous}).hex,'32');
+ const inventory=store.list();assert.equal(inventory.results.find(r=>r.result_handle===pinned).consumed,false);assert.equal(inventory.retention_seconds,900);assert.equal(inventory.pending,0);assert(inventory.next_expiry_at);assert.throws(()=>store.list(0,9),/invalid_request/);assert.equal(store.read({handle:pinned}).hex,'31');assert.equal(store.read({handle:previous}).hex,'32');
 });
 
 test('live adapter provenance stays pinned when a rebuild replaces build metadata',async t=>{

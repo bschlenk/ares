@@ -65,7 +65,7 @@
     }
   ],
   "reference_count": 68,
-  "current_count": 108,
+  "current_count": 109,
   "missing": [],
   "added": [
     "app_health",
@@ -107,6 +107,7 @@
     "run_script",
     "script_result",
     "script_result_release",
+    "script_results",
     "ui_screenshot"
   ],
   "matching": 0,
