@@ -900,3 +900,16 @@ artifact hashes. Recording originates in a real plugin user gesture and the host
 save picker. It records frozen native samples before renderer coalescing; loss
 or overflow fails publication. `app_health.user_interaction_waits` identifies
 pending export save dialogs. See `plugins/README.md` for SDK limits and lifecycle.
+
+`app_health.watchdog` describes an independent process, not the event loop it
+observes. `main` is responsive/unresponsive/disconnected/unknown; `observer`
+reports whether the watchdog itself has recent progress. Main responsiveness
+means heartbeat progress within two seconds, not a proof that every native
+operation is healthy. Native/error snapshots remain cached during a stall.
+A fresh client falls back within 500 ms if a previously healthy main stops
+answering; known missing-heartbeat snapshots require no main IPC. The private
+snapshot is bounded to 64 KiB and is tied to the selected connection instance.
+Transition history is retained in `logs_directory/watchdog.jsonl` and `.1`,
+separate from main's bounded app-log journal, so a killed main cannot erase the
+only observation of its stall. No automatic process kill or mutating retry is
+performed by the watchdog.

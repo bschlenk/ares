@@ -630,3 +630,15 @@ also runs in `test:all`: actual microcode executes nested lists, segmented
 addresses, stack/load/multiply/pop and viewport changes, with fixed-point
 rounding, cached-vertex and rendered-pixel assertions. `matrix_capture` exposes
 these immutable native states; unsupported microcode remains unavailable.
+
+With agent services enabled, an independent Node watchdog receives main-process
+heartbeats every 250 ms. `app_health` uses the live main response when available
+and a private bounded snapshot when main IPC cannot answer. After two seconds
+without heartbeat progress it reports `watchdog.main: unresponsive`; this does
+not identify the cause or imply a modal dialog. A stale watchdog reports main
+state unknown, and IPC parent disconnection is recorded separately. Cached
+native observations are explicitly cached. Monotonic clocks determine age.
+The worker retains only the latest snapshot (64 KiB), one pending heartbeat and
+a two-file, 64-KiB-per-file `logs/watchdog.jsonl` transition journal. Normal service
+shutdown removes the sidecar and worker; abrupt parent death leaves a diagnostic
+snapshot. Fresh CLI/MCP clients can read it without a main-process handshake.

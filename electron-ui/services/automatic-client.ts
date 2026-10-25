@@ -1,3 +1,4 @@
+import {readWatchdog} from './watchdog.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import os from 'node:os';
 import { profileRoot } from '../profile.js';
@@ -5,7 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { LocalServiceClient, readConnection, namedConnection } from './local-endpoint.js';
+import { LocalServiceClient, readConnection, namedConnection, connectionInstance } from './local-endpoint.js';
 import { ServiceError, type ServiceMethod, type SessionIdentity, type ServiceParams, type ServiceResult, type SessionReply } from './contracts.js';
 
 /** Discover a running app before launching. A launched GUI outlives this adapter. */
@@ -19,6 +20,15 @@ export class AutomaticServiceClient extends LocalServiceClient {
   launchedApp = false;
   private launchedInstance?: string;
   constructor(private directory: string, private name?: string) { super('', ''); }
+  protected override async healthSnapshot():Promise<any|undefined>{
+    try{
+      const files=this.name?[path.basename(namedConnection(this.directory,this.name))]:(await fs.readdir(this.directory)).filter(f=>/^[a-f0-9-]{36}\.json$/.test(f));
+      const values=[];
+      for(const file of files){try{const full=path.join(this.directory,file),id=this.name?await connectionInstance(full):path.basename(file,'.json');const value=await readWatchdog(await readConnection(full,id));if(value)values.push(value);}catch{}}
+      if(values.length>1){const live=values.filter(v=>v.watchdog.main!=='disconnected');if(live.length===1)return live[0];return undefined;}
+      return values[0];
+    }catch{return undefined;}
+  }
   private async discover() {
     let files: string[];
     try { files = this.name ? [path.basename(namedConnection(this.directory, this.name))] :

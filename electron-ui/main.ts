@@ -1,3 +1,4 @@
+import {MainWatchdog} from './services/watchdog.js';
 import {ServiceError} from './services/contracts.js'
 import {PluginExports} from './services/plugin-exports.js'
 import { ObserverDeliveries } from './services/observer-delivery.js'
@@ -226,7 +227,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
     case 'script_result': return sessions.readScriptResult(params)
     case 'build_info': return {...buildInfo(),native_sha256:await hashRom(hostPath),app_instance:appLogs.instance,app_root:appRoot,executable:process.execPath}
     case 'app_logs': return appLogs.read(params)
-    case 'app_health': return { instance: appLogs.instance, observed_at: new Date().toISOString(), native: { generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() }
+    case 'app_health': return appHealth()
     case 'app_status': return { ready: sessions.identity !== undefined, pid: process.pid }
     case 'load_rom': {
       if (Object.keys(params).some(key => !['operation', 'path', 'system'].includes(key)) || typeof params.path !== 'string' || !path.isAbsolute(params.path) || params.path.includes('\0') || (params.system !== undefined && typeof params.system !== 'string')) throw new Error('invalid_rom_request')
@@ -365,6 +366,8 @@ export const preferences = new SettingsStore(
     ...(serviceLaunchOverride() === undefined ? {} : { 'agent.enabled': serviceLaunchOverride() }),
   },
 )
+function appHealth(){return { instance: appLogs.instance, observed_at: new Date().toISOString(), native: { generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
+const mainWatchdog=new MainWatchdog(appHealth,error=>appLogs.write('watchdog','error',error));
 function serviceLaunchOverride(): boolean | undefined {
   const switches = process.argv.filter(arg => arg === '--services' || arg === '--no-services')
   if (switches.length) return switches.at(-1) === '--services'
@@ -372,12 +375,13 @@ function serviceLaunchOverride(): boolean | undefined {
   return undefined
 }
 async function configureServices(enabled: boolean) {
-  if (!enabled) { await serviceHost.close(); return }
+  if (!enabled) { await mainWatchdog.close(); await serviceHost.close(); return }
   if (serviceHost.info) return
   const index = process.argv.indexOf('--instance-name')
   const name = index < 0 ? undefined : process.argv[index + 1]
   if (index >= 0 && (!name || name.startsWith('--'))) throw new Error('invalid_instance_name')
   const file = await serviceHost.listen(process.env.ARES_SERVICE_DIR, name, hostPath)
+  try{await mainWatchdog.start(serviceHost.info!);}catch(error){await mainWatchdog.close();await serviceHost.close();throw error;}
   console.error(`ares service instance ${serviceHost.instance}: ${file}`)
 }
 let nativeSettingsRegistered = false
@@ -945,7 +949,7 @@ app.on('before-quit', (event) => {
   void (async()=>{
     // Window closure or another signal can request quit again while these await.
     // Keep every request blocked until all owners and service claims are released.
-    for(const close of [()=>enqueue(stop),()=>plugins.close(),()=>serviceHost.close()]){
+    for(const close of [()=>enqueue(stop),()=>plugins.close(),()=>mainWatchdog.close(),()=>serviceHost.close()]){
       try{await close()}catch(error){appLogs.write('main','error',error)}
     }
     quitReady=true
