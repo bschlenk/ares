@@ -58,7 +58,7 @@ export async function main(argv = process.argv.slice(2)) {
         process.stdout.write(value+'\n');
         consumed=true;
       } finally {
-        if(!retain)await client.manage({operation:'script_result',handle:operation.result_handle,...(consumed?{consumed:true}:{release:true})}).catch(()=>{});
+        if(!retain)await client.manage({operation:'script_result',handle:operation.result_handle,...(consumed?{consumed:true}:{discard:true})}).catch(()=>{});
       }
       return;
     }

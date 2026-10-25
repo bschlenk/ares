@@ -69,3 +69,7 @@ test('live adapter provenance stays pinned when a rebuild replaces build metadat
  fs.copyFileSync(path.join(__dirname,'../dist/services/build-info.js'),path.join(dir,'services/build-info.mjs'));const file=path.join(dir,'build-info.json');fs.writeFileSync(file,JSON.stringify({build_id:'old',schema_id:'old-schema'}));
  const {buildInfo}=await import(require('node:url').pathToFileURL(path.join(dir,'services/build-info.mjs')));assert.equal(buildInfo().schema_id,'old-schema');fs.writeFileSync(file,JSON.stringify({build_id:'new',schema_id:'new-schema'}));assert.equal(buildInfo().build_id,'old');assert.equal(buildInfo().schema_id,'old-schema');
 });
+
+test('CLI cancellation can discard a pending result before its native transfer completes',()=>{
+ const store=new ScriptResults(),handle=store.reserve();assert.deepEqual(store.discard(handle),{released:true});store.publish(handle,1,{session:'cancelled',epoch:1},Buffer.from('42'),{});assert.throws(()=>store.read({handle}),/script_result_released/);
+});

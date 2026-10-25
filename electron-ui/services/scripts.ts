@@ -179,7 +179,7 @@ export class ScriptJobs {
             const guard=()=>{if(!current()||!executionCurrent()||client.identity.session!==identity.session||client.identity.epoch!==identity.epoch)throw new ServiceError('script_output_interrupted');};
             const {artifactGuard}=await import('./artifact-guard.js');
             const artifact=await artifactGuard.run(async()=>{guard();},()=>publishArtifact(p.outputPath!,false,async write=>{await write(data);await write('\n');},guard));
-            if(generation===this.generation)this.outputs.set(id,{state:'committed',...artifact});
+            if(generation===this.generation)this.outputs.set(id,{state:p.videoPath?'pending':'committed',...artifact});
           }
           if(p.videoPath){
             if((page.stop_reason??completed.result?.stop_reason)!=='script_done')throw new ServiceError('script_video_interrupted');
@@ -187,7 +187,7 @@ export class ScriptJobs {
             if(!status.ok||!status.result||!status.result.active)throw new ServiceError('script_video_incomplete: '+(status.result?.stop_reason??status.error));
             const saved=await invoke.request('artifact.videoStop',client.identity,{path:p.videoPath,overwrite:false},owner);
             if(!saved.ok)throw new ServiceError(saved.error!);
-            if(generation===this.generation)this.outputs.set(id,{state:'committed',video:saved.result});
+            if(generation===this.generation)this.outputs.set(id,{...this.outputs.get(id),state:'committed',video:saved.result});
           }
           return;
         }

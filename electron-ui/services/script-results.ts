@@ -7,12 +7,13 @@ export class ScriptResults {
   private released=new Set<string>();
   private reservations=new Set<string>();
   consume(handle:string){this.read({handle});this.values.get(handle)!.consumed=true;return {consumed:true};}
+  discard(handle:string){if(this.reservations.delete(handle)){this.released.add(handle);while(this.released.size>64)this.released.delete(this.released.values().next().value!);return {released:true};}return this.release(handle);}
   abort(handle:string){this.reservations.delete(handle);}
   release(handle:string){this.read({handle});this.values.delete(handle);this.released.add(handle);while(this.released.size>64)this.released.delete(this.released.values().next().value!);return {released:true};}
   reserve(){this.prune();for(const [key,value]of this.values){if(this.values.size+this.reservations.size<16&&this.bytes+(this.reservations.size+1)*4*1024*1024<=16*1024*1024)break;if(value.consumed){this.values.delete(key);this.expired.add(key);}}if(this.values.size+this.reservations.size>=16||this.bytes+(this.reservations.size+1)*4*1024*1024>16*1024*1024)throw new ServiceError('script_result_backpressure');const handle=randomUUID();this.reservations.add(handle);return handle;}
   private get bytes(){return [...this.values.values()].reduce((n,v)=>n+v.data.length,0);}
   private prune(){for(const [k,v]of this.values)if(v.expires<Date.now()){this.values.delete(k);this.expired.add(k);}while(this.expired.size>64)this.expired.delete(this.expired.values().next().value!);}
-  publish(handle:string,operation_id:number,identity:SessionIdentity,data:Buffer,page:any){this.prune();this.reservations.delete(handle);if(this.values.size>=16||this.bytes+data.length>16*1024*1024)throw new ServiceError('script_result_backpressure');this.values.set(handle,{handle,operation_id,identity:{...identity},data:Buffer.from(data),page:{...page,hex:''},expires:Date.now()+15*60*1000,sha256:createHash('sha256').update(data).digest('hex')});}
+  publish(handle:string,operation_id:number,identity:SessionIdentity,data:Buffer,page:any){this.prune();if(!this.reservations.delete(handle))return;if(this.values.size>=16||this.bytes+data.length>16*1024*1024)throw new ServiceError('script_result_backpressure');this.values.set(handle,{handle,operation_id,identity:{...identity},data:Buffer.from(data),page:{...page,hex:''},expires:Date.now()+15*60*1000,sha256:createHash('sha256').update(data).digest('hex')});}
   read(p:{handle?:string;operation_id?:number;offset?:number;length?:number},scope?:SessionIdentity){
     this.prune();const offset=p.offset??0,length=p.length??16384;
     if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(length)||length<1||length>16384)throw new ServiceError('invalid_request');

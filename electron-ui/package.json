@@ -34,6 +34,7 @@
     "accept": "node scripts/accept.cjs",
     "test:agent": "npm run build && electron tests/electron-agent-integration.mjs",
     "test:automatic-launch": "npm run build && node tests/automatic-launch.cjs",
+    "test:demonstration": "npm run build && electron tests/electron-demonstration.mjs",
     "test:controls": "npm run build && electron tests/electron-controls.mjs",
     "test:all": "node scripts/test-all.cjs",
     "test:matrix": "npm run build && node tests/kirby-matrix-live.cjs",
