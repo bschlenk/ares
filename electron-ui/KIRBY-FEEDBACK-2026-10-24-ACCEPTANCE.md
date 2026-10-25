@@ -70,3 +70,43 @@ separate bounded recorder/export contract.
   main stall. It does not infer a dialog or other unobserved root cause.
 - This macOS arm64 package is a development distribution, without a signing or
   notarization claim. Sparse JIT optimization remains separately scoped issue 15.
+
+## Final installed handoff
+
+Build **609ee560967bbeb3** replaced `../build_macos/Ares.app` at the normal path.
+No app backup was created. Its build-time HEAD is `1e6f68e4c`; final acceptance
+harness/documentation are committed afterward. Source digest is
+`609ee560967bbeb3a88b82455e417fc4f7991ea17c196f15fb6555a4a3378981` and the
+installed native payload SHA-256 is
+`b970af1f4f750482bcb444dd50079d9a7eb4cbd1f7b79edd980f9c317d1d82c3`.
+The existing `/Users/bschlenk/.local/bin/ares` already targets that app and needed
+no rewrite. The user's controller icon remains in the verified package.
+
+Final checks passed:
+
+- Full Node lane: **180 passed, 0 failed, 0 skipped**.
+- Copied package: bundled Node/native/MCP and schemas, plugin build/reload/tooling,
+  icon and named-instance signal/reconnect/nonreplay checks.
+- Actual installed helper: real private Kirby recorder, its state load and 80-VI
+  result, exact output-file/full-paged-result agreement and fresh-process default/
+  explicit retrieval. Adapter/app build IDs match; original media is unchanged.
+- Packaged main was OS-stopped. Fresh installed `ares call app_health` returned
+  bounded independent cached `main: unresponsive`, `observer: responsive` health;
+  continuing main restored its responsive heartbeat. No dialog cause was guessed.
+- The actual deployed Kirby plugin with installed native passed overlay pixel,
+  resize/DPR, Settings/floating, clipboard/save, exclusive reload and epoch cleanup.
+  Screenshot reviewed: 34 captured nodes, the 16-joint Kirby rig, 2280 overlay
+  pixels, epoch 2 / VI 26 / origin commit 26. Its frozen export is nonpartial for
+  this sample; task mapping remains candidate-only.
+- Generic real-Kirby overlay composition/slow-consumer/origin checks and scoped
+  clipboard/single-frame/12-frame sequence export/cancel/reset-picker checks pass.
+  Actual Electron fatal/EPIPE handling and durable stack capture pass.
+
+Receipt: ignored `artifacts/kirby-skeleton-migration/deployment.json`; detailed
+installed recorder evidence: `artifacts/feedback-packaged/summary.json`; final
+package: `artifacts/feedback-plan-final-20261025/Ares.app`. The canonical example
+and all five deployed Kirby plugin files have identical recorded SHA-256 hashes.
+
+All A–H deliverables are complete within the explicit capability boundaries
+above. Broader arbitrary-microcode/pixel-authorship/platform work and issue 15
+remain separate work, not silent guarantees of this implementation.
