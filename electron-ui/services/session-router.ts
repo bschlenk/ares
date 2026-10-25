@@ -1,3 +1,4 @@
+import { InputClips } from './input-clips.js';
 import { startScript, ScriptJobs } from './scripts.js';
 import type { ScriptRunParams } from './script-contracts.js';
 import { MemoryArtifacts } from './memory-artifacts.js';
@@ -22,7 +23,7 @@ import { METHODS, PROTOCOL, encodeRequest, ServiceError, type SessionIdentity, t
 import type { NativeSessionClient } from './native-client.js';
 
 function mainCapabilities(reply: SessionReply<any>): void {
-  if (reply.ok && Array.isArray(reply.result?.capabilities)) for (const method of ['scripts.observe', 'scripts.run', 'artifact.memoryExport', 'experiment.batch', 'artifact.traceExport', 'artifact.rdpExport', 'artifact.dump', ...SCREENSHOT_METHODS, ...STATE_METHODS, 'artifact.audioSave', 'artifact.videoStop']) if (!reply.result.capabilities.includes(method)) reply.result.capabilities.push(method);
+  if (reply.ok && Array.isArray(reply.result?.capabilities)) for (const method of ['artifact.inputRequest','artifact.inputExport','artifact.inputImport','scripts.observe', 'scripts.run', 'artifact.memoryExport', 'experiment.batch', 'artifact.traceExport', 'artifact.rdpExport', 'artifact.dump', ...SCREENSHOT_METHODS, ...STATE_METHODS, 'artifact.audioSave', 'artifact.videoStop']) if (!reply.result.capabilities.includes(method)) reply.result.capabilities.push(method);
 }
 
 /** Electron main owns this router, independently of renderer/plugin lifetimes. */
@@ -39,7 +40,8 @@ export class SessionRouter {
     this.observerStartTail=result.catch(()=>{});
     try{return await result;}finally{if(!--owned.count&&this.observerStarts.get(owner)===owned)this.observerStarts.delete(owner);}
   }
-  private scripts = new ScriptJobs();
+  private scripts = new ScriptJobs(error=>this.diagnose('scripts.run',error));
+  private inputClips=new InputClips();
   health() {return this.client?.health()??{connected:false,observation:'cached'};}
   readScriptResult(params:any) {if(params.consumed===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.consume(params.handle);}if(params.release===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.release(params.handle);}return this.scripts.readResult(params,this.identity);}
   private memoryArtifacts = new MemoryArtifacts();
@@ -94,7 +96,8 @@ export class SessionRouter {
       const envelope = { protocol: PROTOCOL, id: `artifact${++this.nextArtifactId}`, ...startingIdentity };
       try {
         let result;
-        if (method === 'scripts.run') result = await this.scripts.start(client, this, startingIdentity, params as ScriptRunParams, owner, () => this.client === client);
+        if(method==='artifact.inputRequest'||method==='artifact.inputExport'||method==='artifact.inputImport')result=await this.inputClips.run(this,startingIdentity,method,params,owner,()=>this.client===client);
+        else if (method === 'scripts.run') result = await this.scripts.start(client, this, startingIdentity, params as ScriptRunParams, owner, () => this.client === client);
         else if (method === 'scripts.observe') result = await this.startObserver(client,startingIdentity,params as ScriptRunParams,owner);
         else if (method === 'experiment.cancelBatch') {
           if(startingIdentity.session !== client.identity.session) throw new ServiceError('wrong_session');

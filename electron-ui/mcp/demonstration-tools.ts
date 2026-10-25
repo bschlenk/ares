@@ -1,0 +1,15 @@
+import type {ToolRegistrar} from '../tools/registry.js';
+import type {SessionClient,SessionIdentity} from '../services/contracts.js';
+import * as z from 'zod/v4';
+export function registerDemonstrationTools(server:ToolRegistrar,client:SessionClient,status:()=>Promise<SessionIdentity>){
+ const call=async(method:any,params?:any)=>{try{const r=await client.request(method,await status(),params);return {content:[{type:'text' as const,text:JSON.stringify(r.ok?r.result:{error:r.error})}],...(!r.ok?{isError:true}:{})};}catch(e){return {content:[{type:'text' as const,text:JSON.stringify({error:e instanceof Error?e.message:String(e)})}],isError:true};}};
+ server.registerTool('demonstration_request',{description:'Arm a bounded human N64 controller demonstration without beginning the interval. Shows in-app Start/Stop/Cancel; polls without a blocking tool call. Use a durable owner_lease across CLI processes. Standard Gamepad SI latches record the exact buttons and shaped axes consumed by the game. Optional state_path saves the paused starting state. Human source rejects injected control; merged source includes injection.',inputSchema:z.object({prompt:z.string().max(1024).default('Please demonstrate the action, then stop recording.'),port:z.number().int().min(1).max(4).default(1),source:z.enum(['human','merged']).default('human'),max_frames:z.number().int().min(1).max(36000).default(600),max_seconds:z.number().min(.001).max(600).default(300),state_path:z.string().min(1).max(4096).optional()}).strict()},p=>call('artifact.inputRequest',{prompt:p.prompt,port:p.port,source:p.source,maxFrames:p.max_frames,timeoutMs:Math.ceil(p.max_seconds*1000),...(p.state_path?{statePath:p.state_path}:{})}));
+ for(const [name,method,description]of [
+  ['status','status','Poll the demonstration job, completion, overflow, input-latch counts and replay cursor.'],
+  ['start','start','Start the armed interval and resume emulation; human can also press Start in the app.'],
+  ['stop','stop','Stop and pause a demonstration; the complete bounded clip becomes exportable.'],
+  ['cancel','cancel','Cancel a demonstration or replay and release held inputs; incomplete clips cannot export.'],
+  ['replay','replay','Replay a complete clip at its exact relative VI and SI-latch sequence with exclusive port ownership. Divergent polling fails explicitly; human input cancels playback. Restore its associated state first for reproducible starting conditions.']
+ ])server.registerTool('demonstration_'+name,{description,inputSchema:z.object({}).strict()},()=>call('n64.demo.'+method));
+ for(const action of ['export','import'])server.registerTool('demonstration_'+action,{description:action==='export'?'Atomically export a versioned complete input clip with ROM, frame/latch and optional save-state metadata.':'Import a bounded input clip for the currently loaded ROM; does not restore its state automatically.',inputSchema:z.object({path:z.string().min(1).max(4096)}).strict()},p=>call(action==='export'?'artifact.inputExport':'artifact.inputImport',p));
+}

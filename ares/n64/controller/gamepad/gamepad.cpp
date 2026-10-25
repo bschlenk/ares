@@ -432,6 +432,10 @@ auto Gamepad::read() -> n32 {
     data.bit(28) = 0;  //Start
   }
 
+  if(executionCoordinate.inputLatch) {
+    auto parent=Node::parent(node);
+    if(parent){std::string name=parent->name().data();if(name.size()==17&&name.substr(0,16)=="Controller Port "&&name[16]>='1'&&name[16]<='4')data=executionCoordinate.inputLatch(name[16]-'0',data);}
+  }
   return data;
 }
 

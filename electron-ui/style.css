@@ -81,3 +81,8 @@ details > summary { cursor:pointer; font-weight:550; padding:12px 0; }
 .ares-screen-overlay[hidden] { display:none!important; }
 .ares-screen-overlay[data-interactive="false"], .ares-screen-overlay[data-interactive="false"] * { pointer-events:none!important; }
 .ares-screen-overlay[data-interactive="true"] { pointer-events:auto; }
+
+#demonstration-banner { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 100; max-width: min(760px, 94vw); padding: 12px 16px; border: 1px solid #8fbc8f; border-radius: 10px; background: #1b2823; color: #fff; box-shadow: 0 4px 24px #0008; }
+#demonstration-banner[hidden] { display: none; }
+#demonstration-banner span { display: block; margin-bottom: 8px; }
+#demonstration-banner button { margin-right: 8px; }

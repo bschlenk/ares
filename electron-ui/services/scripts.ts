@@ -18,6 +18,8 @@ for(const [type,width,get,set] of [['u8',1,'getUint8','setUint8'],['i8',1,'getIn
 }
 const input=(state={})=>{const names=['a','b','z','start','up','down','left','right','c_up','c_down','c_left','c_right','l','r'];return __input(state.port??1,names.reduce((m,k,i)=>m|(state[k]?1<<i:0),0),state.x??0,state.y??0)};
 input.set=(port,state={},stick={})=>input({...state,...stick,port});
+const demoHex=text=>Array.from(unescape(encodeURIComponent(text)),c=>c.charCodeAt(0).toString(16).padStart(2,'0')).join('')||'-';
+input.demonstration=Object.freeze({request:(p={})=>__demo('request',[(p.maxFrames??600),(p.timeoutMs??300000),(p.port??1),(p.source??'human'),demoHex(p.prompt??'Please demonstrate the action.'),'-'].join(' ')),status:()=>__demo('status',''),start:()=>__demo('start',''),stop:()=>__demo('stop',''),cancel:()=>__demo('cancel',''),replay:()=>__demo('replay',''),export:path=>__host('input_export',path),import:path=>__host('input_import',path)});
 for(const n of [8,16,32,64]){mem['s'+n]=mem['i'+n];mem['writeS'+n]=mem['writeI'+n]}
 let seed=1;Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};globalThis.Date=undefined;
 `;
@@ -76,7 +78,7 @@ async function bundleScript(p: ScriptRunParams, observe=false) {
     }}]
   });
   const bundled=output.outputFiles[0].text;
-  if(/\bimport\s*\(/.test(bundled))throw new ServiceError('script_dynamic_import_denied');
+  if(/(^|[^.$\w])import\s*\(/.test(bundled))throw new ServiceError('script_dynamic_import_denied');
   const args=JSON.stringify(p.args);
   const source=bootstrap+bundled+`\n${observe?'(()=>':'Promise.resolve().then(()=>'}__aresModule.default({args:${args},emu:Object.freeze({get frame(){return __info().frame},info:__info,loadState:path=>__host('state_load',path),saveState:path=>__host('state_save',path),screenshot:path=>__host('screenshot',path)}),mem,input,frames:__frames,cpu:Object.freeze({onExecute:(address,callback)=>{const id=__hook(address,r=>{Object.freeze(r.gpr);Object.freeze(r.cop0);Object.freeze(r.fpr);return callback(Object.freeze(r))});return ()=>__unhook(id)}}),log:(...v)=>__log(JSON.stringify(v))}));`;
   if(Buffer.byteLength(source)>262144)throw new ServiceError('script_source_limit');
@@ -97,6 +99,7 @@ export async function startScript(client:NativeSessionClient,identity:SessionIde
 
 /** File work runs in main; the native job retains the reservation while suspended. */
 export class ScriptJobs {
+  constructor(private diagnose:(error:unknown)=>void=()=>{}){}
   readonly results = new ScriptResults();
   private generation=0;
   readonly publications = new Map<number, Record<string,unknown>>();
@@ -192,10 +195,10 @@ export class ScriptJobs {
         if(work) {
           let ok=true,value:unknown;
           try {
-            if(typeof work.path!=='string'||!(work.kind==='state_load'?inputs:outputs).has(resolveFile(work.path)))throw new ServiceError('script_file_capability_denied');
+            if(typeof work.path!=='string'||!((work.kind==='state_load'||work.kind==='input_import')?inputs:outputs).has(resolveFile(work.path)))throw new ServiceError('script_file_capability_denied');
             const revalidate=async()=>{const state=await pending();if(!state.running||state.pending?.id!==work.id)throw new ServiceError('script_interrupted');};
             const {artifactGuard}=await import('./artifact-guard.js');
-            const reply=await artifactGuard.run(revalidate,()=>work.kind==='state_load'?
+            const reply=await artifactGuard.run(revalidate,()=>work.kind==='input_export'?invoke.request('artifact.inputExport',client.identity,{path:resolveFile(work.path)},owner):work.kind==='input_import'?invoke.request('artifact.inputImport',client.identity,{path:resolveFile(work.path)},owner):work.kind==='state_load'?
               invoke.request('state.load',client.identity,{path:resolveFile(work.path),resume:false,keepOverrides:false},owner):work.kind==='state_save'?
               invoke.request('state.save',client.identity,{path:resolveFile(work.path),overwrite:false,metadata:true},owner):
               invoke.request('artifact.screenshot',client.identity,{path:resolveFile(work.path),inline:false,overwrite:false,source:'framebuffer',region:null,scale:1},owner));
@@ -206,12 +209,13 @@ export class ScriptJobs {
             }
             // Native replies carry the new epoch following an intentional load.
             value={epoch:reply.epoch,committed:true,...(work.kind==='state_load'?{state_sha256:(reply.result as any)?.state_sha256}:{})};
-          } catch(error){ok=false;value=error instanceof Error?error.message:String(error);}
+          } catch(error){if(!(error instanceof ServiceError))this.diagnose(error);ok=false;value=error instanceof Error?error.message:String(error);}
           const reply=await client.request('script.resolve',client.identity,{id:work.id,ok,hex:Buffer.from(JSON.stringify(value)).toString('hex')},owner);
           if(!reply.ok)throw new ServiceError(reply.error??'script_interrupted');
         } else await new Promise(resolve=>setTimeout(resolve,10));
       }
     } catch(error) {
+      if(!(error instanceof ServiceError))this.diagnose(error);
       if(p.videoPath)await client.request('video.record.cancel',client.identity,undefined,owner).catch(()=>{});
       this.results.abort(handle);
       if(this.publications.get(id)?.state!=='committed')this.publications.set(id,{state:'failed',result_handle:handle,error:error instanceof Error?error.message:String(error)});

@@ -2,7 +2,7 @@ export const SCRIPT_NATIVE_METHODS = ['script.ack','script.pending','script.reso
 export interface ScriptRunParams { path?: string; source?: string; args: unknown; timeoutMs: number; maxFrames: number; statePaths?: string[]; outputPaths?: string[]; outputPath?: string; projectRoot?: string; fileBase?:string; videoPath?:string; every?:number; boundary?:'vi'|'vi_origin'; push?:boolean }
 export interface ScriptServiceMap {
   'script.ack': {params:{operationId:number};result:{released:true}};
-  'script.pending': {params:undefined;result:{running:boolean;pending:{id:number;kind:'state_load'|'state_save'|'screenshot';path:string}|null}};
+  'script.pending': {params:undefined;result:{running:boolean;pending:{id:number;kind:'state_load'|'state_save'|'screenshot'|'input_export'|'input_import';path:string}|null}};
   'script.resolve': {params:{id:number;ok:boolean;hex:string};result:{resolved:true}};
 
   'script.observerPrepare': ScriptServiceMap['script.prepare'];
