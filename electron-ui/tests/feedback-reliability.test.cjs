@@ -56,3 +56,10 @@ test('completed result retention bounds simultaneous reservations, expiry and am
  store.release(handles[0]);assert.throws(()=>store.read({handle:handles[0]}),/released/);
  const original=Date.now;try{const later=original()+16*60*1000;Date.now=()=>later;assert.throws(()=>store.read({handle:handles[1]}),/expired/);assert.throws(()=>store.read({},scope),/no_script_result/);const free=store.reserve();store.abort(free);}finally{Date.now=original;}
 });
+
+test('consumed CLI results remain readable until pressure; unconsumed results are pinned',()=>{
+ const store=new ScriptResults(),scope={session:'consumed',epoch:1};const pinned=store.reserve();store.publish(pinned,1,scope,Buffer.from('1'),{});
+ let previous;
+ for(let n=0;n<40;n++){const h=store.reserve();store.publish(h,n+2,scope,Buffer.from('2'),{});store.consume(h);assert.equal(store.read({handle:h}).hex,'32');previous=h;}
+ assert.equal(store.read({handle:pinned}).hex,'31');assert.equal(store.read({handle:previous}).hex,'32');
+});

@@ -141,7 +141,8 @@ export class ScriptJobs {
     } catch(error){this.results.abort(handle);if(this.jobs.get(owner)===job)this.jobs.delete(owner);throw error;}
   }
   private async drive(client:NativeSessionClient,invoke:import('./contracts.js').SessionClient,id:number,p:ScriptRunParams,owner:string,current:()=>boolean,generation:number,handle:string,executionCurrent:()=>boolean) {
-    const inputs=new Set((p.statePaths??[]).map(v=>path.resolve(v))),outputs=new Set((p.outputPaths??[]).map(v=>path.resolve(v)));
+    const resolveFile=(v:string)=>path.resolve(p.fileBase??process.cwd(),v);
+    const inputs=new Set((p.statePaths??[]).map(resolveFile)),outputs=new Set((p.outputPaths??[]).map(resolveFile));
     const pending=async()=>{
       if(!current()||!executionCurrent())throw new ServiceError('script_interrupted');
       const r=await client.request('script.pending',client.identity,undefined,owner);
@@ -179,13 +180,13 @@ export class ScriptJobs {
         if(work) {
           let ok=true,value:unknown;
           try {
-            if(typeof work.path!=='string'||!(work.kind==='state_load'?inputs:outputs).has(path.resolve(work.path)))throw new ServiceError('script_file_capability_denied');
+            if(typeof work.path!=='string'||!(work.kind==='state_load'?inputs:outputs).has(resolveFile(work.path)))throw new ServiceError('script_file_capability_denied');
             const revalidate=async()=>{const state=await pending();if(!state.running||state.pending?.id!==work.id)throw new ServiceError('script_interrupted');};
             const {artifactGuard}=await import('./artifact-guard.js');
             const reply=await artifactGuard.run(revalidate,()=>work.kind==='state_load'?
-              invoke.request('state.load',client.identity,{path:work.path,resume:false,keepOverrides:false},owner):work.kind==='state_save'?
-              invoke.request('state.save',client.identity,{path:work.path,overwrite:false,metadata:true},owner):
-              invoke.request('artifact.screenshot',client.identity,{path:work.path,inline:false,overwrite:false,source:'framebuffer',region:null,scale:1},owner));
+              invoke.request('state.load',client.identity,{path:resolveFile(work.path),resume:false,keepOverrides:false},owner):work.kind==='state_save'?
+              invoke.request('state.save',client.identity,{path:resolveFile(work.path),overwrite:false,metadata:true},owner):
+              invoke.request('artifact.screenshot',client.identity,{path:resolveFile(work.path),inline:false,overwrite:false,source:'framebuffer',region:null,scale:1},owner));
             if(!reply.ok)throw new ServiceError(reply.error??'script_host_work_failed');
             if(work.kind==='state_load') {
               const lineage=this.lineages.get(id);

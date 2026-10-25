@@ -5,7 +5,7 @@ test('direct CLI uses discovery, preserves stdout JSON, writes output and owns S
  const dir=fs.mkdtempSync('/tmp/ares-script-cli-'),identity={session:'cli-test',epoch:1};
  const nativeProcess=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),['--synthetic','--paused','--silent','--save-dir',dir,'--control-session',identity.session],{stdio:['pipe','pipe','pipe','pipe']});nativeProcess.stdout.resume();nativeProcess.stderr.resume();const closed=once(nativeProcess,'close');
  const native=new NativeSessionClient(nativeProcess.stdin,nativeProcess.stdio[3],identity,()=>{});const router=new SessionRouter();router.attach(native);const host=new LocalServiceHost(router,async p=>p.operation==='script_result'?router.readScriptResult(p):({ready:true}));
- function cli(args){const child=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),...args],{env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc')}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);return {child,done:once(child,'close').then(([code])=>({code,out,err}))};}
+ function cli(args,cwd){const child=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),...args],{cwd,env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc')}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);return {child,done:once(child,'close').then(([code])=>({code,out,err}))};}
  try{
   await host.listen(path.join(dir,'ipc'));
   const source=path.join(dir,'record.ts');fs.writeFileSync(source,'export default async({args,frames,log})=>{await frames(4);log("hello");return {answer:args.n}}');
@@ -14,6 +14,10 @@ test('direct CLI uses discovery, preserves stdout JSON, writes output and owns S
   assert.equal(r.code,0,r.err);assert.deepEqual(JSON.parse(r.out),{answer:42});assert.equal(fs.readFileSync(output,'utf8'),r.out);assert.match(r.err,/hello/);
   const retained=await cli(['call','script_result']).done;assert.equal(retained.code,0,retained.err);const retainedPage=JSON.parse(retained.out);assert.deepEqual(JSON.parse(Buffer.from(retainedPage.hex,'hex').toString()),{answer:42});
   const explicit=await cli(['call','script_result','--result_handle',retainedPage.result_handle]).done;assert.equal(explicit.code,0,explicit.err);assert.equal(JSON.parse(explicit.out).sha256,retainedPage.sha256);
+  for(let n=0;n<20;n++){const r=await cli(['run','record.ts','--args','args.json'],dir).done;assert.equal(r.code,0,r.err);}
+  for(let n=0;n<20;n++){fs.writeFileSync(source,'export default()=>{throw Error("deliberate")}');const r=await cli(['run','record.ts'],dir).done;assert.equal(r.code,1);assert.match(r.err,/deliberate/);}
+  const missing=await cli(['run','missing.ts'],dir).done;assert.match(missing.err,/ENOENT/);assert.doesNotMatch(missing.err,/write_failed/);
+  fs.writeFileSync(source,'export default()=>{ invalid syntax');const broken=await cli(['run','record.ts'],dir).done;assert.match(broken.err,/Build failed/);
   const invalid=await cli(['call','run_frames','--n','-1']).done;assert.equal(invalid.code,1);assert.equal(invalid.out,'');assert.match(invalid.err,/too_small/);
   const failed=await cli(['call','read_memory','--region','missing','--addr','0','--length','1']).done;assert.equal(failed.code,1);assert.equal(failed.out,'');assert.match(failed.err,/unknown_region/);
   fs.writeFileSync(source,'export default({frames})=>frames(1000000)');const interrupt=cli(['run',source]);

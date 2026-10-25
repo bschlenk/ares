@@ -41,7 +41,7 @@ export class SessionRouter {
   }
   private scripts = new ScriptJobs();
   health() {return this.client?.health()??{connected:false,observation:'cached'};}
-  readScriptResult(params:any) {if(params.release===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.release(params.handle);}return this.scripts.readResult(params,this.identity);}
+  readScriptResult(params:any) {if(params.consumed===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.consume(params.handle);}if(params.release===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.release(params.handle);}return this.scripts.readResult(params,this.identity);}
   private memoryArtifacts = new MemoryArtifacts();
   private batches = new Batches();
   private stateLoading = new StateLoading();
@@ -57,7 +57,7 @@ export class SessionRouter {
   private client?: NativeSessionClient;
   get identity() { return this.client?.identity; }
   private stateTimer?: ReturnType<typeof setInterval>;
-  constructor(private onSessionState?: (reply: SessionReply) => void) {}
+  constructor(private onSessionState?: (reply: SessionReply) => void, private diagnose: (source:string,error:unknown)=>void = ()=>{}) {}
   attach(client: NativeSessionClient): void {
     this.detach(); this.client = client;
     client.onObserverSample=sample=>{if(this.client===client)this.onObserverSample?.(sample);};
@@ -116,7 +116,10 @@ export class SessionRouter {
           result = method === 'artifact.imageRead' ? this.screenshots.read(p.imageId, p.offset, p.length, owner, startingIdentity) : this.screenshots.releaseImage(p.imageId, owner);
         }
         return { ...envelope, ...((method === 'state.load' || method === 'experiment.batch') ? { epoch: (result as { epoch: number }).epoch } : {}), ok: true, result } as SessionReply<ServiceResult<M>>;
-      } catch (error) { return { ...envelope, ...client.identity, ok: false, error: error instanceof ServiceError ? error.code : 'write_failed' }; }
+      } catch (error) {
+        if(!(error instanceof ServiceError))this.diagnose(method,error);
+        return { ...envelope, ...client.identity, ok: false, error: error instanceof ServiceError ? error.code : ('unexpected_error: '+(error instanceof Error?error.message:String(error))).slice(0,2048) };
+      }
     }
     // The authenticated parent may pause/cancel its batch child. Other callers
     // keep their own generation and remain subject to native ownership checks.

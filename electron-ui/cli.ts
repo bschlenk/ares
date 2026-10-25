@@ -1,6 +1,7 @@
 import { waitForScript } from './services/script-wait.js';
 import { publishArtifact } from './services/artifact-writer.js';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { registerTools } from './mcp/register-tools.js';
 import { installCancellation } from './mcp/cancellation.js';
 import { ToolRegistry } from './tools/registry.js';
@@ -21,20 +22,22 @@ export async function main(argv = process.argv.slice(2)) {
       process.stdout.write(JSON.stringify(registry.list()) + '\n'); return;
     }
     if (command === 'run' && tool) {
-      let args: unknown = {}, outputPath: string | undefined;const state_paths:string[]=[],output_paths:string[]=[];
+      let args: unknown = {}, outputPath: string | undefined; let retain=false;const state_paths:string[]=[],output_paths:string[]=[];
       for (let i=0;i<flags.length;i+=2) {
+        if(flags[i]==='--retain-result'){retain=true;--i;continue;}
         if (!flags[i+1]) throw new Error('Expected --args FILE or --output FILE');
         if (flags[i]==='--args') args=JSON.parse(await fs.readFile(flags[i+1],'utf8'));
-        else if (flags[i]==='--state') state_paths.push(flags[i+1]);
-        else if (flags[i]==='--artifact') output_paths.push(flags[i+1]);
+        else if (flags[i]==='--state') state_paths.push(path.resolve(flags[i+1]));
+        else if (flags[i]==='--artifact') output_paths.push(path.resolve(flags[i+1]));
         else if (flags[i]==='--output') outputPath=flags[i+1];
         else throw new Error(`Unknown flag: ${flags[i]}`);
       }
-      const started=await registry.call('run_script',{path:tool,args,state_paths,output_paths},abort.signal);
+      const started=await registry.call('run_script',{path:path.resolve(tool),args,state_paths,output_paths,file_base:process.cwd()},abort.signal);
       const operation=JSON.parse(started.content[0].text);
       if(started.isError)throw new Error(JSON.stringify(operation));
       const identity={...client.identity!};
-      {
+      let consumed=false;
+      try {
         const final=await waitForScript(client,operation,identity,{signal:abort.signal});
         if(final.stop_reason!=='script_done'){const details=await client.request('script.read',identity,{offset:0,length:16384,operationId:operation.operation_id});throw new Error(JSON.stringify({...final,script_error:details.result?.error}));}
         const chunks:Buffer[]=[];let offset=0,total=0;
@@ -50,6 +53,9 @@ export async function main(argv = process.argv.slice(2)) {
         const value=Buffer.concat(chunks).toString('utf8');
         if(outputPath)await publishArtifact(outputPath,false,async write=>{await write(value+'\n');},()=>{if(abort.signal.aborted)throw new Error('cancelled');});
         process.stdout.write(value+'\n');
+        consumed=true;
+      } finally {
+        if(!retain)await client.manage({operation:'script_result',handle:operation.result_handle,...(consumed?{consumed:true}:{release:true})}).catch(()=>{});
       }
       return;
     }
