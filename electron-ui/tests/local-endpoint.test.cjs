@@ -130,7 +130,7 @@ test('old live adapters are rejected at handshake before any mutation, with app 
   for(const schema_id of [undefined,'old-schema']){
    const socket=net.createConnection(info.endpoint);socket.on('error',()=>{});await once(socket,'connect');
    const reply=once(socket,'data');socket.write(JSON.stringify({protocol:1,type:'hello',id:'hello',instance:host.instance,token:info.token,schema_id,build_id:'old-adapter'})+'\n');
-   const result=JSON.parse((await reply)[0]);assert.equal(result.error,'adapter_stale');assert.equal(result.adapter_build,'old-adapter');assert(result.app_build.schema_id);assert.match(result.instructions,/Restart/);assert.equal(writes(),0);socket.destroy();
+   const result=JSON.parse((await reply)[0]);assert.match(result.error,/^adapter_stale:.*Restart/);assert.equal(result.adapter_build,'old-adapter');assert(result.app_build.schema_id);assert.match(result.instructions,/Restart/);assert.equal(writes(),0);socket.destroy();
   }
  });
 });

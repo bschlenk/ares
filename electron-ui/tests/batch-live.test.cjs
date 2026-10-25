@@ -115,6 +115,9 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     for(let i=0;i<100&&ioStatus.script_output?.state==='pending';i++){await sleep(10);ioStatus=await peer.tool('operation_status',{operation_id:ioJob.operation_id});}
     assert.equal(ioStatus.script_output?.state,'committed',JSON.stringify(ioStatus));
     const ioResult=await peer.tool('script_result',{});assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'script-result.json'),'utf8')),JSON.parse(Buffer.from(ioResult.hex,'hex').toString()));assert.equal(ioResult.artifacts.length,2);assert(fs.existsSync(scriptState));assert(fs.existsSync(scriptPng));
+    const cliScript=path.join(dir,'capture.ts'),cliArgs=path.join(dir,'capture-args.json');
+    fs.writeFileSync(cliScript,'export default async({args,emu,frames})=>{await emu.loadState(args.state);await frames(3);await emu.loadState(args.state);await frames(200);await emu.screenshot(args.png);return {frames:200,epoch:emu.info().epoch}}');fs.writeFileSync(cliArgs,JSON.stringify({state:'baseline.bs',png:'relative.png'}));
+    const captureCli=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),'run','capture.ts','--args','capture-args.json','--state','baseline.bs','--artifact','relative.png','--video','relative.avi'],{cwd:dir,env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc')}});let captureOut='',captureErr='';captureCli.stdout.on('data',b=>captureOut+=b);captureCli.stderr.on('data',b=>captureErr+=b);assert.equal((await once(captureCli,'close'))[0],0,captureErr);assert.equal(JSON.parse(captureOut).frames,200);assert(fs.existsSync(path.join(dir,'relative.png')));assert.equal(fs.readFileSync(path.join(dir,'relative.avi')).readUInt32LE(48),200);
     await peer.tool('state_load',{path:baseline});
     const timeline = await peer.tool('batch', { steps: [
       { kind: 'state_load', path: baseline },

@@ -10,6 +10,7 @@
 #include "../native/rsp-debug-service.hpp"
 #include "../native/memory-experiment.hpp"
 #include "../native/input-service.hpp"
+#include "../native/demonstration-service.hpp"
 #include "../native/trace-service.hpp"
 #include "../native/dma-service.hpp"
 #include "../native/profiler-service.hpp"
@@ -167,6 +168,52 @@ int main(int argc, char** argv) {
   check(set("1", "1", "0", "0", "owner-a").error.empty(), "epoch fixture acquired");
   input.service(2, 0, now);
   check(!input.hasOverrides(), "epoch replacement revokes every hold");
+  {
+    struct DemoPlatform:ares::Platform {void input(ares::Node::Input::Input) override {}} sink;
+    auto* previous=ares::platform;ares::platform=&sink;
+    InputService controls;controls.available=true;ExecutionService replay;replay.supported=true;replay.atBoundary=true;replay.frameKind="vi";bool paused=true;
+    DemonstrationService demo;demo.input=&controls;demo.execution=&replay;demo.paused=&paused;uint64_t frame=0;
+    auto demoPort=root->append<ares::Node::Port>("Controller Port 1");
+    {
+      Gamepad gamepad(demoPort);
+      executionCoordinate.inputLatch=[&](unsigned p,uint32_t data){return demo.latch(p,data,1,frame);};
+      auto call=[&](const std::string& method,std::vector<std::string> args={}){return demo.execute("n64.demo."+method,args,"demonstrator",1,frame,"rom-hash","native-session");};
+      check(call("request",{"600","10000","1","human","44656d6f","-"}).error.empty()&&demo.state=="armed"&&paused,"demonstration arms without recording");
+      check(call("start").error.empty()&&!paused,"human starts the native interval");
+      gamepad.a->setValue(1);gamepad.up->setValue(1);gamepad.down->setValue(1);gamepad.x->setValue(32767);gamepad.y->setValue(-32767);
+      uint32_t first=gamepad.read();check(demo.events.size()==1&&demo.events[0].port==1&&demo.events[0].data==first,"actual Gamepad SI read reaches recording hook");
+      check((first>>31)==1&&!(first&(3u<<26))&&int8_t(first>>8)>0&&int8_t(first)>0,"recording sees button cancellation and shaped wire axes");
+      frame=1;gamepad.a->setValue(0);gamepad.b->setValue(1);gamepad.x->setValue(-32767);uint32_t second=gamepad.read(),third=gamepad.read();
+      check(demo.events.size()==3&&demo.events[1].frame==1&&demo.events[2].frame==1,"multiple same-VI SI latches retain order");
+      frame=2;check(call("stop").error.empty()&&demo.complete&&demo.duration==2,"stop freezes complete frame-relative clip");
+      frame=20;replay.frame=frame;check(call("replay").error.empty()&&controls.hasOverrides(),"replay owns controller port");
+      gamepad.b->setValue(0);gamepad.x->setValue(0);gamepad.y->setValue(0);
+      check(uint32_t(gamepad.read())==first,"replay returns exact first controller word without reshaping");frame=21;replay.frame=frame;
+      check(uint32_t(gamepad.read())==second&&uint32_t(gamepad.read())==third,"replay returns exact ordered same-frame words");
+      frame=22;replay.frame=frame;demo.tick(1,frame);check(demo.state=="ready"&&demo.cursor==3&&!controls.hasOverrides()&&!replay.active,"replay completion releases controller and execution");
+      frame=30;replay.frame=frame;check(call("replay").error.empty(),"clip replay is reusable");frame=31;replay.frame=frame;
+      check(uint32_t(gamepad.read())==0&&demo.reason=="replay_diverged"&&!controls.hasOverrides(),"frame mismatch fails and releases held input");
+      check(call("request",{"1","10000","1","human","-","-"}).error.empty(),"new bounded request");check(call("start").error.empty(),"bounded recording starts");
+      frame=32;demo.tick(1,frame);check(demo.overflow&&!demo.complete&&demo.reason=="frames_limit","overflow is explicit incomplete output");
+      executionCoordinate.inputLatch={};
+    }
+    ares::platform=previous;
+  }
+  {
+    RecordingService video;std::vector<uint8_t> pixels(64*64*4);
+    check(video.execute("video.record.scriptStart",{"1000","4194304","60","10000","0"},"script",1,0,"vi").error.empty(),"exact script capture starts");
+    for(unsigned frame=1;frame<=200;++frame){pixels[0]=frame;video.capture(pixels.data(),64,64,1,frame,"vi",true);video.capture(pixels.data(),64,64,1,frame,"vi",true);}
+    check(video.frames.size()==200&&video.startFrame==1&&video.endFrame==200,"exact 200-frame capture deduplicates boundaries");
+    for(unsigned n=0;n<200;++n)check(video.frames[n][63*192+2]==uint8_t(n+1),"frame pixels preserve exact order");
+    video.rebase("script",2);check(video.exact&&video.active&&video.frames.empty()&&video.epoch==2,"owned load deliberately restarts capture interval");
+    pixels[0]=9;video.capture(pixels.data(),64,64,2,1,"vi",true);check(video.frames.size()==1,"new epoch frame zero is excluded");
+    check(video.execute("video.record.cancel",{},"script",2,1).error.empty()&&!video.available&&video.frames.empty(),"cancel discards unpublished frames");
+    video.execute("video.record.scriptStart",{"1000","1048576","60","10000","0"},"script",2,0,"vi");
+    for(unsigned frame=1;frame<=100;++frame)video.capture(pixels.data(),64,64,2,frame,"vi",true);
+    check(!video.active&&video.reason=="bytes_limit"&&video.frames.size()*12288<=1048576,"native capture bounds bytes before allocation");
+    video.reset();video.execute("video.record.scriptStart",{"1000","1048576","60","10000","0"},"script",2,0,"vi");video.deadline=RecordingService::Clock::now();video.capture(pixels.data(),64,64,2,1,"vi",true);check(!video.active&&video.frames.empty()&&video.reason=="seconds_limit","native deadline prevents partial late capture");
+    video.reset();video.execute("video.record.scriptStart",{"1000","1048576","60","10000","0"},"script",2,0,"vi");video.capture(pixels.data(),64,64,2,2,"vi",true);check(video.reason=="frame_gap","noncontiguous frame capture fails explicitly");
+  }
   cpu.load(root);
   cpu.power(false);
   cpu.recompiler.enabled = true;

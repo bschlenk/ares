@@ -282,7 +282,7 @@ export class LocalServiceHost {
         }
         const appBuild=buildInfo();
         if(message.schema_id!==appBuild.schema_id||!message.schema_id){
-          send(socket,{protocol:1,type:'hello',id:message.id,instance:this.instance,ok:false,error:'adapter_stale',app_build:appBuild,adapter_build:message.build_id??'unknown',instructions:'Restart the MCP adapter from the rebuilt app; requests were not executed.'});socket.end();return;
+          send(socket,{protocol:1,type:'hello',id:message.id,instance:this.instance,ok:false,error:`adapter_stale: app=${appBuild.build_id} schema=${appBuild.schema_id}; adapter=${message.build_id??'legacy (no negotiation)'}. Restart the MCP adapter from the rebuilt app; no request was executed.`,app_build:appBuild,adapter_build:message.build_id??'unknown',instructions:'Restart the MCP adapter from the rebuilt app; requests were not executed.'});socket.end();return;
         }
         authenticated = true
         clearTimeout(helloTimeout)
@@ -537,7 +537,7 @@ export class LocalServiceClient implements SessionClient {
               message.instance !== selected ||
               !token(message.connection)
             ) {
-              const error = new ServiceError(message.error==='adapter_stale'?`adapter_stale: adapter=${buildInfo().build_id} schema=${buildInfo().schema_id}; app=${message.app_build?.build_id??'unknown'} schema=${message.app_build?.schema_id??'unknown'}. Restart the MCP adapter from the rebuilt app; no request was executed.`:message.error || 'wrong_instance')
+              const error = new ServiceError(typeof message.error==='string'&&message.error.startsWith('adapter_stale')?`adapter_stale: adapter=${buildInfo().build_id} schema=${buildInfo().schema_id}; app=${message.app_build?.build_id??'unknown'} schema=${message.app_build?.schema_id??'unknown'}. Restart the MCP adapter from the rebuilt app; no request was executed.`:message.error || 'wrong_instance')
               socket.destroy()
               reject(error)
               return
