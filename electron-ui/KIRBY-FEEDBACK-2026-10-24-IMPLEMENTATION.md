@@ -612,3 +612,18 @@ Together with the genuine yield/resume, nested-list, task-reuse, bounded-history
 and reset fixtures, this completes E's supported provenance contract. It does not
 add general pixel authorship: arbitrary microcode, CPU writes, partial coverage,
 blends and overwritten targets remain unknown/ambiguous as allowed by the plan.
+
+## Final stress and cost reporting
+
+`KIRBY-FEEDBACK-2026-10-24-ACCEPTANCE.md` consolidates the per-slice evidence and
+explicit supported limits. The new private-media `test:feedback-cost` harness
+compares ordinary play with always-on metadata, repeated task queries, full
+capture and two immutable observers over at least 120 VIs, preserving original
+media. It records wall time, actual VIs, native snapshot/read cost, JSON response/
+push bytes, requests, task retention/loss and compact capture truncation. There is
+no isolated-renderer or zero-overhead performance claim. A deterministic delivery
+stress test feeds 60-VI samples to independent 30-Hz/slow consumers, accounts for
+all delivered/skipped samples and verifies owner cleanup. Existing live observer
+fixtures cover native offender isolation and immutable VI/origin boundaries.
+
+Final Node regression for these slices: **180 passed, 0 failures, 0 skips**.
