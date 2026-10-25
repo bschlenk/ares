@@ -57,4 +57,6 @@
   display: none;
 }
 
-.kirby-skeleton .ks-objs td:nth-child(2) { overflow-wrap: anywhere; }
+.kirby-skeleton .ks-objs td:nth-child(2) {
+  overflow-wrap: anywhere;
+}
