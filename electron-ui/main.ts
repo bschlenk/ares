@@ -112,7 +112,7 @@ export const sessions = new SessionRouter((reply) => {
   plugins.observe(reply)
   if (window && !window.isDestroyed() && !window.webContents.isDestroyed())
     window.webContents.send('session-state', reply)
-})
+}, (source,error)=>appLogs.write(source,'error',error))
 export const plugins = new PluginRegistry(
   path.join(appRoot, 'bundled-plugins'),
   path.join(app.getPath('userData'), 'plugins'),

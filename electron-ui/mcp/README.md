@@ -829,6 +829,12 @@ The interpreter is selected for the entire hook lifetime and the configured
 executor is restored afterward. Sparse JIT instrumentation is not implemented.
 
 `ares run FILE --args scenario.json --output result.json` waits for completion.
+CLI file capabilities resolve against the caller directory, including relative paths used
+inside `emu.loadState/saveState/screenshot`; user argument strings stay unchanged.
+Successful CLI consumption acknowledges the result: fresh clients may still retrieve it,
+but it becomes evictable under retention pressure. Use `--retain-result` to pin it for
+the normal 15-minute retention window. Failed CLI runs release their results.
+Unconsumed MCP results remain pinned until release or expiry.
 Use repeated `--state FILE` / `--artifact FILE` for script file capabilities.
 JSON goes to stdout; logs/errors go to stderr. SIGINT cancels only that job and
 exits 130. `examples/scripts/record.ts` and `observe.ts` share a decoder and take
