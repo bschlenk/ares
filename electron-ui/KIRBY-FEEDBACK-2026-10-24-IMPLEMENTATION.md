@@ -545,3 +545,25 @@ see `artifacts/kirby-skeleton-migration/deployment.json` for the handoff receipt
 This completes the skeleton-plugin migration, not the remaining whole-plan work
 on verified task contribution/yield-resume, broader stress/cost reporting or an
 independent main-event-loop watchdog.
+
+## Independent stall watchdog
+
+Agent-service startup now starts a separate Node process. It receives a bounded
+250-ms heartbeat and writes one private instance-bound health snapshot; its own
+monotonic clock continues during blocked/stopped main execution. Fresh fixed,
+named and automatic local clients can read the snapshot before a main socket
+handshake. Healthy main responses remain live; a missing response falls back in
+500 ms, and two seconds without heartbeat progress is labeled unresponsive.
+Observer staleness and parent IPC disconnection are separate from main status;
+no modal dialog or root cause is inferred. Oversized/failed snapshot collection
+cannot suppress the heartbeat. A two-file 64-KiB transition journal survives an
+abrupt parent exit. Normal shutdown revokes the observer and removes its sidecar.
+
+Focused validation exercises Atomics.wait in a real parent Node loop, OS-stopped
+Electron main, a freshly started MCP client, recovery, SIGKILL, file permissions,
+instance mismatch, oversized state, journal transitions and cleanup. This closes
+the independently responsive main-stall reporting gap from A.
+
+Watchdog acceptance: **175 tests passed, 0 failures, 0 skips**, including the
+real stopped-Electron/fresh-MCP case and normal recovery/cleanup. This independent
+slice is committed before graphics provenance work continues.

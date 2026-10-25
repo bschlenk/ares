@@ -1,3 +1,4 @@
+import {readWatchdog} from './watchdog.js';
 import { spawn, type ChildProcess } from 'node:child_process'
 import net from 'node:net'
 import fs from 'node:fs/promises'
@@ -109,7 +110,7 @@ export function namedConnection(directory: string, name: string): string {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$/.test(name) || !path.isAbsolute(directory)) throw new ServiceError('invalid_instance_name');
   return path.join(directory, `named-${name}.json`);
 }
-async function connectionInstance(file: string): Promise<string> {
+export async function connectionInstance(file: string): Promise<string> {
   const parent = await fs.lstat(path.dirname(file)); privateFile(parent);
   if (!parent.isDirectory() || parent.isSymbolicLink()) throw new ServiceError('invalid_connection_file');
   const h = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -465,6 +466,9 @@ export class LocalServiceClient implements SessionClient {
     try { return { file: this.metadataFile, instance: await connectionInstance(this.metadataFile) }; }
     catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') throw new ServiceError('instance_not_running'); throw e; }
   }
+  protected async healthSnapshot():Promise<any|undefined>{
+    try{const target=await this.resolveConnection();return readWatchdog(await readConnection(target.file,target.instance));}catch{return undefined;}
+  }
   private async connect(): Promise<void> {
     if (this.stopped) throw new ServiceError('app_disconnected')
     if (this.socket && this.connection) return
@@ -578,6 +582,18 @@ export class LocalServiceClient implements SessionClient {
     }
   }
   async manage(params: unknown): Promise<any> {
+    if((params as any)?.operation==='app_health'){
+      const cached=await this.healthSnapshot();
+      if(cached&&['unresponsive','disconnected'].includes(cached.watchdog.main))return cached;
+      if(cached){
+        let timer:ReturnType<typeof setTimeout>|undefined;
+        try{return await Promise.race([this.manageRequest(params).then(value=>({...value,watchdog:cached.watchdog})).catch(()=>this.healthSnapshot().then(value=>value??cached)),new Promise(resolve=>{timer=setTimeout(()=>{void this.healthSnapshot().then(value=>resolve({...value??cached,main_response:'no_response'}));},500);})]);}
+        finally{clearTimeout(timer);}
+      }
+    }
+    return this.manageRequest(params);
+  }
+  private async manageRequest(params:unknown):Promise<any>{
     await this.connect()
     if (this.pending.size >= 16) throw new ServiceError('request_overload')
     const socket = this.socket,
