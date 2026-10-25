@@ -7,7 +7,7 @@
 struct RecordingService {
   using Clock = std::chrono::steady_clock;
   std::mutex mutex;
-  bool active = false, available = false;
+  bool active = false, available = false, exact = false;
   std::string owner, reason, frameKind = "unavailable";
   uint64_t epoch = 0, startFrame = 0, endFrame = 0, nextId = 1, pin = 0;
   uint64_t maxFrames = 600, maxBytes = 128ull << 20, fps = 60, width = 0, height = 0;
@@ -15,11 +15,14 @@ struct RecordingService {
   std::vector<std::vector<uint8_t>> frames;
   void finish(const std::string& why) { if(active) { active = false; reason = why; } }
   void expire() { if(active && Clock::now() >= deadline) finish("seconds_limit"); if(pin && Clock::now() >= pinDeadline) pin = 0; }
-  void clear() { active = available = false; owner.clear(); reason.clear(); frames.clear(); pin = 0; width = height = epoch = startFrame = endFrame = 0; }
+  void clear() { active = available = exact = false; owner.clear(); reason.clear(); frames.clear(); pin = 0; width = height = epoch = startFrame = endFrame = 0; }
   void reset() { std::lock_guard lock(mutex); clear(); }
   void releaseOwner(const std::string& who) { std::lock_guard lock(mutex); if(owner == who) clear(); }
-  void capture(const uint8_t* rgba, uint32_t w, uint32_t h, uint64_t e, uint64_t f, const std::string& kind = "unavailable") {
-    std::lock_guard lock(mutex); expire(); if(!active) return;
+  void rebase(const std::string& who,uint64_t e) {std::lock_guard lock(mutex);if(exact&&owner==who&&available){frames.clear();width=height=startFrame=endFrame=0;epoch=e;}else clear();}
+  void capture(const uint8_t* rgba, uint32_t w, uint32_t h, uint64_t e, uint64_t f, const std::string& kind = "unavailable", bool boundary = false) {
+    std::lock_guard lock(mutex); expire(); if(!active || exact!=boundary) return;
+    if(exact && f<=endFrame)return;
+    if(exact && f!=endFrame+1){finish("frame_gap");return;}
     if(e != epoch) { finish("epoch_changed"); return; }
     if(f < startFrame || w <= 1 || h <= 1) return;
     if(width && (w != width || h != height)) { finish("dimensions_changed"); return; }
@@ -37,20 +40,21 @@ struct RecordingService {
     return "{\"active\":" + std::string(active ? "true" : "false") + ",\"available\":" + (available ? "true" : "false")
       + ",\"frames\":" + std::to_string(frames.size()) + ",\"fps\":" + std::to_string(fps) + ",\"width\":" + std::to_string(width) + ",\"height\":" + std::to_string(height)
       + ",\"epoch\":" + std::to_string(epoch) + ",\"start_frame\":" + std::to_string(startFrame) + ",\"end_frame\":" + std::to_string(endFrame)
-      + ",\"frame_kind\":" + controlQuote(frameKind) + ",\"stop_reason\":" + controlQuote(reason) + ",\"format\":\"avi_raw_bgr24\",\"audio\":false,\"source\":\"presented\",\"max_frames\":" + std::to_string(maxFrames)
+      + ",\"frame_kind\":" + controlQuote(frameKind) + ",\"stop_reason\":" + controlQuote(reason) + ",\"format\":\"avi_raw_bgr24\",\"audio\":false,\"source\":" + controlQuote(exact?"framebuffer":"presented") + ",\"max_frames\":" + std::to_string(maxFrames)
       + ",\"max_bytes\":" + std::to_string(maxBytes) + ",\"captured_bytes\":" + std::to_string(frames.empty() ? 0 : frames.size() * frames[0].size()) + "}";
   }
   ControlResult execute(const std::string& method, const std::vector<std::string>& args, const std::string& who, uint64_t e, uint64_t f, const std::string& kind = "unavailable") {
     std::lock_guard lock(mutex); expire();
     if(method == "video.record.status") { if(!args.empty()) return {"invalid_request", {}}; return {{}, status()}; }
     if(available && owner != who) return {"busy", {}};
-    if(method == "video.record.start") {
+    if(method == "video.record.cancel"){if(!args.empty())return {"invalid_request",{}};clear();return {{},"{\"released\":true}"};}
+    if(method == "video.record.start" || method == "video.record.scriptStart") {
       uint64_t count, bytes, rate, ms;
       if(args.size() != 5 || !ExecutionService::number(args[0], count) || !count || count > 36000 || !ExecutionService::number(args[1], bytes) || bytes < (1 << 20) || bytes > (256ull << 20) ||
         !ExecutionService::number(args[2], rate) || !rate || rate > 120 || !ExecutionService::number(args[3], ms) || !ms || ms > 3600000 || (args[4] != "0" && args[4] != "1")) return {"invalid_request", {}};
       if(pin) return {"busy", {}};
       if(active || (available && args[4] != "1")) return {"recording_exists", {}};
-      clear(); owner = who; active = available = true; maxFrames = count; maxBytes = bytes; fps = rate;
+      clear(); exact=method=="video.record.scriptStart"; owner = who; active = available = true; maxFrames = count; maxBytes = bytes; fps = rate;
       epoch = e; frameKind = kind; startFrame = endFrame = f; deadline = Clock::now() + std::chrono::milliseconds(ms);
       return {{}, status()};
     }

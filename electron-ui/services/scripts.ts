@@ -128,17 +128,21 @@ export class ScriptJobs {
     const handle=this.results.reserve();
     const job:{cancelled:boolean;id?:number}={cancelled:false};this.jobs.set(owner,job);
     try {
+      if(p.videoPath){
+        const paused=await client.request('session.pause',identity,undefined,owner);if(!paused.ok)throw new ServiceError(paused.error!);
+        const video=await client.request('video.record.scriptStart',identity,{maxFrames:36000,maxBytes:268435456,fps:60,timeoutMs:p.timeoutMs,discard:false},owner);if(!video.ok)throw new ServiceError(video.error!);
+      }
       const op=await startScript(client,identity,p,owner,()=>current()&&!job.cancelled);job.id=op.operation_id;
       this.publications.set(op.operation_id,{state:'pending',result_handle:handle});
       while(this.publications.size>32)this.publications.delete(this.publications.keys().next().value!);
       this.lineages.set(op.operation_id,{session:identity.session,epochs:[identity.epoch]});
       while(this.lineages.size>32)this.lineages.delete(this.lineages.keys().next().value!);
       if(generation!==this.generation){await client.request('execution.cancel',client.identity,{operationId:op.operation_id},owner).catch(()=>{});throw new ServiceError('native_host_disconnected');}
-      if(p.outputPath)this.outputs.set(op.operation_id,{state:'pending',path:path.resolve(p.outputPath)});
+      if(p.outputPath||p.videoPath)this.outputs.set(op.operation_id,{state:'pending',path:path.resolve(p.outputPath??p.videoPath!)});
       while(this.outputs.size>32)this.outputs.delete(this.outputs.keys().next().value!);
       void this.drive(client,invoke,op.operation_id,p,owner,current,generation,handle,()=>current()&&!job.cancelled).finally(()=>{this.results.abort(handle);if(this.jobs.get(owner)===job)this.jobs.delete(owner);});
       return {...op,result_handle:handle,...this.metadata(op.operation_id)};
-    } catch(error){this.results.abort(handle);if(this.jobs.get(owner)===job)this.jobs.delete(owner);throw error;}
+    } catch(error){if(p.videoPath)await client.request('video.record.cancel',client.identity,undefined,owner).catch(()=>{});this.results.abort(handle);if(this.jobs.get(owner)===job)this.jobs.delete(owner);throw error;}
   }
   private async drive(client:NativeSessionClient,invoke:import('./contracts.js').SessionClient,id:number,p:ScriptRunParams,owner:string,current:()=>boolean,generation:number,handle:string,executionCurrent:()=>boolean) {
     const resolveFile=(v:string)=>path.resolve(p.fileBase??process.cwd(),v);
@@ -174,6 +178,14 @@ export class ScriptJobs {
             const artifact=await artifactGuard.run(async()=>{guard();},()=>publishArtifact(p.outputPath!,false,async write=>{await write(data);await write('\n');},guard));
             if(generation===this.generation)this.outputs.set(id,{state:'committed',...artifact});
           }
+          if(p.videoPath){
+            if((page.stop_reason??completed.result?.stop_reason)!=='script_done')throw new ServiceError('script_video_interrupted');
+            const status=await client.request('video.record.status',client.identity,undefined,owner);
+            if(!status.ok||!status.result||!status.result.active)throw new ServiceError('script_video_incomplete: '+(status.result?.stop_reason??status.error));
+            const saved=await invoke.request('artifact.videoStop',client.identity,{path:p.videoPath,overwrite:false},owner);
+            if(!saved.ok)throw new ServiceError(saved.error!);
+            if(generation===this.generation)this.outputs.set(id,{state:'committed',video:saved.result});
+          }
           return;
         }
         const work=(await pending()).pending;
@@ -200,9 +212,10 @@ export class ScriptJobs {
         } else await new Promise(resolve=>setTimeout(resolve,10));
       }
     } catch(error) {
+      if(p.videoPath)await client.request('video.record.cancel',client.identity,undefined,owner).catch(()=>{});
       this.results.abort(handle);
       if(this.publications.get(id)?.state!=='committed')this.publications.set(id,{state:'failed',result_handle:handle,error:error instanceof Error?error.message:String(error)});
-      if(p.outputPath&&generation===this.generation)this.outputs.set(id,{state:'failed',error:error instanceof Error?error.message:String(error)});
+      if((p.outputPath||p.videoPath)&&generation===this.generation)this.outputs.set(id,{state:'failed',error:error instanceof Error?error.message:String(error)});
       await client.request('execution.cancel',client.identity,{operationId:id},owner).catch(()=>{});
     }
   }

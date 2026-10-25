@@ -24,6 +24,7 @@ test('direct CLI uses discovery, preserves stdout JSON, writes output and owns S
   const runVideo=await cli(['run','record.ts'],dir,lease).done;assert.equal(runVideo.code,0,runVideo.err);
   const stopVideo=await cli(['call','video_stop','--path',path.join(dir,'leased.avi')],dir,lease).done;assert.equal(stopVideo.code,0,stopVideo.err);assert.equal(JSON.parse(stopVideo.out).frames,4);
   await sleep(2200);const expired=await cli(['call','emu_status'],dir,lease).done;assert.match(expired.err,/owner_lease_expired/);
+  fs.writeFileSync(source,'export default async({frames})=>{await frames(200);return true}');const captured=await cli(['run','record.ts','--video','script.avi'],dir).done;assert.equal(captured.code,0,captured.err);const avi=fs.readFileSync(path.join(dir,'script.avi'));assert.equal(avi.toString('ascii',0,4),'RIFF');assert.equal(avi.readUInt32LE(48),200);
   const invalid=await cli(['call','run_frames','--n','-1']).done;assert.equal(invalid.code,1);assert.equal(invalid.out,'');assert.match(invalid.err,/too_small/);
   const failed=await cli(['call','read_memory','--region','missing','--addr','0','--length','1']).done;assert.equal(failed.code,1);assert.equal(failed.out,'');assert.match(failed.err,/unknown_region/);
   fs.writeFileSync(source,'export default({frames})=>frames(1000000)');const interrupt=cli(['run',source]);
