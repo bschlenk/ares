@@ -63,3 +63,9 @@ test('consumed CLI results remain readable until pressure; unconsumed results ar
  for(let n=0;n<40;n++){const h=store.reserve();store.publish(h,n+2,scope,Buffer.from('2'),{});store.consume(h);assert.equal(store.read({handle:h}).hex,'32');previous=h;}
  assert.equal(store.read({handle:pinned}).hex,'31');assert.equal(store.read({handle:previous}).hex,'32');
 });
+
+test('live adapter provenance stays pinned when a rebuild replaces build metadata',async t=>{
+ const dir=fs.mkdtempSync('/tmp/ares-build-pinning-');t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));fs.mkdirSync(path.join(dir,'services'));
+ fs.copyFileSync(path.join(__dirname,'../dist/services/build-info.js'),path.join(dir,'services/build-info.mjs'));const file=path.join(dir,'build-info.json');fs.writeFileSync(file,JSON.stringify({build_id:'old',schema_id:'old-schema'}));
+ const {buildInfo}=await import(require('node:url').pathToFileURL(path.join(dir,'services/build-info.mjs')));assert.equal(buildInfo().schema_id,'old-schema');fs.writeFileSync(file,JSON.stringify({build_id:'new',schema_id:'new-schema'}));assert.equal(buildInfo().build_id,'old');assert.equal(buildInfo().schema_id,'old-schema');
+});
