@@ -120,6 +120,8 @@ auto VI::writeWord(u32 address, u32 data_, Thread& thread) -> void {
   if(address == 1) {
     //VI_DRAM_ADDRESS
     io.dramAddress = data.bit(0,23);
+    ++executionCoordinate.originCommit;
+    if(executionCoordinate.originObserver)executionCoordinate.originObserver();
   }
 
   if(address == 2) {

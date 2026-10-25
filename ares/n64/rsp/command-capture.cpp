@@ -1,7 +1,9 @@
 // F3DEX2 dispatch signature/layout from ares-64 desktop-ui/ui/rsp-overlays/f3dex2.json.
 // Bounded RSPQ/config hooks and display-list dispatch; metadata is frozen at dispatch.
 auto CommandCapture::detectRsp() -> void {
+  matrices.dirty=true;
   if(!rspEnabled) return;
+  rspFlush(false);
   segmentOpen = false; sigPc = loopPc = dispatchPc = -1;
   queueMode = false;
   if(queue.loaded) {
@@ -18,8 +20,44 @@ auto CommandCapture::detectRsp() -> void {
     if(match) { sigPc = pc; loopPc = pc + display.loopOffset; dispatchPc = pc + display.dispatchOffset; break; }
   }
 }
-auto CommandCapture::rspFlush() -> void {
+// Tasks commonly boot first, then DMA in graphics microcode. Preserve an open
+// command across handler overlays when its dispatch signature remains intact.
+auto CommandCapture::rspCodeChanged() -> void {
+  matrices.dirty=true;
+  if(!rspEnabled)return;
+  bool stable=sigPc>=0;
+  if(stable&&queueMode){
+    for(unsigned h=0;h<5;++h)for(unsigned w=0;w<2;++w)
+      if(rsp.imem.read<Word>(queue.hooks[h]+w*4)!=queue.signature[h][w])stable=false;
+  }else if(stable){
+    for(unsigned w=0;w<display.count;++w)
+      if(rsp.imem.read<Word>(sigPc+w*4)!=display.signature[w])stable=false;
+  }
+  if(stable)return;
+  rspFlush(false);detectRsp();
+}
+auto CommandCapture::rspFlush(bool completed) -> void {
   if(!segmentOpen) return;
+  segment.commandComplete=completed;
+  if(!segment.overhead&&completed&&matrixSignatureSupported()&&matrices.refreshCode()){
+    const auto op=segment.opcode;
+    if(op==0xd6){matrices.unknownCommand();}
+    segment.matrixAfter=matrices.snapshot(segment.seq,true);
+    if(op==1)matrices.vertexLoaded(segment.word0,segment.matrixAfter);
+    if(op==2)matrices.modified(segment.word0);
+  }
+  segment.matrixBefore=matrices.admit(segment.matrixBefore);
+  segment.matrixAfter=matrices.admit(segment.matrixAfter);
+  for(auto& v:segment.drawVertices)v.transform=matrices.admit(v.transform);
+  if(!segment.overhead&&segment.opcode==1&&segment.matrixAfter){
+    const auto& state=*segment.matrixAfter;
+    auto& batch=transformBatch(state.task);batch.matrixOverflow|=matrices.overflow;
+    for(auto it=batch.entries.rbegin();it!=batch.entries.rend();++it)if(it->after&&it->after->pointer==state.pointer&&it->after->segments[4]==state.segments[4]&&it->after->modelview==state.modelview){it->vertexState=segment.matrixAfter;++it->vertexBatches;break;}
+  }
+  if(!segment.overhead&&segment.opcode==0xda){
+    auto& batch=transformBatch(segment.taskId);++batch.observed;batch.matrixOverflow|=matrices.overflow;
+    if(batch.entries.size()<TransformCapacity)batch.entries.push_back({segment.seq,segment.taskId,segment.sourceVi,segment.word0,segment.word1,segment.commandComplete,segment.matrixDmaCount==1,segment.matrixOperand,segment.matrixBefore,segment.matrixAfter});
+  }
   segment.cycle = uint32_t(rsp.pipeline.clocksTotal - uint32_t(segmentStart));
   ++rspObserved;
   if(rspLive.size() < Capacity) rspLive.push_back(segment);
@@ -33,16 +71,16 @@ auto CommandCapture::rspInstruction(uint32_t pc) -> void {
     if(!type) return;
     // A task may replace microcode without another HALT-clear. Never reuse its labels.
     for(unsigned h = 0; h < 5; ++h) for(unsigned w = 0; w < 2; ++w)
-      if(rsp.imem.read<Word>(queue.hooks[h] + w * 4) != queue.signature[h][w]) { segmentOpen = false; sigPc = -1; return; }
+      if(rsp.imem.read<Word>(queue.hooks[h] + w * 4) != queue.signature[h][w]) { rspFlush(false);sigPc = -1;matrices.unknownCommand();return; }
     if(segmentOpen && segment.segmentType == type) return;
   } else {
     if(pc != loopPc && pc != dispatchPc) return;
     for(unsigned w = 0; w < display.count; ++w)
-      if(rsp.imem.read<Word>(sigPc + w * 4) != display.signature[w]) { segmentOpen = false; sigPc = -1; return; }
+      if(rsp.imem.read<Word>(sigPc + w * 4) != display.signature[w]) { rspFlush(false);sigPc = -1;matrices.unknownCommand();return; }
     type = pc == loopPc ? 2 : 1;
   }
   rspFlush();
-  segment = {}; segment.seq = sequence++; segment.frame = presentedFrame;
+  segment = {}; segment.seq = sequence++; segment.frame = presentedFrame;segment.taskId=taskProvenance.active;segment.sourceVi=executionCoordinate.frame;
   segment.segmentType = type; segment.overhead = type != 1;
   if(!segment.overhead && queueMode) {
     uint32_t gp = rsp.ipu.r[28].u32;
@@ -60,12 +98,24 @@ auto CommandCapture::rspInstruction(uint32_t pc) -> void {
     segment.opcode = segment.word0 >> display.opcodeShift;
     segment.wordCount = 2; segment.words[0] = segment.word0; segment.words[1] = segment.word1;
   }
+  segment.matrixCandidate=!segment.overhead&&segment.opcode==0xda&&matrixSignatureSupported();
+  if(!segment.overhead){
+    if(matrixSignatureSupported()&&matrices.refreshCode()){
+      segment.matrixBefore=matrices.snapshot(segment.seq,false);
+      if(segment.opcode==5||segment.opcode==6||segment.opcode==7)segment.drawVertices=matrices.draw(segment.word0,segment.word1);
+    }else matrices.unknownCommand();
+  }
   if(annotate) annotate(segment);
   segmentStart = rsp.pipeline.clocksTotal; segmentOpen = true;
 }
 auto CommandCapture::rspDma(uint32_t bytes, bool toRdram) -> void {
   if(!rspEnabled || !segmentOpen) return;
   if(toRdram) segment.bytesOut += bytes; else segment.bytesIn += bytes;
+}
+auto CommandCapture::rspMatrixOperand(uint32_t dram,uint32_t dmem,const uint8_t* bytes) -> void {
+  if(!wantsMatrixOperand())return;
+  if(segment.matrixDmaCount!=UINT32_MAX)++segment.matrixDmaCount;
+  if(segment.matrixDmaCount==1){segment.matrixDram=dram;segment.matrixDmem=dmem;std::copy(bytes,bytes+64,segment.matrixOperand.begin());}
 }
 auto CommandCapture::rdpCommand(uint8_t opcode, uint64_t word0, uint64_t word1, uint8_t words) -> void {
   if(!rdpEnabled) return;
@@ -76,9 +126,32 @@ auto CommandCapture::rdpCommand(uint8_t opcode, uint64_t word0, uint64_t word1, 
 auto CommandCapture::afterRun() -> void {
   if(rspEnabled && rsp.status.halted) rspFlush();
   uint32_t origin = vi.io.dramAddress;
+  // The compact scene is a VI scanout candidate view, independent of the older
+  // address-swap command viewer. Repeated origins still get distinct identities.
+  if(transformVi!=executionCoordinate.frame){
+    transformVi=executionCoordinate.frame;
+    TransformCapture view{++transformGeneration,transformVi,executionCoordinate.originCommit,0,origin,false,{}};
+    if(rspEnabled)for(auto scan=taskProvenance.scanouts.rbegin();scan!=taskProvenance.scanouts.rend();++scan){
+      if(scan->frame!=transformVi||scan->originCommit!=executionCoordinate.originCommit)continue;
+      bool found=false;
+      for(auto id:scan->candidates){
+        const auto* task=taskProvenance.find(id);
+        if(!task||!task->stopped||task->stoppedFrame>transformVi||transformVi-task->stoppedFrame>2)continue;
+        for(auto& batch:transformBatches)if(batch.task==id&&batch.observed){view.observed=batch.observed;view.matrixOverflow=batch.matrixOverflow;view.entries=batch.entries;found=true;break;}
+        if(found)break;
+      }
+      break;
+    }
+    if(transformHistory.size()==TransformHistory)transformHistory.erase(transformHistory.begin());
+    transformHistory.push_back(std::move(view));
+  }
   if(!origin || origin == lastOrigin) return;
   lastOrigin = origin;
   rspLatest.swap(rspLive); rspLive.clear(); rspCommitted = rspObserved; rspObserved = 0;
+  std::map<uint64_t,std::shared_ptr<const F3dex2MatrixState>> states;
+  for(auto& row:rspLatest){for(auto value:{row.matrixBefore,row.matrixAfter})if(value)states.emplace(value->id,value);for(auto& v:row.drawVertices)if(v.transform)states.emplace(v.transform->id,v.transform);}
+  matrixLatest.clear();for(auto& [id,value]:states)matrixLatest.push_back(value);
+  matrixLatestOverflow=matrices.overflow;matrices.nextGeneration();
   rdpLatest.swap(rdpLive); rdpLive.clear(); rdpCommitted = rdpObserved; rdpObserved = 0;
   ++presentedFrame; ++generation;
 }

@@ -6,6 +6,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <map>
 #include "execution-service.hpp"
 
 // One isolated runtime per exclusive job. Only the emulation thread enters JS.
@@ -24,9 +25,15 @@ struct ScriptService {
   uint64_t lastOperation = 0;
   uint64_t epoch = 0, target = 0, framesUsed = 0, frameLimit = 1000000;
   std::string owner, source, args, result, error, logs = "[]";
+  struct Completion {std::string owner,result,error,logs,artifacts,reason; uint64_t epoch,reads,bytes,ns; Clock::time_point expires;};
+  std::map<uint64_t,Completion> completions;
+  void expireCompletions(){for(auto it=completions.begin();it!=completions.end();)if(it->second.expires<Clock::now())it=completions.erase(it);else ++it;}
   size_t expected = 0, logBytes = 0;
-  bool waiting = false, running = false, readOnly = false, observing = false;
-  uint64_t observedFrame=UINT64_MAX, publishedFrame=0;
+  bool waiting = false, running = false, readOnly = false, observing = false, completionTicket = true;
+  uint64_t observedFrame=UINT64_MAX, publishedFrame=0, observerEvery=4, publishedSequence=0;
+  std::function<void(const ScriptService&)> onSample;
+  uint64_t observerReadBytes=0,observerSkipped=0,lastPublishedBoundary=0;
+  unsigned observerBudgetMs=2;bool observerPush=false,observerOrigin=false;
   struct Hook { uint32_t address; JSValue callback; bool active=true; };
   std::vector<Hook> hooks;
   uint64_t hookFrame=UINT64_MAX, hookCount=0;
@@ -77,6 +84,7 @@ struct ScriptService {
     if(argc!=3||!ScriptService::address(c,argv[0],address)||!number(c,argv[1],length,65536)||!length)return fail(c,"invalid_memory_range");
     if(!JS_IsString(argv[2]))return fail(c,"invalid_memory_view");
     const char* view=JS_ToCString(c,argv[2]);if(!view)return JS_EXCEPTION;std::string v=view;JS_FreeCString(c,view);
+    if(s.observing&&(length>65536-s.observerReadBytes))return fail(c,"observer_copy_budget");if(s.observing)s.observerReadBytes+=length;
     auto began=Clock::now();std::vector<uint8_t> bytes;auto r=s.read(address,v,length,bytes);++s.readCalls;s.readBytes+=bytes.size();s.readNs+=std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-began).count();if(!r.error.empty())return fail(c,r.error);
     return JS_NewArrayBufferCopy(c,bytes.data(),bytes.size());
   }
@@ -84,6 +92,7 @@ struct ScriptService {
     auto& s=self(c);uint64_t offset,length;
     if(argc!=3||!number(c,argv[1],offset)||!number(c,argv[2],length,65536)||!length)return fail(c,"invalid_memory_range");
     size_t size;const char* name=JS_ToCStringLen(c,&size,argv[0]);if(!name)return JS_EXCEPTION;if(size>256){JS_FreeCString(c,name);return fail(c,"invalid_region");}std::string id(name,size);JS_FreeCString(c,name);
+    if(s.observing&&(length>65536-s.observerReadBytes))return fail(c,"observer_copy_budget");if(s.observing)s.observerReadBytes+=length;
     auto began=Clock::now();std::vector<uint8_t> bytes;auto r=s.regionRead(id,offset,length,bytes);++s.readCalls;s.readBytes+=bytes.size();s.readNs+=std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-began).count();if(!r.error.empty())return fail(c,r.error);
     return JS_NewArrayBufferCopy(c,bytes.data(),bytes.size());
   }
@@ -169,31 +178,38 @@ struct ScriptService {
   void finish(const std::string& reason) {
     if(!running)return;
     running=false;waiting=false;
+    if(observing&&observerPush&&onSample&&(reason!="observer_stopped"||!error.empty())&&reason!="disconnected"&&reason!="shutdown"){
+      if(error.empty())error=reason;publishedFrame=execution->frame;++publishedSequence;onSample(*this);
+    }
     if(hooksChanged)hooksChanged(false);
     if(cleanup)cleanup();
     if(!observing && execution->active && execution->active->owner==owner)execution->complete(reason,*paused);
     if(!observing && execution->reservation && execution->reservation->owner==owner)execution->reservation.reset();
+    if(!observing&&completionTicket)completions.emplace(lastOperation,Completion{owner,result,error,logs,artifacts,reason,epoch,readCalls,readBytes,readNs,Clock::now()+std::chrono::seconds(60)});
     destroy();
   }
-  void pump() {
+  void pump(bool originBoundary=false) {
     if(!running)return;
     if(observing) {
+      if(observerOrigin!=originBoundary)return;
       if(Clock::now()>=deadline){error="observer_deadline";finish("observer_stopped");return;}
-      if(*paused || execution->active || execution->reservation || observedFrame==execution->frame || !execution->atBoundary)return;
-      observedFrame=execution->frame;
-      if(observedFrame%4)return;
-      budget=Clock::now()+std::chrono::milliseconds(5);readOnly=true;
+      const auto coordinate=observerOrigin?ares::Nintendo64::executionCoordinate.originCommit:execution->frame;
+      if(*paused || execution->active || execution->reservation || observedFrame==coordinate || !originBoundary&&!execution->atBoundary)return;
+      observedFrame=coordinate;
+      if(observedFrame%observerEvery)return;
+      const auto due=(observedFrame-lastPublishedBoundary)/observerEvery;if(due>1)observerSkipped+=due-1;lastPublishedBoundary=observedFrame;observerReadBytes=0;
+      budget=Clock::now()+std::chrono::milliseconds(observerBudgetMs);readOnly=true;
       JSValue value=JS_Call(context,promise,JS_UNDEFINED,0,nullptr);
       if(JS_IsException(value))error=exception();
       else if(JS_PromiseState(context,value)>=0||JS_IsJobPending(runtime))error="async_observer_callback";
       if(error.empty()) {
         JSValue json=JS_JSONStringify(context,value,JS_UNDEFINED,JS_UNDEFINED);
         if(JS_IsException(json))error=exception();
-        else {size_t length;const char* text=JS_ToCStringLen(context,&length,json);if(!text||JS_IsUndefined(json)||length>8192)error="observer_result_limit";else {result.assign(text,length);publishedFrame=observedFrame;}if(text)JS_FreeCString(context,text);}
+        else {size_t length;const char* text=JS_ToCStringLen(context,&length,json);if(!text||JS_IsUndefined(json)||length>8192)error="observer_result_limit";else {result.assign(text,length);publishedFrame=execution->frame;++publishedSequence;}if(text)JS_FreeCString(context,text);}
         JS_FreeValue(context,json);
       }
       JS_FreeValue(context,value);readOnly=false;
-      if(!error.empty())finish("observer_failed");return;
+      if(!error.empty()){finish("observer_failed");return;}if(observerPush&&onSample)onSample(*this);return;
     }
     if(!execution->active || execution->active->owner!=owner || execution->active->epoch!=epoch || !execution->reservation) {if(error.empty())error="ownership_revoked";finish("script_interrupted");return;}
     budget=Clock::now()+std::chrono::milliseconds(25);
@@ -239,12 +255,25 @@ struct ScriptService {
       if(JS_IsException(returned)){error=exception();}JS_FreeValue(context,returned);return {{},"{\"resolved\":true}"};
     }
     if(method=="script.stop") {if(who!=owner)return {"stale_script",{}};finish("observer_stopped");return {{},"{\"stopped\":true}"};}
+    if(method=="script.ack") {
+      uint64_t id;if(a.size()!=1||!ExecutionService::number(a[0],id))return {"invalid_request",{}};
+      auto it=completions.find(id);if(it==completions.end()||it->second.owner!=who)return {"stale_script_result",{}};
+      completions.erase(it);return {{},"{\"released\":true}"};
+    }
     if(method=="script.read") {
-      uint64_t offset,length;if(who!=owner||(a.size()!=2&&a.size()!=3)||!ExecutionService::number(a[0],offset)||!ExecutionService::number(a[1],length)||!length||length>16384||offset>result.size())return {"invalid_request",{}};
-      uint64_t requested=0;if(a.size()==3&&(!ExecutionService::number(a[2],requested)||(requested&&requested!=lastOperation)))return {"stale_script_result",{}};
-      auto part=result.substr(offset,length);return {{},"{\"native_reads\":"+std::to_string(readCalls)+",\"native_read_bytes\":"+std::to_string(readBytes)+",\"native_read_ns\":"+std::to_string(readNs)+",\"operation_id\":"+std::to_string(lastOperation)+",\"hex\":"+controlQuote(MemoryTools::hex(std::vector<uint8_t>(part.begin(),part.end()),0,part.size()))+",\"bytes\":"+std::to_string(result.size())+",\"error\":"+controlQuote(error)+",\"artifacts\":"+artifacts+",\"logs\":"+logs+(observing?",\"active\":"+std::string(running?"true":"false")+",\"frame\":"+std::to_string(publishedFrame):"")+"}"};
+      expireCompletions();
+      uint64_t offset,length,requested=0;
+      if((a.size()!=2&&a.size()!=3)||!ExecutionService::number(a[0],offset)||!ExecutionService::number(a[1],length)||!length||length>16384||(a.size()==3&&!ExecutionService::number(a[2],requested)))return {"invalid_request",{}};
+      if(!requested)requested=lastOperation;
+      const Completion* saved=nullptr;auto found=completions.find(requested);
+      if(found!=completions.end())saved=&found->second;
+      if(saved?saved->owner!=who:(who!=owner||requested!=lastOperation))return {"stale_script_result",{}};
+      const auto& value=saved?saved->result:result;const auto& failure=saved?saved->error:error;
+      if(offset>value.size())return {"invalid_request",{}};
+      auto part=value.substr(offset,length);return {{},"{\"complete\":"+std::string(saved?"true":"false")+",\"result_epoch\":"+std::to_string(saved?saved->epoch:epoch)+",\"stop_reason\":"+controlQuote(saved?saved->reason:"")+",\"native_reads\":"+std::to_string(saved?saved->reads:readCalls)+",\"native_read_bytes\":"+std::to_string(saved?saved->bytes:readBytes)+",\"native_read_ns\":"+std::to_string(saved?saved->ns:readNs)+",\"operation_id\":"+std::to_string(requested)+",\"hex\":"+controlQuote(MemoryTools::hex(std::vector<uint8_t>(part.begin(),part.end()),0,part.size()))+",\"bytes\":"+std::to_string(value.size())+",\"error\":"+controlQuote(failure)+",\"artifacts\":"+(saved?saved->artifacts:artifacts)+",\"logs\":"+(saved?saved->logs:logs)+(observing?",\"active\":"+std::string(running?"true":"false")+",\"frame\":"+std::to_string(publishedFrame):"")+"}"};
     }
     if(method=="script.prepare") {
+      expireCompletions();if(completions.size()>=4)return {"script_result_backpressure",{}};
       uint64_t bytes;if(a.size()!=1||!ExecutionService::number(a[0],bytes)||!bytes||bytes>256*1024)return {"invalid_request",{}};
       if(running||execution->active||execution->reservation)return {"busy",{}};
       owner=who;epoch=e;source.clear();result.clear();error.clear();logs="[]";artifacts="[]";lastOperation=0;expected=bytes;execution->reservation=ExecutionService::Reservation{execution->nextId++,owner,Clock::now()+std::chrono::seconds(5)};return {{},"{\"ready\":true}"};
@@ -254,8 +283,12 @@ struct ScriptService {
       if(a.size()!=1||a[0].size()%2||a[0].size()>2048||source.size()+a[0].size()/2>expected)return {"invalid_request",{}};
       for(size_t i=0;i<a[0].size();i+=2){int hi=MemoryService::nibble(a[0][i]),lo=MemoryService::nibble(a[0][i+1]);if(hi<0||lo<0)return {"invalid_request",{}};source+=char(hi*16+lo);}return {{},"{\"written\":true}"};
     }
-    if((method!="script.start"&&method!="script.observe")||a.size()!=2||source.size()!=expected)return {"invalid_request",{}};
+    if((method!="script.start"&&method!="script.observe")||(a.size()!=2&&(method!="script.observe"||(a.size()!=3&&a.size()!=4&&a.size()!=5)))||source.size()!=expected)return {"invalid_request",{}};
     uint64_t milliseconds,limit;if(!ExecutionService::number(a[0],milliseconds)||!milliseconds||milliseconds>600000||!ExecutionService::number(a[1],limit)||limit>1000000)return {"invalid_request",{}};
+    observerEvery=4;if(a.size()>=3&&(!ExecutionService::number(a[2],observerEvery)||!observerEvery||observerEvery>120))return {"invalid_request",{}};
+    observerOrigin=a.size()==5&&a[4]=="vi_origin";if(a.size()==5&&a[4]!="vi"&&a[4]!="vi_origin")return {"invalid_request",{}};
+    if(observerOrigin&&execution->frameKind!="vi")return {"frame_boundary_unavailable",{}};
+    observerPush=a.size()>=4&&a[3]=="1";if(a.size()>=4&&a[3]!="0"&&a[3]!="1")return {"invalid_request",{}};
     if(execution->active)return {"busy",{}};
     if(!execution->reservation||execution->reservation->owner!=owner)return {"script_preparation_revoked",{}};
     if(method=="script.observe"&&!execution->supported){execution->reservation.reset();return {"frame_boundary_unavailable",{}};}
@@ -270,7 +303,7 @@ struct ScriptService {
     execution->reservation=ExecutionService::Reservation{execution->nextId++,owner,deadline};
     execution->active=ExecutionService::Operation{execution->nextId++,e,execution->frame,ExecutionService::maxInteger,0,owner,"script",execution->atBoundary,now,deadline};
     lastOperation=execution->active->id;
-    observing=method=="script.observe";observedFrame=UINT64_MAX;bool previousPause=*paused;
+    observing=method=="script.observe";if(observing&&observerPush)deadline=Clock::time_point::max();completionTicket=!observing;lastPublishedBoundary=observerOrigin?ares::Nintendo64::executionCoordinate.originCommit:execution->frame;observedFrame=UINT64_MAX;bool previousPause=*paused;
     execution->instructionCount=0;
     running=true;*paused=true;
     readOnly=observing;

@@ -18,6 +18,8 @@ export const CAPABILITIES = [
   'settings.read',
   'settings.write',
   'settings.register',
+  'clipboard.write',
+  'files.export',
 ] as const
 export type Capability = (typeof CAPABILITIES)[number]
 export interface PluginManifest {
@@ -88,6 +90,12 @@ export interface PluginAction {
   name: string
 }
 export interface PluginBridge {
+  clipboard(token:string,text:string):Promise<{copied:true;bytes:number}|PluginBridgeFailure>;
+  exportText(token:string,params:import('../services/export-contracts.js').TextExport):Promise<import('../services/export-contracts.js').ExportStatus|PluginBridgeFailure>;
+  recordFrames(token:string,params:import('../services/export-contracts.js').FrameExport):Promise<import('../services/export-contracts.js').ExportStatus|PluginBridgeFailure>;
+  finishExport(token:string,id:string,cancel:boolean):Promise<import('../services/export-contracts.js').ExportStatus|PluginBridgeFailure>;
+  frames(callback:(token:string,sample:import('../services/observer-contracts.js').ObserverDelivery)=>void):()=>void;
+  frameAck(token:string,observerId:number,delivery:number):void;
   settings(token: string, request: PluginSettingsRequest): Promise<SettingsSnapshot | PluginBridgeFailure>
   actions(callback: (action: PluginAction) => void): () => void
   result(id: string, token: string, error?: string): Promise<void>

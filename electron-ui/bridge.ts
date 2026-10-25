@@ -5,6 +5,8 @@ import type { SessionIdentity, ServiceMethod, ServiceParams, ServiceResult, Sess
 
 /** Only serializable application data crosses this sandbox bridge. */
 export interface VideoFrame {
+  geometry?:import('./services/video-geometry.js').VideoGeometry|null;
+  frameReference?:import('./services/frame-contracts.js').FrameReference;logicalWidth?:number;logicalHeight?:number;
   width: number; height: number; sequence: number; inputSequence: number;
   nativeMs: number; queueMs: number; aspect: number; pixels: Uint8Array<ArrayBuffer>;
 }

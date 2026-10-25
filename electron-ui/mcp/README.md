@@ -754,9 +754,16 @@ handle, rejects stale epochs/disconnects, and limits JSON output to 64 MiB.
 `run_script` accepts exactly one of `path` and `source`, JSON `args`,
 `max_seconds` (1 ms–600 s), `max_frames` (0–1,000,000), and `wait_ms` (0–1000).
 It returns an operation handle immediately by default. Poll `operation_status`,
-cancel with `cancel_operation`, and page `script_result` using its optional
-`operation_id` to reject replacement results. The most recent result is retained;
-starting another job invalidates that result. `output_path` streams JSON to a
+cancel with `cancel_operation`, and page `script_result` using the returned
+`result_handle`. Completed immutable JSON remains available to a fresh authorized
+local CLI for 15 minutes, until `script_result_release`, or until app exit.
+The store admits 16 results / 16 MiB, reserves up to 4 MiB before each run, and
+returns `script_result_backpressure` rather than overwriting an unacknowledged
+result. `operation_id: 0` (also the default) selects the latest completed result
+in the currently loaded native session; an explicit handle works across reconnects
+and ROM replacement. No eligible result returns `no_script_result`.
+`operation_status.script_result` distinguishes pending transfer from committed
+results. Native completion tickets have a separate four-ticket / 60-second bound. `output_path` streams JSON to a
 new file in main; `operation_status.script_output` reports pending, committed
 (path/bytes/SHA-256), or failed. Runtime completion and file publication are
 reported separately. A failure or cancellation retains earlier guest effects.
@@ -832,7 +839,64 @@ Plugins can call `ctx.scripts.run(params)` and
 plugin root; source can also be supplied. Runs require session.control,
 memory.read, memory.write and debug.read. Observation requires memory.read and
 cannot mutate or advance the guest. File capabilities are unavailable to plugins.
-One observer is supported initially; it publishes a latest value every fourth
-VI, with a 5 ms callback budget and an 8 KiB result limit. It suspends during
-exclusive runs, coalesces updates for slow panels, and is disposed on plugin
-unload/reset. Observers must return synchronously.
+Up to eight observers globally / four per owner have independent native handles.
+The compatibility `scripts.observe` interface defaults to every fourth VI and
+renderer polling. New `scope.onFrame` subscriptions default to every VI and push
+frozen samples through a bounded acknowledged channel. Each native callback has
+a 2 ms runtime / 64 KiB read budget and an 8 KiB JSON result limit, with a rotating
+6 ms aggregate scheduler budget. Observers suspend during exclusive runs and are
+disposed on plugin unload/reset. Native callbacks must return synchronously;
+renderer callbacks may be asynchronous and coalesce with explicit skipped counts.
+See `plugins/README.md` and `examples/overlay` for host-sized DPR canvas layers.
+
+
+Both controller spellings replace the entire selected port: `input({port:1,right:true,x:20,y:0})`
+and `input.set(1,{right:true},{x:20,y:0})` have identical behavior. Port defaults to 1
+in the callable form; valid ports are 1–4. Omitted buttons and axes are neutral,
+axes use signed controller units (-128..127), and the state latches at the next VI.
+The lease remains held until replaced or the job completes/cancels/disconnects;
+reset/load revokes it. Examples use `.set` as the canonical spelling.
+
+`ares --help`, `ares call --help`, `ares tools --help`, and `ares run --help` do not
+start an app. Unknown commands/options fail; positional ROM launch paths are not
+accepted by the helper (use `ares call load_rom --path /absolute/game.z64`).
+GUI launches detach and write bounded launch diagnostics under the selected
+profile's `logs` directory. `app_logs` exposes bounded main/native/renderer history,
+generation-aware cursors, loss counts and that directory; JSONL files remain after
+exit. `app_health` reports cached native response times, pending request identities
+and recent errors, without requiring a ROM/native response. It cannot diagnose a
+stalled main event loop independently. `build_info` identifies the adapter build;
+`build_info --app true` also identifies the connected app.
+
+`memory_sample` freezes up to 256 explicit debugger-region ranges / 1 MiB at one
+safe point or the next native boundary. Existing `readMany` limits remain 64 ranges /
+64 KiB. New sample handles expire after 30 seconds; each owner may retain four.
+A 5 ms copy deadline fails with `sample_copy_budget_exhausted` and publishes no
+partial data. Page with `memory_capture_read` or `memory.capture.page`, then release.
+The frozen `frame_reference` carries session/epoch/VI and sampled origin where
+available. `origin_commit` identifies actual VI-origin writes, including repeated values.
+Native samples leave video sequence and presentation acknowledgement null; the
+overlay host joins them to immutable video-packet identity and explicitly labels
+renderer-submit acknowledgement separately from compositor presentation.
+Plugins with `debug.read` can request `n64.peripheral.registers`; this does not grant
+other N64 methods. Region samples describe debugger-region views, not dirty CPU
+cache snapshots.
+
+`rsp_last_task` returns bounded native SP-dispatch provenance without enabling
+interpreter mode. Its conventional descriptor and address-matched scanout task
+lists are explicitly candidates; they do not prove displayed-pixel contribution
+or verified yield/resume. `matrix_state.available` reports retained verified
+states for the selected task. `matrix_capture(generation=null,offset=0,limit=4)`
+pages actual RSP matrix, viewport, segment and observed stack data for full-hash
+verified F3DEX2 FIFO 2.04H. Join state IDs from `rsp_capture`, including cached
+vertices whose transform predates the current matrix. Unknown microcode and
+unobserved stack levels remain unavailable; overflow is explicit. See the plugin
+README for bounds and provenance. Gated RSP capture rows also contain immutable
+consumed matrix DMA bytes, labeled
+`consumed_dma_operand_only`, with no reconstructed stack presented as RSP state.
+
+`plugin_exports` inspects paged host-mediated plugin export status and committed
+artifact hashes. Recording originates in a real plugin user gesture and the host
+save picker. It records frozen native samples before renderer coalescing; loss
+or overflow fails publication. `app_health.user_interaction_waits` identifies
+pending export save dialogs. See `plugins/README.md` for SDK limits and lifecycle.

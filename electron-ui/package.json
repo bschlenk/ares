@@ -16,7 +16,7 @@
     "package:mac": "npm run build && node scripts/package-macos.cjs",
     "test:mcp": "npm run build && electron tests/electron-mcp.mjs",
     "test:package": "node tests/package-live.cjs",
-    "build": "npm run clean && tsc -p tsconfig.json && tsc -p tsconfig.browser.json && tsc -p tsconfig.preload.json && node scripts/generate-sdk.cjs",
+    "build": "npm run clean && tsc -p tsconfig.json && tsc -p tsconfig.browser.json && tsc -p tsconfig.preload.json && node scripts/generate-sdk.cjs && node scripts/build-info.cjs",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "test:state-reference": "npm run build && node tests/state-reference.cjs",
     "test:plugins": "npm run build && electron tests/electron-plugins.mjs",
@@ -34,7 +34,10 @@
     "accept": "node scripts/accept.cjs",
     "test:agent": "npm run build && electron tests/electron-agent-integration.mjs",
     "test:automatic-launch": "npm run build && node tests/automatic-launch.cjs",
-    "test:controls": "npm run build && electron tests/electron-controls.mjs"
+    "test:controls": "npm run build && electron tests/electron-controls.mjs",
+    "test:all": "node scripts/test-all.cjs",
+    "test:matrix": "npm run build && node tests/kirby-matrix-live.cjs",
+    "test:skeleton": "npm run build && electron tests/electron-kirby-skeleton.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

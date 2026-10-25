@@ -1,12 +1,21 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import os from 'node:os';
+import { profileRoot } from '../profile.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { LocalServiceClient, readConnection, namedConnection } from './local-endpoint.js';
-import { ServiceError } from './contracts.js';
+import { ServiceError, type ServiceMethod, type SessionIdentity, type ServiceParams, type ServiceResult, type SessionReply } from './contracts.js';
 
 /** Discover a running app before launching. A launched GUI outlives this adapter. */
 export class AutomaticServiceClient extends LocalServiceClient {
+  private observation=new AsyncLocalStorage<boolean>();
+  private boundRequest=new AsyncLocalStorage<boolean>();
+  override request<M extends ServiceMethod>(method:M,identity?:SessionIdentity,params?:ServiceParams<M>):Promise<SessionReply<ServiceResult<M>>>{
+    return this.boundRequest.run(identity!==undefined,()=>super.request(method,identity,params));
+  }
+  override manage(params:any):Promise<any>{return this.observation.run(['app_logs','app_health','build_info','script_result','plugin_exports'].includes(params?.operation),()=>super.manage(params));}
   launchedApp = false;
   private launchedInstance?: string;
   constructor(private directory: string, private name?: string) { super('', ''); }
@@ -38,6 +47,7 @@ export class AutomaticServiceClient extends LocalServiceClient {
   protected override async resolveConnection() {
     const found = await this.discover();
     if (found) {
+      if(this.observation.getStore())return found;
       const deadline = Date.now() + 20000;
       let target = found;
       while (!target.ready && Date.now() < deadline) {
@@ -50,15 +60,20 @@ export class AutomaticServiceClient extends LocalServiceClient {
       this.launchedApp = target.instance === this.launchedInstance;
       return target;
     }
+    // Polling/cancellation for a particular native session must not launch a
+    // replacement app after that session exits between two requests.
+    if(this.boundRequest.getStore())throw new ServiceError('app_disconnected');
     const appRoot = fileURLToPath(new URL('../../', import.meta.url));
     const bundled = appRoot.includes(`${path.sep}Contents${path.sep}Resources${path.sep}`);
     const executable = bundled ? path.resolve(appRoot, '../../MacOS/Ares') :
       process.versions.electron ? process.execPath : path.join(appRoot, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron');
     const env: NodeJS.ProcessEnv = { ...process.env, ARES_SERVICE_DIR: this.directory };
     delete env.ELECTRON_RUN_AS_NODE; delete env.NODE_OPTIONS; delete env.NODE_PATH;
-    const logDirectory = await fs.mkdtemp(path.join(process.platform === 'darwin' ? '/tmp' : (await import('node:os')).tmpdir(), 'ares-launch-'));
-    const logPath = path.join(logDirectory, 'stderr.log');
-    const log = await fs.open(logPath, 'wx', 0o600);
+    const logDirectory = path.join(process.env.ARES_PROFILE_DIR || profileRoot(process.platform==='darwin'?path.join(os.homedir(),'Library/Application Support'):path.join(os.homedir(),'.config'),process.env.ARES_PROFILE),'logs');
+    await fs.mkdir(logDirectory,{recursive:true,mode:0o700});
+    const logPath = path.join(logDirectory, 'automatic-launch.log');
+    const stat=await fs.stat(logPath).catch(()=>undefined);if(stat&&stat.size>1024*1024)await fs.rename(logPath,logPath+'.1');
+    const log = await fs.open(logPath, 'a', 0o600);
     try {
       const child = spawn(executable, [...(bundled ? [] : [appRoot]), '--services', ...(this.name ? ['--instance-name', this.name] : [])],
         { env, detached: true, stdio: ['ignore', 'ignore', log.fd] });
@@ -80,7 +95,7 @@ export class AutomaticServiceClient extends LocalServiceClient {
     } finally {
       await log.close();
       // The app retains its own descriptor, so adapter exit cannot break stderr.
-      await fs.rm(logDirectory, { recursive: true, force: true });
+      // Keep bounded launch diagnostics after the adapter exits.
     }
   }
 }

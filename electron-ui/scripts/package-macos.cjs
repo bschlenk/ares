@@ -41,6 +41,8 @@ for (const field of [
       : 'Ares Workbench',
     path.join(destination, 'Contents/Info.plist'),
   ])
+copy(path.join(root,'assets/Ares.icns'),path.join(resources,'Ares.icns'))
+execFileSync('plutil',['-replace','CFBundleIconFile','-string','Ares.icns',path.join(destination,'Contents/Info.plist')])
 for (const field of ['CFBundleShortVersionString', 'CFBundleVersion'])
   execFileSync('plutil', ['-replace', field, '-string', manifest.version,
     path.join(destination, 'Contents/Info.plist')])

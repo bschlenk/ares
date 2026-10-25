@@ -1,3 +1,4 @@
+import { waitForScript } from './services/script-wait.js';
 import { publishArtifact } from './services/artifact-writer.js';
 import fs from 'node:fs/promises';
 import { registerTools } from './mcp/register-tools.js';
@@ -33,22 +34,13 @@ export async function main(argv = process.argv.slice(2)) {
       const operation=JSON.parse(started.content[0].text);
       if(started.isError)throw new Error(JSON.stringify(operation));
       const identity={...client.identity!};
-      const cancel=()=>{void client.request('session.status').then(r=>{if(r.session===identity.session)return client.request('execution.cancel',{session:r.session,epoch:r.epoch},{operationId:operation.operation_id});}).catch(()=>{});};
-      abort.signal.addEventListener('abort',cancel,{once:true});
-      if(abort.signal.aborted)cancel();
-      try {
-        let final=operation;
-        while(final.state==='running') {
-          await new Promise(resolve=>setTimeout(resolve,20));
-          const latest=client.identity;if(latest?.session!==identity.session)throw new Error('stale_session');identity.epoch=latest.epoch;
-          const r=await client.request('execution.status',identity,{operationId:operation.operation_id});
-          if(!r.ok&&r.error==='stale_epoch')continue;
-          if(!r.ok||!r.result)throw new Error(r.error??'invalid_reply');final=r.result;
-        }
+      {
+        const final=await waitForScript(client,operation,identity,{signal:abort.signal});
         if(final.stop_reason!=='script_done'){const details=await client.request('script.read',identity,{offset:0,length:16384,operationId:operation.operation_id});throw new Error(JSON.stringify({...final,script_error:details.result?.error}));}
         const chunks:Buffer[]=[];let offset=0,total=0;
         do {
-          const r=await client.request('script.read',identity,{offset,length:16384,operationId:operation.operation_id});
+          const page=await registry.call('script_result',{result_handle:operation.result_handle,offset,length:16384},abort.signal);
+          const r={ok:!page.isError,result:page.isError?undefined:JSON.parse(page.content[0].text),error:page.isError?page.content[0].text:undefined};
           if(!r.ok||!r.result)throw new Error(r.error??'invalid_reply');
           if(r.result.error)throw new Error(r.result.error);
           if(!offset)for(const log of r.result.logs)process.stderr.write(log+'\n');
@@ -58,7 +50,7 @@ export async function main(argv = process.argv.slice(2)) {
         const value=Buffer.concat(chunks).toString('utf8');
         if(outputPath)await publishArtifact(outputPath,false,async write=>{await write(value+'\n');},()=>{if(abort.signal.aborted)throw new Error('cancelled');});
         process.stdout.write(value+'\n');
-      } finally {abort.signal.removeEventListener('abort',cancel);}
+      }
       return;
     }
     if (command !== 'call'  || !tool) throw new Error('Usage: ares tools | ares call TOOL [--json FILE | --name VALUE ...]');

@@ -9,6 +9,8 @@ import {
   decodeReply,
   encodeRequest,
   ServiceError,
+  validErrorContext,
+  type ServiceErrorContext,
   type SessionClient,
   type SessionIdentity,
   type ServiceMethod,
@@ -240,7 +242,7 @@ export class LocalServiceHost {
           .catch(() => {})
     })
     lines(socket, (message) => {
-      const error = (code: string, end = false) => {
+      const error = (code: string, end = false,context?:ServiceErrorContext) => {
         send(socket, {
           protocol: 1,
           type: 'reply',
@@ -248,6 +250,7 @@ export class LocalServiceHost {
           connection,
           ok: false,
           error: code,
+          ...(context?{error_context:context}:{}),
         })
         if (end) socket.end()
       }
@@ -318,12 +321,14 @@ export class LocalServiceHost {
         return
       }
       if (message.method === 'plugin.manage') {
-        if (!this.manage) {
+        const resultReader=(this.client as SessionClient & {readScriptResult?:(p:any)=>unknown}).readScriptResult;
+        const manage=message.params?.operation==='script_result'&&resultReader ? async(p:any)=>resultReader.call(this.client,p) : this.manage;
+        if (!manage) {
           error('unavailable')
           return
         }
         ++inFlight
-        void this.manage(message.params)
+        void manage(message.params)
           .then(
             (result) => {
               if (Buffer.byteLength(JSON.stringify(result)) > 48000) {
@@ -342,9 +347,9 @@ export class LocalServiceHost {
             },
             (failure) =>
               error(
-                String(
+                failure instanceof ServiceError?failure.code:String(
                   failure instanceof Error ? failure.message : failure,
-                ).slice(0, 2048),
+                ).slice(0, 2048),false,failure instanceof ServiceError?failure.context:undefined,
               ),
           )
           .finally(() => --inFlight)
@@ -400,7 +405,7 @@ export class LocalServiceHost {
             error(
               failure instanceof ServiceError
                 ? failure.code
-                : 'native_host_disconnected',
+                : 'native_host_disconnected',false,failure instanceof ServiceError?failure.context:undefined,
             ),
         )
         .finally(() => --inFlight)
@@ -541,7 +546,7 @@ export class LocalServiceClient implements SessionClient {
           this.pending.delete(message.id)
           clearTimeout(waiting.timer)
           if (message.ok === false && typeof message.error === 'string') {
-            const error = new ServiceError(message.error)
+            const error = new ServiceError(message.error,validErrorContext(message.error_context)?message.error_context:undefined)
             waiting.reject(error)
             if (message.error === 'connection_request_limit') this.drop(error)
             return
@@ -582,7 +587,7 @@ export class LocalServiceClient implements SessionClient {
     const id = `local${++this.nextId}`
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
-        () => this.drop(new ServiceError('request_timeout')),
+        () => this.drop(new ServiceError('request_timeout',{component:'app',method:'plugin.manage',request_id:id,reason:'response_deadline_exceeded',observation:'no_response'})),
         this.timeoutMs,
       )
       this.pending.set(id, { method: 'plugin.manage', resolve, reject, timer })
@@ -627,7 +632,7 @@ export class LocalServiceClient implements SessionClient {
             )
           : this.timeoutMs
       const timer = setTimeout(
-        () => this.drop(new ServiceError('request_timeout')),
+        () => this.drop(new ServiceError('request_timeout',{component:'app',method,request_id:id,reason:'response_deadline_exceeded',observation:'no_response'})),
         timeout,
       )
       this.pending.set(id, { method, resolve, reject, timer })

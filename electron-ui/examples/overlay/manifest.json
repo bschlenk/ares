@@ -1,0 +1,11 @@
+{
+  "id": "ares.examples.overlay",
+  "name": "Screen overlay example",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "mode": "overlay",
+  "entry": "dist/plugin.js",
+  "build": {"entry": "plugin.ts"},
+  "capabilities": ["memory.read"],
+  "contributes": {}
+}

@@ -260,3 +260,20 @@ test('registry reports invalid builds and duplicate IDs; configuration and stora
   )
   registry.disconnect()
 })
+
+test('compact transform reads require debug.read; capture control also requires session.control',async t=>{
+ const {PluginRegistry}=await import('../dist/plugins/registry.js');
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'ares-transform-permissions-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ for(const capabilities of [[],['debug.read'],['session.control'],['debug.read','session.control']]){
+  const source=path.join(root,'source-'+capabilities.length+'-'+capabilities.join('-'));await fs.mkdir(source);
+  await fs.writeFile(path.join(source,'manifest.json'),JSON.stringify({...manifest,capabilities}));await fs.writeFile(path.join(source,'plugin.js'),'export function activate(){}');
+  const identity={session:'transform-permissions',epoch:1},calls=[];
+  const client={request:async(method,id,params,owner)=>{calls.push({method,owner});return {protocol:1,id:'p',...identity,ok:true,result:{}};}};
+  const registry=new PluginRegistry(path.join(root,'empty'),path.join(source,'profile'),client,()=>identity);await registry.initialize([source]);registry.attach();registry.observe({protocol:1,id:'p',...identity,ok:true,result:{system:'Nintendo 64',paused:true,synthetic:false,capabilities:[]}});await registry.enable(manifest.id,true);const token=registry.catalog().plugins[0].lease.token;registry.finish(token);
+  const read=()=>registry.request(token,'n64.capture.transforms',{generation:null,offset:0,limit:32});
+  if(capabilities.includes('debug.read')){await read();assert.equal(calls.at(-1).method,'n64.capture.transforms');assert.match(calls.at(-1).owner,/^plugin-/);}else await assert.rejects(read(),/plugin_capability_denied/);
+  const control=()=>registry.request(token,'n64.capture.control',{rsp:true,rdp:null});
+  if(capabilities.includes('debug.read')&&capabilities.includes('session.control'))await control();else await assert.rejects(control(),/plugin_capability_denied/);
+  registry.disconnect();
+ }
+});

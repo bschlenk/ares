@@ -3,6 +3,9 @@ import type { AresBridge } from './bridge.js'
 window.addEventListener('DOMContentLoaded', () => {
   if (process.platform === 'darwin') document.body.dataset.windowChrome = 'macos'
 })
+let exportGesture=false;
+for(const kind of ['click','keydown'])window.addEventListener(kind,event=>{if(event.isTrusted){exportGesture=true;setTimeout(()=>{exportGesture=false;},0);}},true);
+function takeExportGesture(){const allowed=exportGesture&&navigator.userActivation.isActive;exportGesture=false;return allowed;}
 const api: AresBridge = {
   agentAction: action => ipcRenderer.invoke('agent.action', action),
   workspace: {
@@ -26,6 +29,12 @@ const api: AresBridge = {
     },
   },
   plugins: {
+    clipboard:(token,text)=>ipcRenderer.invoke('plugin.clipboard',token,text,takeExportGesture()),
+    exportText:(token,params)=>ipcRenderer.invoke('plugin.exportText',token,params,takeExportGesture()),
+    recordFrames:(token,params)=>ipcRenderer.invoke('plugin.recordFrames',token,params,takeExportGesture()),
+    finishExport:(token,id,cancel)=>ipcRenderer.invoke('plugin.finishExport',token,id,cancel),
+    frames:callback=>{const listener=(_event:unknown,token:string,sample:import('./services/observer-contracts.js').ObserverDelivery)=>callback(token,sample);ipcRenderer.on('plugin-frame',listener);return ()=>ipcRenderer.removeListener('plugin-frame',listener);},
+    frameAck:(token,id,delivery)=>ipcRenderer.send('plugin.frameAck',token,id,delivery),
     settings: (token, request) => ipcRenderer.invoke('plugin.settings', token, request),
     actions: (callback) => {
       const listener = (_event: unknown, action: any) => callback(action)

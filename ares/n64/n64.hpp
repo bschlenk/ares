@@ -1,6 +1,7 @@
 #pragma once
 #include "execution.hpp"
 #include "command-capture.hpp"
+#include "task-provenance.hpp"
 #include "provenance.hpp"
 //started: 2020-04-28
 

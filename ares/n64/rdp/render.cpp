@@ -194,6 +194,7 @@ auto RDP::render() -> void {
   while(command.current < command.end) {
     u64 op = fetch();
     auto opCode = op >> 56 & 0x3f;
+    taskProvenance.consume(opCode,op,taskProvenance.submissionTask);
     commandCapture.rdpCommand(opCode, op, 0, CommandCapture::RdpWords[opCode]);
 
     if(debugger.tracer.command->enabled()) {

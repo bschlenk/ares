@@ -19,3 +19,11 @@ test('script artifact completion revalidates native ownership and disconnect gen
  }finally{fs.rmSync(dir,{recursive:true,force:true})}
  }
 });
+test('file publication failure preserves the committed immutable script result',async t=>{
+ const dir=fs.mkdtempSync('/tmp/ares-script-output-');t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'existing.json');fs.writeFileSync(file,'keep');
+ const identity={session:'output',epoch:1},op={operation_id:7,state:'done',kind:'script',stop_reason:'script_done'};
+ const native={identity,async request(method){const result=method==='script.start'||method==='execution.status'?op:method==='script.read'?{operation_id:7,hex:'3432',bytes:2,error:'',logs:[],complete:true,result_epoch:1,stop_reason:'script_done'}:method==='script.ack'?{released:true}:{};return {ok:true,result,...identity};}};
+ const jobs=new ScriptJobs();const start=await jobs.start(native,{},identity,{source:'export default()=>42',args:{},timeoutMs:1000,maxFrames:0,outputPath:file},'owner',()=>true);
+ for(let n=0;n<100&&jobs.outputs.get(7)?.state==='pending';n++)await new Promise(r=>setTimeout(r,5));
+ assert.equal(jobs.outputs.get(7).state,'failed');assert.equal(jobs.publications.get(7).state,'committed');assert.equal((await jobs.readResult({handle:start.result_handle},identity)).hex,'3432');assert.equal(fs.readFileSync(file,'utf8'),'keep');
+});

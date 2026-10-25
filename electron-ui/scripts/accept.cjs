@@ -81,6 +81,8 @@ async function main() {
   if (!Number.isInteger(jobs) || jobs < 1 || jobs > 16) throw new Error('ARES_ACCEPT_JOBS must be 1–16')
   env.ARES_HOST = path.join(build, 'bin', 'ares-electron-host')
   env.ARES_CPU_FIXTURE = path.join(build, 'bin', 'ares-electron-cpu-fixture')
+  env.ARES_TASK_FIXTURE = path.join(build, 'bin', 'ares-electron-task-fixture')
+  env.ARES_MATRIX_FIXTURE = path.join(build, 'bin', 'ares-electron-matrix-fixture')
   summary.nativeBuild = build
   summary.revision = {
     commit: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).stdout.trim(),
@@ -88,7 +90,7 @@ async function main() {
   }
   summary.tools = { cmake: version[0], electron: require('electron/package.json').version, ffprobe: env.ARES_FFPROBE }
   await gate('configure', cmake, ['-S', repository, '-B', build, '-G', 'Unix Makefiles', '-UARES_CORES', '-DARES_BUILD_ELECTRON_UI=ON', '-DARES_BUILD_OPTIONAL_TARGETS=OFF', '-DARES_ENABLE_LIBRASHADER=OFF', '-DENABLE_CCACHE=OFF', '-DENABLE_IPO=OFF', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'], repository, 300000)
-  await gate('native-build', cmake, ['--build', build, '--target', 'ares-electron-host', 'ares-electron-cpu-fixture', '-j', String(jobs)], repository, 1800000)
+  await gate('native-build', cmake, ['--build', build, '--target', 'ares-electron-host', 'ares-electron-cpu-fixture', 'ares-electron-task-fixture', 'ares-electron-matrix-fixture', '-j', String(jobs)], repository, 1800000)
   await gate('typescript', 'npm', ['run', 'build'])
   const tests = fs.readdirSync(path.join(root, 'tests')).filter(name => name.endsWith('.test.cjs') && name !== 'plugins-game-live.test.cjs').sort().map(name => `tests/${name}`)
   const unitLog = await gate('fixture-regressions', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'protocol.test.cjs', ...tests])
@@ -99,6 +101,7 @@ async function main() {
   await gate('native-smoke', process.execPath, ['smoke.cjs'])
   for (const [name, file, args] of [
     ['electron-session', 'electron-session.mjs', []],
+    ['electron-shutdown', 'electron-shutdown.mjs', []],
     ['electron-mcp', 'electron-mcp.mjs', []],
     ['electron-plugins', 'electron-plugins.mjs', []],
     ['electron-reload', 'electron-reload.mjs', []],

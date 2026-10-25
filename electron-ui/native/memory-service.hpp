@@ -19,7 +19,7 @@ struct MemoryService {
   static constexpr uint32_t maxTransfer = 1024;
   struct Region {
     std::string id; ares::Node::Debugger::Memory node; bool supported, writesAllowed;
-    std::function<uint8_t(uint32_t)> hostRead;
+    std::function<uint8_t(uint32_t)> hostRead, hostCpuRead;
     uint8_t read(uint32_t offset) { return hostRead ? hostRead(offset) : uint8_t(node->read(offset)); }
   };
   std::vector<Region> regions;

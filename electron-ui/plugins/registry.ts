@@ -109,7 +109,7 @@ export class PluginRegistry {
     )
       throw new ServiceError('stale_plugin_scope')
     const match = activation(manifest, current.system, current.game)
-    if (!match.matches || (manifest.mode && manifest.mode !== 'panel'))
+    if (!match.matches || (manifest.mode && !['panel','overlay'].includes(manifest.mode)))
       throw new Error('Candidate no longer matches the current session/mode')
     const token = randomUUID()
     return {
@@ -694,7 +694,7 @@ export class PluginRegistry {
         r.state = 'disabled'
         continue
       }
-      if (r.manifest.mode && r.manifest.mode !== 'panel') {
+      if (r.manifest.mode && !['panel','overlay'].includes(r.manifest.mode)) {
         r.state = 'unsupported'
         r.error = `${r.manifest.mode} mode is reserved; only panels/commands are implemented.`
         continue
@@ -840,13 +840,14 @@ export class PluginRegistry {
       if(method==='scripts.run'&&!['session.control','memory.read','memory.write','debug.read'].every(c=>r.manifest!.capabilities.includes(c as Capability)))throw new ServiceError('plugin_capability_denied');
     }
     let capability: Capability | undefined
-    if (['n64.debug.lastStop', 'n64.debug.registers'].includes(method))
+    if (['n64.debug.lastStop', 'n64.debug.registers', 'n64.peripheral.registers','n64.rsp.lastTask','n64.capture.rsp','n64.capture.matrices','n64.capture.transforms'].includes(method))
       capability = 'debug.read'
     if (['scripts.observe','script.observerRead','script.observerStop'].includes(method)) capability = 'memory.read'
+    if(method==='n64.capture.control'){if(!r.manifest!.capabilities.includes('debug.read'))throw new ServiceError('plugin_capability_denied');capability='session.control';}
     if (method === 'script.read') capability = 'session.control'
     if (method === 'session.status') capability = 'session.read'
     if (['memory.regions', 'memory.read',
-              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes', 'n64.memory.readMany', 'n64.memory.read'].includes(method))
+              'memory.readMany', 'memory.sample', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes', 'n64.memory.readMany', 'n64.memory.read'].includes(method))
       capability = 'memory.read'
     if (
       ['memory.write', 'n64.memory.write', 'n64.memory.writeMany'].includes(
@@ -875,8 +876,9 @@ export class PluginRegistry {
         'session.status',
         'memory.regions',
         'memory.read',
-              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
+              'memory.readMany', 'memory.sample', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
         'n64.memory.readMany', 'n64.memory.read',
+        'n64.rsp.lastTask','n64.capture.rsp','n64.capture.matrices','n64.capture.transforms',
         'n64.debug.lastStop',
         'n64.debug.registers',
         'execution.status',

@@ -15,7 +15,8 @@ test('CLI wrappers preserve spaces, quotes and arguments; refuse unrelated comma
   for (const file of [executable, path.join(resources, 'ares-mcp'), path.join(resources, 'ares-plugin')]) fs.writeFileSync(file, '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
   await assert.rejects(installCliHelpers(resources, false, executable), /built Ares.app/);
   await installCliHelpers(path.join(resources, 'app'), true, executable);
-  for (const name of ['ares', 'ares-mcp', 'ares-plugin']) assert.equal(execFileSync(path.join(directory, '.local/bin', name), ['argument with spaces', "'quoted'"], { encoding: 'utf8' }), "argument with spaces\n'quoted'\n");
+  for (const name of ['ares-mcp', 'ares-plugin']) assert.equal(execFileSync(path.join(directory, '.local/bin', name), ['argument with spaces', "'quoted'"], { encoding: 'utf8' }), "argument with spaces\n'quoted'\n");
+  assert.equal(execFileSync(path.join(directory,'.local/bin/ares'),['tools'],{encoding:'utf8'}),path.join(resources,'app/dist/launcher.js')+'\ntools\n');
   await installCliHelpers(path.join(resources, 'app'), true, executable);
   fs.writeFileSync(path.join(directory, '.local/bin/ares'), 'unrelated');
   await assert.rejects(installCliHelpers(path.join(resources, 'app'), true, executable), /Existing command/);

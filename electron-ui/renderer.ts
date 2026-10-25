@@ -1,3 +1,4 @@
+import {configureOverlays,layoutOverlays,submitOverlayFrame,overlayFrame,overlaySnapshot} from './plugins/overlays.js';
 import { appliedInputSettings, defaultInputSettings, mapInput } from './settings/input.js';
 import { blocksGameInput, notify, onSessionAction } from './workspace/shell.js';
 import type { FramePacket, RendererStats } from './bridge.js';
@@ -47,6 +48,7 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 const lines = gl.getUniformLocation(program, 'lines'), rows = gl.getUniformLocation(program, 'rows');
 let system = 'Synthetic', aspect = 4 / 3;
+configureOverlays($('viewport'),canvas);
 let width = 0, height = 0, pending: FramePacket | null = null, port: MessagePort | undefined, paused = false;
 let frames = 0, skipped = 0, last = 0, firstNative = 0, lastNative = 0, firstSequence = 0;
 let bridge: number[] = [], upload: number[] = [], inputTimes = new Map<number, number>(), inputAges: number[] = [], latestQueue = 0;
@@ -85,12 +87,15 @@ function resize() {
   const backingW = Math.round(w * devicePixelRatio), backingH = Math.round(h * devicePixelRatio);
   if (canvas.width !== backingW || canvas.height !== backingH) { canvas.width = backingW; canvas.height = backingH; }
   gl.viewport(0, 0, canvas.width, canvas.height);
-  draw();
+  draw();layoutOverlays();
 }
 function draw() {
   gl.uniform1f(lines, scanlineSetting ? 1 : 0); gl.uniform1f(rows, height);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
+function watchDpr(){const media=matchMedia(`(resolution: ${devicePixelRatio}dppx)`);media.addEventListener('change',()=>{resize();watchDpr();},{once:true});}
+watchDpr();
+window.addEventListener('ares-session-reset',()=>{submitOverlayFrame(null);layoutOverlays(0,0,0,0,null);});
 new ResizeObserver(resize).observe($('viewport'));
 window.addEventListener('message', event => {
   if (event.source !== window || event.data?.type !== 'ares-frames' || !event.ports[0]) return;
@@ -99,6 +104,7 @@ window.addEventListener('message', event => {
     if (data.reset) {
       system = data.system;
       document.getElementById('empty-state')!.hidden = system !== 'Synthetic';
+      submitOverlayFrame(null);layoutOverlays(0,0,0,0,null);
       pending = null; frames = skipped = last = firstNative = lastNative = firstSequence = receivedFrames = maxPending = 0;
       bridge = []; upload = []; inputAges = []; inputTimes.clear(); started = performance.now();
       lastMask = -1; syncSession(); window.dispatchEvent(new Event('ares-session-reset')); return;
@@ -235,6 +241,9 @@ function tick() {
     } else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, frame.pixels);
     if (changedAspect) resize();
     draw();
+    layoutOverlays(frame.logicalWidth??frame.width,frame.logicalHeight??frame.height,frame.width,frame.height,frame.geometry??null);
+    const reference=frame.frameReference?{...frame.frameReference,presentation:{window:'main',sequence:frame.sequence,stage:'renderer_submit' as const},provenance:'matched' as const}:null;
+    submitOverlayFrame(reference);
     const after = performance.now();
     record(upload, after - before);
     record(bridge, performance.timeOrigin + after - frame.receivedMs);
@@ -246,11 +255,12 @@ function tick() {
     if (last) skipped += Math.max(0, frame.sequence - last - 1);
     else { firstNative = frame.nativeMs; firstSequence = frame.sequence; }
     last = frame.sequence; lastNative = frame.nativeMs; frames++;
-    port!.postMessage({ ack: frame.sequence, generation: frame.generation });
+    port!.postMessage({ ack: frame.sequence, generation: frame.generation,submitted:true });
   }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
+window.overlayFrame=overlayFrame;window.overlaySnapshot=overlaySnapshot;
 window.stats = stats;
 window.sendInput = sendInput;
 window.ares.ready();

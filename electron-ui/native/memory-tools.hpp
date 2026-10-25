@@ -12,12 +12,14 @@
 // the emulation thread. This reports content changes, never writes that cancel out.
 struct MemoryTools {
   struct Range { MemoryService::Region* region; uint32_t offset, length; };
-  struct Sample { uint64_t sequence, frame; std::vector<std::vector<uint8_t>> bytes; };
+  struct Sample { uint64_t sequence, frame; std::vector<std::vector<uint8_t>> bytes; std::string reference="null"; };
+  std::function<std::string(uint64_t,bool)> frameReference;
   struct Capture {
     std::string owner; uint64_t epoch, id, next = 0, dropped = 0, duration = 0;
     uint64_t lastCopyNs = 0, maxCopyNs = 0, copiedBytes = 0, transferredBytes = 0;
     uint32_t capacity = 1; bool recording = false, active = false, pending = false;
     std::vector<Range> ranges; std::deque<Sample> samples;
+    bool cpuView=false,boundedSample=false; std::string failure; std::chrono::steady_clock::time_point expires;
   };
   MemoryService* memory = nullptr;
   uint64_t nextId = 0, epoch = 0, observedFrame = 0;
@@ -31,8 +33,8 @@ struct MemoryTools {
     const char* digits="0123456789abcdef"; std::string out; out.reserve(length*2);
     for(size_t i=offset;i<offset+length;++i) { out += digits[b[i]>>4]; out += digits[b[i]&15]; } return out;
   }
-  std::string validate(const std::vector<std::string>& a, size_t begin, std::vector<Range>& ranges, size_t maxBytes) {
-    if(a.size() <= begin || (a.size()-begin)%3 || (a.size()-begin)/3 > 64) return "invalid_request";
+  std::string validate(const std::vector<std::string>& a, size_t begin, std::vector<Range>& ranges, size_t maxBytes,size_t maxRanges=64) {
+    if(a.size() <= begin || (a.size()-begin)%3 || (a.size()-begin)/3 > maxRanges) return "invalid_request";
     size_t total=0;
     for(size_t i=begin;i<a.size();i+=3) {
       uint32_t offset,length;
@@ -46,10 +48,13 @@ struct MemoryTools {
     }
     return {};
   }
-  void sample(Capture& c,uint64_t frame) {
+  void sample(Capture& c,uint64_t frame,bool boundary=false,std::chrono::steady_clock::time_point sharedDeadline=std::chrono::steady_clock::time_point::max()) {
     const auto started = std::chrono::steady_clock::now();
-    Sample s{c.next++,frame,{}};
-    for(auto& r:c.ranges) { std::vector<uint8_t> bytes(r.length); for(uint32_t i=0;i<r.length;++i) bytes[i]=r.region->read(r.offset+i); s.bytes.push_back(std::move(bytes)); }
+    Sample s{c.next++,frame,{}};if(frameReference)s.reference=frameReference(frame,boundary);
+    for(auto& r:c.ranges) { std::vector<uint8_t> bytes(r.length); for(uint32_t i=0;i<r.length;++i) {
+      if(c.boundedSample && !(i%1024) && (std::chrono::steady_clock::now()-started>std::chrono::milliseconds(5)||std::chrono::steady_clock::now()>sharedDeadline)){c.failure="sample_copy_budget_exhausted";c.active=c.pending=false;return;}
+      bytes[i]=c.cpuView?r.region->hostCpuRead(r.offset+i):r.region->read(r.offset+i);
+    } s.bytes.push_back(std::move(bytes)); }
     c.lastCopyNs = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count();
     c.maxCopyNs = std::max(c.maxCopyNs, c.lastCopyNs);
     for(const auto& b : s.bytes) c.copiedBytes += b.size();
@@ -58,9 +63,9 @@ struct MemoryTools {
     if(!c.recording || (c.duration && c.next>=c.duration)) c.active=false;
     c.pending=false;
   }
-  void boundary(uint64_t current,uint64_t frame) { sync(current); for(auto& [id,c]:captures) if(c.active) sample(c,frame); }
+  void boundary(uint64_t current,uint64_t frame) { sync(current);const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(5);for(auto& [id,c]:captures)if(c.active)sample(c,frame,true,c.boundedSample?deadline:std::chrono::steady_clock::time_point::max()); }
   std::string metadata(const Capture& c,const std::string& kind) {
-    std::string out="{\"handle\":"+std::to_string(c.id)+",\"epoch\":"+std::to_string(c.epoch)+",\"frame_kind\":"+controlQuote(kind)+",\"active\":"+(c.active?"true":"false")+",\"pending\":"+(c.pending?"true":"false")+",\"capacity\":"+std::to_string(c.capacity)+",\"duration\":"+std::to_string(c.duration)+",\"next_sequence\":"+std::to_string(c.next)+",\"dropped\":"+std::to_string(c.dropped)+",\"first_sequence\":"+std::to_string(c.samples.empty()?c.next:c.samples.front().sequence)+",\"ranges\":[";
+    std::string out="{\"view\":"+controlQuote(c.cpuView?"cpu":"physical")+",\"handle\":"+std::to_string(c.id)+",\"epoch\":"+std::to_string(c.epoch)+",\"frame_kind\":"+controlQuote(kind)+",\"active\":"+(c.active?"true":"false")+",\"pending\":"+(c.pending?"true":"false")+",\"capacity\":"+std::to_string(c.capacity)+",\"duration\":"+std::to_string(c.duration)+",\"next_sequence\":"+std::to_string(c.next)+",\"dropped\":"+std::to_string(c.dropped)+",\"first_sequence\":"+std::to_string(c.samples.empty()?c.next:c.samples.front().sequence)+",\"ranges\":[";
     for(auto& r:c.ranges) {if(out.back()!='[')out+=',';out+="{\"region\":"+controlQuote(r.region->id)+",\"offset\":"+std::to_string(r.offset)+",\"length\":"+std::to_string(r.length)+"}";} return out + "],\"first_frame\":" + (c.samples.empty() ? "null" : std::to_string(c.samples.front().frame))
       + ",\"last_frame\":" + (c.samples.empty() ? "null" : std::to_string(c.samples.back().frame))
       + ",\"last_copy_ns\":" + std::to_string(c.lastCopyNs) + ",\"max_copy_ns\":" + std::to_string(c.maxCopyNs)
@@ -75,38 +80,46 @@ struct MemoryTools {
 #include "memory-query.inc.hpp"
   ControlResult execute(const std::string& method,const std::vector<std::string>& a,const std::string& owner,uint64_t current,uint64_t frame,const std::string& kind,bool paused) {
     sync(current);
+    for(auto it=captures.begin();it!=captures.end();)if(it->second.boundedSample&&it->second.expires<std::chrono::steady_clock::now())it=captures.erase(it);else ++it;
     if(method.starts_with("memory.query.")) return query(method, a, owner);
     if(method == "memory.snapshot.changes") return changes(a, owner);
-    if(method=="memory.snapshot.capture"||method=="memory.recorder.start") {
+    if(method=="memory.sample"||method=="memory.snapshot.capture"||method=="memory.recorder.start") {
       bool recorder=method=="memory.recorder.start";uint32_t capacity=1,duration=0;
       if(a.size()<3)return {"invalid_request",{}};
       if(recorder && (!MemoryService::number(a[0],capacity)||!capacity||capacity>1024||!MemoryService::number(a[1],duration)||duration>1000000))return {"invalid_request",{}};
-      if(!recorder && a[0]!="immediate" && a[0]!="boundary")return {"invalid_request",{}};
-      if((recorder||a[0]=="boundary") && kind=="unavailable")return {"frame_boundary_unavailable",{}};
-      if(!recorder && a[0]=="boundary" && paused)return {"paused_boundary_unavailable",{}};
+      const bool cpuView=method=="memory.sample"&&(a[0]=="immediate_cpu"||a[0]=="boundary_cpu");
+      const bool atBoundary=a[0]=="boundary"||cpuView&&a[0]=="boundary_cpu";
+      if(!recorder && !cpuView && a[0]!="immediate" && a[0]!="boundary")return {"invalid_request",{}};
+      if((recorder||atBoundary) && kind=="unavailable")return {"frame_boundary_unavailable",{}};
+      if(!recorder && atBoundary && paused)return {"paused_boundary_unavailable",{}};
       if(captures.size()>=32)return {"memory_handle_limit",{}};
       if(recorder) {unsigned count=0;for(auto& [id,c]:captures)if(c.recording)++count;if(count>=4)return {"recorder_limit",{}};}
-      Capture c; c.owner=owner;c.epoch=current;c.id=++nextId;c.capacity=capacity;c.duration=duration;c.recording=recorder;
-      auto error=validate(a,recorder?2:1,c.ranges,recorder?65536:16*1024*1024);if(!error.empty())return {error,{}};
+      if(method=="memory.sample"){unsigned count=0;for(auto& [id,c]:captures)if(c.owner==owner&&c.boundedSample)++count;if(count>=4)return {"sample_handle_limit",{}};}
+      Capture c;c.cpuView=cpuView;c.boundedSample=method=="memory.sample";c.expires=std::chrono::steady_clock::now()+std::chrono::seconds(30); c.owner=owner;c.epoch=current;c.id=++nextId;c.capacity=capacity;c.duration=duration;c.recording=recorder;
+      auto error=validate(a,recorder?2:1,c.ranges,recorder?65536:c.boundedSample?1024*1024:16*1024*1024,c.boundedSample?256:64);if(!error.empty())return {error,{}};
+      if(cpuView)for(auto& r:c.ranges)if(!r.region->hostCpuRead)return {"cpu_view_unavailable",{}};
       size_t bytes=0;for(auto& r:c.ranges)bytes+=r.length;
       if(bytes*capacity>budget-reserved())return {"memory_budget_exhausted",{}};
-      c.active=recorder||a[0]=="boundary";c.pending=!recorder&&a[0]=="boundary";
+      c.active=recorder||atBoundary;c.pending=!recorder&&atBoundary;
       if(!c.active)sample(c,frame);
+      if(!c.failure.empty())return {c.failure,{}};
       captures.emplace(c.id,std::move(c));return {{},metadata(captures.at(nextId),kind)};
     }
     uint32_t id;if(a.empty()||!MemoryService::number(a[0],id))return {"invalid_request",{}};
     auto found=captures.find(id);if(found==captures.end()||found->second.owner!=owner)return {"stale_memory_handle",{}};
     auto& c=found->second;
+    if(!c.failure.empty()&&method!="memory.capture.release")return {c.failure,{}};
     if(method == "memory.capture.freeze") {
       uint32_t sequence;
       if(a.size() != 2 || !MemoryService::number(a[1], sequence)) return {"invalid_request", {}};
       if(c.samples.empty() || sequence >= c.next) return {"sample_not_ready", {}};
       if(sequence < c.samples.front().sequence) return {"cursor_overwritten", {}};
       if(captures.size() >= 32) return {"memory_handle_limit", {}};
+      if(c.boundedSample){unsigned count=0;for(auto& [id,other]:captures)if(other.owner==owner&&other.boundedSample)++count;if(count>=4)return {"sample_handle_limit",{}};}
       size_t bytes = 0; for(const auto& r : c.ranges) bytes += r.length;
       if(bytes > budget - reserved()) return {"memory_budget_exhausted", {}};
       const auto started = std::chrono::steady_clock::now();
-      Capture frozen; frozen.id = ++nextId; frozen.owner = owner; frozen.epoch = epoch; frozen.ranges = c.ranges; frozen.next = 1;
+      Capture frozen; frozen.cpuView=c.cpuView;frozen.boundedSample=c.boundedSample;frozen.expires=c.expires; frozen.id = ++nextId; frozen.owner = owner; frozen.epoch = epoch; frozen.ranges = c.ranges; frozen.next = 1;
       frozen.samples.push_back(c.samples[sequence - c.samples.front().sequence]); frozen.samples.front().sequence = 0;
       frozen.lastCopyNs = frozen.maxCopyNs = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count(); frozen.copiedBytes = bytes;
       auto [it, inserted] = captures.emplace(frozen.id, std::move(frozen)); return {{}, metadata(it->second, kind)};
@@ -126,7 +139,7 @@ struct MemoryTools {
         if(offset>=bytes.size())return {"out_of_bounds",{}};
         size_t length=std::min(remaining,bytes.size()-offset);
         if(chunks++)out+=',';
-        out+="{\"sequence\":"+std::to_string(sequence)+",\"frame\":"+std::to_string(sample.frame)+",\"range\":"+std::to_string(range)+",\"offset\":"+std::to_string(offset)+",\"hex\":"+controlQuote(hex(bytes,offset,length))+"}";
+        out+="{\"frame_reference\":"+sample.reference+",\"sequence\":"+std::to_string(sequence)+",\"frame\":"+std::to_string(sample.frame)+",\"range\":"+std::to_string(range)+",\"offset\":"+std::to_string(offset)+",\"hex\":"+controlQuote(hex(bytes,offset,length))+"}";
         remaining-=length;c.transferredBytes+=length;offset+=length;
         if(offset==bytes.size()){offset=0;if(++range==c.ranges.size()){range=0;++sequence;}}
       }
@@ -141,7 +154,7 @@ struct MemoryTools {
       auto& s=c.samples[sequence-c.samples.front().sequence];auto& b=s.bytes[range];
       if(offset>b.size()||length>b.size()-offset)return {"out_of_bounds",{}};
       c.transferredBytes += length;
-      return {{},"{\"handle\":"+std::to_string(id)+",\"epoch\":"+std::to_string(current)+",\"sequence\":"+std::to_string(sequence)+",\"frame\":"+std::to_string(s.frame)+",\"range\":"+std::to_string(range)+",\"offset\":"+std::to_string(offset)+",\"hex\":"+controlQuote(hex(b,offset,length))+"}"};
+      return {{},"{\"frame_reference\":"+s.reference+",\"handle\":"+std::to_string(id)+",\"epoch\":"+std::to_string(current)+",\"sequence\":"+std::to_string(sequence)+",\"frame\":"+std::to_string(s.frame)+",\"range\":"+std::to_string(range)+",\"offset\":"+std::to_string(offset)+",\"hex\":"+controlQuote(hex(b,offset,length))+"}"};
     }
     // A query page scans at most 64 KiB and returns at most 256 matching values.
     // Cursor is byte-relative; immutable snapshots make continuation deterministic.

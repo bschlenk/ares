@@ -75,3 +75,9 @@ details > summary { cursor:pointer; font-weight:550; padding:12px 0; }
 :focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 
 #mcp-config-preview { padding:12px; border:1px solid var(--line); border-radius:5px; background:var(--panel); user-select:text; }
+
+/* Viewport overlays stay with the host-owned viewport; DOM dialogs use the top layer. */
+.ares-screen-overlay { position:absolute; overflow:hidden; pointer-events:none; }
+.ares-screen-overlay[hidden] { display:none!important; }
+.ares-screen-overlay[data-interactive="false"], .ares-screen-overlay[data-interactive="false"] * { pointer-events:none!important; }
+.ares-screen-overlay[data-interactive="true"] { pointer-events:auto; }

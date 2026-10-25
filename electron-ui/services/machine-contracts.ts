@@ -1,6 +1,7 @@
+import {validRspTaskResult,type RspTaskResult} from './task-contracts.js';
 import { validRspDebug, type RspDebugState } from './rsp-contracts.js';
 import { GPR_NAMES, hex64 } from './n64-contracts.js';
-export const MACHINE_METHODS = ['n64.cpu.setRegisters', 'n64.cpu.disassemble', 'n64.rsp.registers', 'n64.rdp.state', 'n64.peripheral.registers'] as const;
+export const MACHINE_METHODS = ['n64.cpu.setRegisters', 'n64.cpu.disassemble', 'n64.rsp.registers', 'n64.rdp.state', 'n64.peripheral.registers','n64.rsp.lastTask'] as const;
 export type MachineMethod = typeof MACHINE_METHODS[number];
 export interface RegisterChanges { gpr?: Record<string, string>; pc?: string; hi?: string; lo?: string; llbit?: number; status?: string }
 export interface RegisterMutation { gpr: { index: number; value: string }[]; pc: string | null; hi: string | null; lo: string | null; llbit: number | null; status: string | null }
@@ -11,11 +12,12 @@ export interface RspRegisters { gpr: string[]; pc: string; status: Record<string
 export type RdpState = Record<'DPC_START' | 'DPC_END' | 'DPC_CURRENT' | 'DPC_CLOCK' | 'PIPE_BUSY' | 'TMEM_BUSY' | 'BUFFER_BUSY', string> & { ready: number; freeze: number; crashed: number; flush: number; source: 'DMEM' | 'RDRAM' };
 export type PeripheralRegisters = Record<'vi' | 'ai' | 'pi' | 'si' | 'ri', Record<string, number | string>>;
 export interface MachineServiceMap {
+  'n64.rsp.lastTask': {params:undefined|{taskId?:number};result:RspTaskResult};
   'n64.cpu.setRegisters': { params: RegisterMutation; result: MutationResult };
   'n64.cpu.disassemble': { params: { address: string; count: number; view: 'cpu' | 'rdram' }; result: Disassembly };
   'n64.rsp.registers': { params: undefined; result: RspRegisters };
   'n64.rdp.state': { params: undefined; result: RdpState };
-  'n64.peripheral.registers': { params: undefined; result: PeripheralRegisters };
+  'n64.peripheral.registers': { params: undefined; result: PeripheralRegisters & {epoch:number;frame:number} };
 }
 const integer = (v: unknown, max = Number.MAX_SAFE_INTEGER): v is number => Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= max;
 const hex32 = (v: unknown): v is string => hex64(v) && BigInt(v) <= 0xffffffffn;
@@ -26,6 +28,7 @@ export function registerIndex(name: string): number {
   return GPR_NAMES.indexOf(name);
 }
 export function encodeMachine(method: MachineMethod, p: any): string | undefined {
+  if(method==='n64.rsp.lastTask')return p===undefined||keys(p,'')?'':keys(p,'taskId')&&integer(p.taskId)&&p.taskId>0?` ${p.taskId}`:undefined;
   if (method === 'n64.cpu.disassemble') return keys(p, 'address,count,view') && hex64(p.address) && integer(p.count, 128) && p.count > 0 && ['cpu', 'rdram'].includes(p.view) ? ` ${p.address} ${p.count} ${p.view}` : undefined;
   if (method !== 'n64.cpu.setRegisters') return p === undefined ? '' : undefined;
   if (!keys(p, 'gpr,hi,llbit,lo,pc,status') || !Array.isArray(p.gpr) || p.gpr.length > 31 ||
@@ -50,6 +53,7 @@ const peripheralFields = {
 };
 export function validMachine(method: MachineMethod, s: any): boolean {
   if (!s) return false;
+  if(method==='n64.rsp.lastTask')return validRspTaskResult(s);
   if (method === 'n64.rdp.state') return hexFields(s, ['DPC_START', 'DPC_END', 'DPC_CURRENT', 'DPC_CLOCK', 'PIPE_BUSY', 'TMEM_BUSY', 'BUFFER_BUSY']) && numericFields(s, ['ready', 'freeze', 'crashed', 'flush'], 1) && ['DMEM', 'RDRAM'].includes(s.source);
   if (method === 'n64.peripheral.registers') return Object.entries(peripheralFields).every(([group, fields]) => hexFields(s[group], fields.hex) && numericFields(s[group], fields.number));
   if (method === 'n64.rsp.registers') return hex32(s.pc) && Array.isArray(s.gpr) && s.gpr.length === 32 && s.gpr.every(hex32) &&

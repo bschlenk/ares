@@ -1,3 +1,4 @@
+import { registerOverlay } from './overlays.js'
 import { PLUGIN_REQUEST_LIMIT, PluginAdmissionError, unwrapPluginBridge } from './admission.js'
 import { mountSettingsForm } from '../settings/form.js'
 import type { PluginSettingsRequest } from '../settings/contracts.js'
@@ -145,6 +146,16 @@ export class PluginScope {
           return effect(() => mountSettingsForm(element, this.context.settings))
         },
       },
+      clipboard:{writeText:async text=>{writable();return unwrapPluginBridge(await window.ares.plugins.clipboard(this.token,text));}},
+      exports:{
+        saveText:async params=>{writable();return unwrapPluginBridge(await window.ares.plugins.exportText(this.token,params));},
+        recordFrames:async params=>{
+          writable();const status=unwrapPluginBridge(await window.ares.plugins.recordFrames(this.token,params));
+          if(status.state!=='recording')return status;
+          const finish=(cancel:boolean)=>window.ares.plugins.finishExport(this.token,status.jobId,cancel).then(unwrapPluginBridge);
+          add(()=>finish(true).then(()=>{},()=>{}));return {jobId:status.jobId,stop:()=>finish(false),cancel:()=>finish(true)};
+        },
+      },
       scripts: {
         run: params => this.context.services.request('scripts.run', params),
         observe: async (params, callback) => {
@@ -154,15 +165,15 @@ export class PluginScope {
           const timer=setInterval(async()=>{
             if(pending||closed)return;pending=true;
             try {
-              const r=await this.context.services.request('script.observerRead',{offset:0,length:16384});
+              const r=await this.context.services.request('script.observerRead',{offset:0,length:16384,observerId:reply.result!.observer_id});
               if(!closed&&r.ok&&r.result){
                 if(r.result.error)throw new Error(r.result.error);
                 if(r.result.bytes&&r.result.frame!==last){last=r.result.frame??-1;const bytes=Uint8Array.from(r.result.hex.match(/../g)??[],b=>parseInt(b,16));await callback(JSON.parse(new TextDecoder().decode(bytes)));}
               }
-            }catch(error){if(!closed){closed=true;clearInterval(timer);this.context.log.error(`Observer stopped: ${error}`);void window.ares.plugins.request(this.token,'script.observerStop').catch(()=>{});}}
+            }catch(error){if(!closed){closed=true;clearInterval(timer);this.context.log.error(`Observer stopped: ${error}`);void window.ares.plugins.request(this.token,'script.observerStop',{observerId:reply.result!.observer_id}).catch(()=>{});}}
             finally{pending=false;}
           },100);
-          return add(()=>{closed=true;clearInterval(timer);return window.ares.plugins.request(this.token,'script.observerStop').then(()=>{},()=>{});});
+          return add(()=>{closed=true;clearInterval(timer);return window.ares.plugins.request(this.token,'script.observerStop',{observerId:reply.result!.observer_id}).then(()=>{},()=>{});});
         },
       },
       services: {
@@ -174,8 +185,10 @@ export class PluginScope {
               'session.status',
               'memory.regions',
               'memory.read',
-              'memory.readMany', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
+              'memory.readMany', 'memory.sample', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
               'n64.memory.readMany', 'n64.memory.read',
+              'n64.peripheral.registers',
+              'n64.rsp.lastTask','n64.capture.rsp','n64.capture.matrices','n64.capture.transforms',
               'n64.debug.lastStop',
               'n64.debug.registers',
               'execution.status',
@@ -200,6 +213,36 @@ export class PluginScope {
         },
       },
       scope: {
+        onFrame:(params,callback)=>effect(()=>{
+          let id=0,closed=false,retries=0;
+          let retry:ReturnType<typeof setTimeout>|undefined;
+          const freeze=(value:any):any=>{if(value&&typeof value==='object'){Object.freeze(value);for(const item of Object.values(value))freeze(item);}return value;};
+          const stop=()=>id?window.ares.plugins.request(this.token,'script.observerStop',{observerId:id}).then(()=>{},()=>{}):Promise.resolve();
+          const unlisten=window.ares.plugins.frames((token,sample)=>{
+            if(token!==this.token)return;
+            if(!id){window.ares.plugins.frameAck(token,sample.observer_id,sample.delivery);return;}
+            if(sample.observer_id!==id)return;
+            if(closed){window.ares.plugins.frameAck(token,id,sample.delivery);return;}
+            void (async()=>{
+              try{
+                alive();if(sample.error)throw new Error(sample.error);
+                await callback(freeze({observerId:id,sequence:sample.sequence,frame:sample.frame_reference,value:sample.value,skipped:sample.skipped}));
+              }catch(error){const report=!closed&&!this.abort.signal.aborted&&!/stale_plugin_scope|stale_epoch|disconnected/.test(String(error));closed=true;unlisten();if(report)this.context.log.error(`Frame observer stopped: ${error}`);void stop();}
+              finally{window.ares.plugins.frameAck(token,id,sample.delivery);}
+            })();
+          });
+          const start=()=>{if(closed)return;void this.context.services.request('scripts.observe',{...params,args:params.args??{},timeoutMs:600000,maxFrames:0,every:params.every??1,boundary:params.boundary??'vi',push:true}).then(reply=>{
+            if(!reply.ok||!reply.result)throw new Error(reply.error??'invalid_reply');id=reply.result.observer_id;if(closed)void stop();
+          }).catch(error=>{
+            if(closed||this.abort.signal.aborted)return;
+            // Registration is read-only. A state load/exclusive job can briefly
+            // own the native thread while this scope publishes; retry admission,
+            // without replaying an execution or memory mutation.
+            if(/(?:^|\W)(?:busy|observer_preparation_busy)(?:$|\W)/.test(String(error))&&retries++<600){retry=setTimeout(start,Math.min(1000,100*2**Math.min(retries,4)));return;}
+            closed=true;unlisten();if(!/stale_plugin_scope|stale_epoch|disconnected/.test(String(error)))this.context.log.error(`Frame observer failed: ${error}`);
+          });};start();
+          return ()=>{closed=true;clearTimeout(retry);unlisten();return stop();};
+        }),
         add,
         listen: (target, event, listener) => {
           const view = currentMount
@@ -297,6 +340,10 @@ export class PluginScope {
         },
       },
       ui: {
+        registerOverlay:(id,mount,options={})=>{
+          alive();if(!/^[a-z][a-z0-9.-]{0,63}$/.test(id))throw new Error('invalid_overlay_id');
+          return effect(()=>registerOverlay(m.id+':'+id,mount,options,fail));
+        },
         registerPanel: (id, mount) => {
           alive()
           const contribution = m.contributes.panels?.find(p => p.id === id)

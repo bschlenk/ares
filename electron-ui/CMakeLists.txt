@@ -48,3 +48,20 @@ target_compile_definitions(ares-quickjs PRIVATE _GNU_SOURCE CONFIG_VERSION="2026
 target_include_directories(ares-quickjs PUBLIC ../thirdparty/quickjs)
 set_target_properties(ares-quickjs PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
 target_link_libraries(ares-electron-host PRIVATE ares-quickjs)
+
+# Generated SP dispatch/IMEM DMA/RDP consumption provenance fixture.
+add_executable(ares-electron-task-fixture EXCLUDE_FROM_ALL tests/task-provenance-fixture.cpp)
+target_include_directories(ares-electron-task-fixture PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(ares-electron-task-fixture PRIVATE ares::ares ares::nall)
+set_target_properties(ares-electron-task-fixture PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+if(APPLE)
+  target_link_options(ares-electron-task-fixture PRIVATE "LINKER:-dead_strip")
+endif()
+
+add_executable(ares-electron-matrix-fixture EXCLUDE_FROM_ALL tests/matrix-stack-fixture.cpp)
+target_include_directories(ares-electron-matrix-fixture PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(ares-electron-matrix-fixture PRIVATE ares::ares ares::nall)
+set_target_properties(ares-electron-matrix-fixture PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+if(APPLE)
+  target_link_options(ares-electron-matrix-fixture PRIVATE "LINKER:-dead_strip" "LINKER:-rpath,${sdl_framework_directory}")
+endif()

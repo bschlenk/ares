@@ -340,3 +340,220 @@ work as for workspace panels. These panels are not workspace panels, so do not u
 [controller editor](../bundled-plugins/controls/README.md) demonstrates artwork,
 keyboard/Gamepad capture and remapping without special host access. Advanced
 input fields remain available independently of plugins.
+
+### Screen overlays and frozen frame callbacks
+
+`ctx.ui.registerOverlay(id, mount, options?)` mounts into a host-owned div sized
+and positioned exactly over the displayed screen rectangle. The div moves with
+the viewport, including a floating workspace viewport. Settings uses the DOM top
+layer and appears above it. Overlay order is explicit (`order`, -100..100); input
+passes through unless `interactive: true`. Registration, child DOM, resize hooks
+and native frame subscriptions are removed on plugin disposal/replacement.
+`mode: "overlay"` is supported; registration also works from an ordinary panel
+plugin. Up to 16 overlay layers may be mounted.
+
+`overlay.size` / `overlay.onResize` distinguish CSS `width`/`height`, `dpr`, canvas
+backing-store `pixelWidth`/`pixelHeight`, and `logicalWidth`/`logicalHeight`. `sourceWidth`/`sourceHeight` describe native video pixels.
+The logical picture describes the submitted picture, rather than the narrower
+active VI register range. Kirby's logical 320×240 picture is independent of its
+640×240 native video output and its aspect-corrected CSS rectangle.
+
+```ts
+ctx.ui.registerOverlay('points', overlay => {
+  const canvas = document.createElement('canvas');
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  overlay.element.append(canvas);
+  return overlay.onResize(s => {
+    canvas.width = s.pixelWidth;
+    canvas.height = s.pixelHeight;
+    const c = canvas.getContext('2d')!;
+    if (s.logicalWidth && s.logicalHeight)
+      c.setTransform(s.pixelWidth / s.logicalWidth, 0,
+                     0, s.pixelHeight / s.logicalHeight, 0, 0);
+    // Draw using logical coordinates; the canvas backing store follows DPR.
+  });
+});
+```
+
+`ctx.scope.onFrame({source, args?, every?, boundary?}, callback)` registers a read-only native
+VI-boundary script. It is inert during candidate activation and starts when the
+scope publishes. It requires `memory.read`. Each callback gets a deeply frozen
+`{observerId, sequence, frame, value, skipped}`. All memory reads occur inside the
+native script at that boundary; delayed renderer callbacks receive serialized
+frozen values and cannot reread the past. `emu.info().frame_reference` exposes
+boundary identity and current VI origin without another transport request.
+
+Use `overlay.present(sample, synchronousPaint)` to draw sampled data: the host
+matches native session, epoch, VI and origin-write identity against the submitted
+video packet. Unmatched data is hidden and marked stale. `overlay.frame` provides
+the matching packet and its renderer-submit acknowledgement. This acknowledgement
+reports submitted WebGL work, not an OS-compositor presentation timestamp.
+`ui_screenshot` includes overlay DOM; its frame reference is null if the submitted
+frame changes during capture. Framebuffer screenshots remain a separate service.
+
+Native observers are bounded to eight globally / four per owner, 16 MiB per
+runtime, 64 KiB read bytes per callback, 8 KiB JSON results, 2 ms callback budgets
+and a rotating 6 ms aggregate scheduler budget. Push subscriptions last until
+stop, reset or lease disposal. Live delivery keeps one outstanding callback and
+one latest replacement per observer; `skipped` includes native scheduling and
+transport coalescing. It does not promise lossless recording. Exclusive scripts
+suspend observers. Stopping a handle cannot stop another subscription. Legacy
+`scripts.observe` retains its lower-rate polling interface and uses explicit native
+handles internally. Default `boundary: 'vi'` samples completed VIs. N64 also
+supports `boundary: 'vi_origin'`, executed synchronously after each VI-origin
+write, including repeated values. `every` counts origin-write identities in that
+mode. Values freeze before the CPU proceeds to later stores; frame references
+label this boundary explicitly. The same rotating 6-ms aggregate budget is shared
+across VI and origin callbacks in each VI. Skipped origin writes are counted.
+Origin samples remain unmatched until video linkage is proven; an origin write
+alone does not prove which subsequent packet contains its pixels.
+
+See `examples/overlay` for a complete DPR canvas and matched-frame crosshair.
+
+### Clipboard and exports
+
+Declare `clipboard.write` for `ctx.clipboard.writeText(text)` and `files.export`
+for `ctx.exports.saveText({suggestedName, text, overwrite?})`. Call these directly
+from a real user click or key event. Synthetic DOM clicks and background scripts
+cannot authorize them. Clipboard text is limited to 64 KiB; saved text to 1 MiB.
+The host picker grants one destination; plugins supply a filename, never a path.
+Cancellation returns a cancelled status. Existing files require explicit
+`overwrite: true`; a destination changed during the operation is preserved.
+Publication is atomic, with byte count and SHA-256 in the committed artifact.
+Plugin unload, reset and session changes revoke outstanding grants, including
+while the picker is open. `app_health` exposes outstanding save-dialog waits.
+
+`ctx.exports.recordFrames({suggestedName, source, args?, every?, maxFrames?,
+maxBytes?, maxSeconds?, boundary?, overwrite?})` also requires `memory.read`. Its source is
+a confined native read-only observer, using the same frozen values and frame
+references as `scope.onFrame`. It returns a recording handle with `jobId`,
+`stop()` and `cancel()`. Stop publishes the complete bounded prefix; cancel
+discards it. Scope disposal cancels the job. A cancelled picker returns a terminal
+status instead of a recording handle.
+
+Defaults are 600 frames, 8 MiB and 60 seconds; maximums are 3,600 frames, 16 MiB
+and 600 seconds. One recording per plugin and two globally are admitted, subject
+to native observer admission and runtime budgets. The main-process writer receives
+samples before live renderer coalescing, with a 32-record / 1-MiB queue. Native
+sample gaps, queue overflow, byte exhaustion and observer errors fail publication
+and discard the temporary output. Frame/time limits and explicit stop publish a
+versioned JSONL header, ordered frame records and a complete summary with its
+termination reason. This promises a complete selected boundary sequence only
+when publication succeeds. `plugin_exports` exposes bounded status pages to
+CLI/MCP, including the committed artifact hash. Status history is bounded to 32
+jobs and expires after 15 minutes when admitting new jobs.
+
+### Graphics task provenance
+
+With `debug.read`, `ctx.bridge.call('n64.rsp.lastTask', {})` returns the latest
+conventionally declared graphics-task candidate; `{taskId}` selects a retained
+ID. `rsp_last_task` exposes the same service through CLI/MCP. It freezes the
+conventional DMEM 0xfc0 descriptor at SP HALT-clear, rather than rereading an
+assumed RDRAM task location. Arbitrary microcode need not use this convention.
+Task IDs, IMEM DMA fingerprints, stop signals and RSP-submitted RDP target
+transitions are retained without forcing interpreter execution or full command
+capture. Retention is 64 tasks, eight code revisions and 16 targets per task;
+overflow is explicit. Reset invalidates retained tasks.
+
+`scanouts` and boundary `task_candidates` match target addresses to VI origins.
+They are explicitly candidates: DPC submission identifies the submitting task,
+not every author of command memory or proof of displayed pixel contribution.
+Repeated descriptor bytes link identities but do not prove yield/resume. Both
+RSP executors are covered by generated submission/DMA fixtures. Snapshot timing
+reports only descriptor/IMEM capture cost, not total graphics overhead.
+
+Plugins with `debug.read` can page `n64.capture.rsp` and
+`n64.capture.matrices`. Enabling capture with `n64.capture.control` additionally
+requires `session.control`. Matrix snapshots are supported for full IMEM hashes
+and static dispatch tables matching F3DEX2 FIFO 2.04H. Other microcode yields no
+invented state. `matrix_before_id`, `matrix_after_id` and each draw vertex's
+`transform_state_id` join to immutable matrix entries in the same generation.
+Page matrices with `{generation: null, offset: 0, limit: 4}`, then reuse the
+returned generation and `next_offset`; a replaced generation returns
+`stale_capture`. Finish both captures before the next origin-swap commit.
+
+Each state contains actual RSP modelview, projection, valid combined matrix,
+viewport, segment table and stack pointer, with original bytes and exact signed
+16.16 values. A cached vertex retains the state from vertex transformation even
+if later commands change the current matrix. `draw_vertices` includes actual
+clip coordinates and quarter-pixel screen coordinates; `modified` marks changes
+after transformation. This does not prove that a draw contributed displayed pixels.
+
+Stack `saved` entries are historical bytes observed at RSP DMA writes, not
+current RAM. Unobserved ancestors are null and `complete` is false; an invalid
+or excessive depth is null. Subsequent pops are captured from actual RSP state.
+Retention is bounded to 512 states per generation and 32 saved levels; `overflow`
+and null references expose capacity loss. `command_complete: false` means no
+verified post-operation state. Snapshots are interned, so their source boundary
+identifies the first identical state rather than every referencing command.
+
+The separate `consumed_matrix` operand remains labeled
+`consumed_dma_operand_only`, with `rsp_matrix_stack: null`; use the state IDs
+above for verified post-operation data.
+
+`memory.sample` / `memory_sample` accepts `view: 'cpu'` for N64 RDRAM region
+ranges. Offsets remain physical region offsets; CPU view uses the corresponding
+cached KSEG0 mapping. Resident dirty DCache bytes take priority over raw RDRAM;
+misses read raw backing bytes without cache fill, writeback, guest timing or
+chip-initialization RNG effects. Other regions reject this view explicitly.
+Default `view: 'physical'` retains the original raw-region semantics. Both views
+share the existing 256-range / 1-MiB / 5-ms limits and immutable page behavior.
+Capture metadata and frozen copies retain the selected view.
+
+Overlay resize snapshots also expose `geometry`, `canvasToCss` and
+`canvasToPixels`. These describe the core's screen canvas **before rotation and
+its final viewport crop**. They are frozen with each video packet, including the
+actual crop after the core refresh. `canvasToCss` maps its pixel-edge coordinates
+to overlay-local CSS pixels; `canvasToPixels` maps to the DPR backing store. Both
+use Canvas/DOMMatrix order `[a,b,c,d,e,f]`. For example:
+
+```ts
+overlay.onResize(s => {
+  canvas.width = s.pixelWidth;
+  canvas.height = s.pixelHeight;
+  const c = canvas.getContext('2d')!;
+  if (s.canvasToPixels) c.setTransform(...s.canvasToPixels);
+  // Draw in native screen-canvas coordinates, with crop and rotation applied.
+});
+```
+
+Use `logicalWidth` / `logicalHeight` for the existing nominal logical-picture
+coordinate system. Screen-canvas geometry is separate: on Kirby, a 320×240
+logical picture can be carried in a 640×240 packet backed by a larger core screen
+canvas. These transforms do not reconstruct N64 VI filtering, source-RDRAM
+coordinates, subpixels or interlace history. Unsupported/missing geometry is
+`null`, including older video protocols; no transform is guessed. Resets clear it.
+
+`ui_screenshot` includes `overlay_geometry` with these overlay-local matrices, the screen's
+separately labeled window-CSS rectangle and the optional capture rectangle. Frame and geometry must
+both remain stable across capture, otherwise both provenance fields are null.
+This remains a renderer-submit observation, not an OS-compositor timestamp.
+
+Graphics dispatch detection also runs after IMEM DMA, so a task can boot before
+loading its graphics microcode. Handler overlays preserve the current command
+when the dispatch signature remains intact. A replaced signature is rediscovered
+before later instructions can acquire its labels. The actual Kirby acceptance
+now exercises this load order and retained consumed DMA bytes with the JIT; an
+interpreter run starts from power-on to avoid assuming cross-executor saved-state
+compatibility. Generated fixtures cover the same late load and handler overlays
+under both RSP executors. JIT blocks preserve the live elapsed clock rather than
+restoring their compile-time value on reuse. This removes wrapped command-cycle
+counts; it does not establish authoritative matrix arithmetic or stack state.
+
+`n64.capture.transforms` is a compact plugin feed for matrix-driven overlays:
+`{generation: null, offset: 0, limit: 32}` selects the latest VI view. Reuse its
+`generation` for subsequent pages. Four immutable VI views are retained; older
+ones return `stale_capture`. Up to 256 matrix commands per task and eight source
+task batches are retained independently of the verbose 4,096-row RSP viewer.
+The view selects a recent stopped scanout task candidate that has matrix data;
+it does not claim all contributors. Compatible source-range matching handles a
+VI origin inside a color target. Unknown or missing state is null, and command
+loss/matrix quota loss are explicit. This read requires `debug.read`.
+
+`emu.info().capture_generation` gives that VI's compact-view generation inside a
+frame observer. The view's frame reference must match the observer's native
+session, epoch, VI and origin-write identity before using `overlay.present`.
+Raw post-matrix bytes and optional vertex-load state avoid reconstructing a
+matrix stack from live RAM. See `examples/kirby-skeleton` for the full consumer
+and its explicitly derived joint/camera visualization.

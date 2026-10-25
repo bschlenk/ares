@@ -82,7 +82,7 @@ export class Workspace {
   }
   selectPanel(id: string, panel: string): void {
     const next = this.snapshot();
-    if (panel === 'video') next.root = this.replaceVideo(next.root, id);
+    if (panel === 'video') {next.root = this.replaceVideo(next.root, id);next.floating=next.floating.filter(item=>item.panel!=='video');}
     next.root = transformArea(next.root, id, area => ({ id: area.id, panel })); this.commit(next);
   }
   private replaceVideo(area: Area, target: string): Area {
@@ -92,6 +92,7 @@ export class Workspace {
   closeArea(id: string): void { const next = this.snapshot(); next.root = removeArea(next.root, id); this.commit(next); }
   addFloating(panel: string, mode: FloatingPanel['mode']): void {
     const next = this.snapshot();
+    if(panel==='video'){next.root=this.replaceVideo(next.root,'');next.floating=next.floating.filter(item=>item.panel!=='video');}
     const shortcut = Array.from({ length: 8 }, (_, i) => `Mod+Shift+Digit${i + 1}`).find(key => !next.floating.some(item => item.shortcut === key)) ?? '';
     const item: FloatingPanel = { id: crypto.randomUUID(), panel, mode, open: true, x: 60 + next.floating.length * 24, y: 60 + next.floating.length * 24, width: 380, height: 400, shortcut, interactive: true };
     next.floating.push(item); this.commit(next); this.focusFloating(item.id);
@@ -164,6 +165,7 @@ export class Workspace {
       const toolbar = document.createElement('header'); toolbar.className = 'area-toolbar';
       const select = document.createElement('select'); select.setAttribute('aria-label', 'Panel'); this.options(select, area.panel); select.onchange = () => this.selectPanel(area.id, select.value);
       toolbar.append(select, button('↔', 'Split side by side', () => this.split(area.id, 'x')), button('↕', 'Split above and below', () => this.split(area.id, 'y')));
+      if(area.panel==='video')toolbar.append(button('▣','Float viewport',()=>this.addFloating('video','popup')));
       if (area.panel !== 'video' && area.panel !== 'empty') toolbar.append(button('◧', 'Show as overlay', () => this.addFloating(area.panel, 'overlay')), button('▣', 'Show as pop-up', () => this.addFloating(area.panel, 'popup')));
       if (leaves(this.layout.root).length > 1) toolbar.append(button('×', 'Close region', () => this.closeArea(area.id)));
       element.append(toolbar, this.view(`area:${area.id}`, area.panel, used)); return element;
@@ -194,11 +196,11 @@ export class Workspace {
       const viewId = `floating:${item.id}`;
       if (!item.open) { const view = this.views.get(viewId); if (view) { used.add(viewId); this.setVisible(view, false); } continue; }
       const element = document.createElement('section'); element.className = `floating-panel ${item.mode}${!item.interactive ? ' passthrough' : ''}`;
-      element.dataset.floating = item.id; element.setAttribute('role', 'dialog'); element.setAttribute('aria-label', this.definitions.get(item.panel)?.title ?? this.known.get(item.panel) ?? 'Plugin panel');
+      element.dataset.floating = item.id; element.setAttribute('role', 'dialog'); element.setAttribute('aria-label', item.panel==='video'?'Viewport':this.definitions.get(item.panel)?.title ?? this.known.get(item.panel) ?? 'Plugin panel');
       element.style.zIndex = String(20 + windows.length);
       element.onpointerdown = () => { element.style.zIndex = String(++this.top); };
       const header = document.createElement('header'); header.className = 'floating-header';
-      const title = document.createElement('span'); title.textContent = this.definitions.get(item.panel)?.title ?? this.known.get(item.panel) ?? 'Plugin panel';
+      const title = document.createElement('span'); title.textContent = item.panel==='video'?'Viewport':this.definitions.get(item.panel)?.title ?? this.known.get(item.panel) ?? 'Plugin panel';
       header.append(title, button('×', 'Hide panel', () => this.toggle(item.id)));
       const content = this.view(viewId, item.panel, used), grip = document.createElement('div'); grip.className = 'window-resize'; grip.setAttribute('aria-label', 'Resize panel');
       this.geometry(element, item);

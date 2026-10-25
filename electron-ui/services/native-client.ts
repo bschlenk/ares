@@ -1,8 +1,13 @@
+import { validObserverSample, type ObserverSample } from './observer-contracts.js';
 import type { Readable, Writable } from 'node:stream';
 import { decodeReply, encodeRequest, ServiceError, type SessionClient, type SessionIdentity, type ServiceMethod, type ServiceParams, type ServiceResult, type SessionReply } from './contracts.js';
 
 /** One native process connection. Bounded, correlated requests; never retries mutations. */
 export class NativeSessionClient implements SessionClient {
+  onObserverSample?:(sample:ObserverSample)=>void;
+  lastResponseAt?:string;
+  lastFailure?:{at:string;message:string};
+  health(){return {connected:!this.closed,last_response_at:this.lastResponseAt,last_error:this.lastFailure,pending:[...this.pending].map(([id,p])=>({id,method:p.method})),observation:'cached'};}
   private nextId = 0;
   private buffer = '';
   private closed = false;
@@ -17,7 +22,9 @@ export class NativeSessionClient implements SessionClient {
         while ((end = this.buffer.indexOf('\n')) >= 0) {
           if (end > 196608) throw new ServiceError('reply_too_large');
           const line = this.buffer.slice(0, end); this.buffer = this.buffer.slice(end + 1);
-          const id = JSON.parse(line)?.id;
+          const message=JSON.parse(line);
+          if(message?.event==='observer_sample'){if(!validObserverSample(message)||message.session!==this.identity.session)throw new ServiceError('invalid_observer_event');this.onObserverSample?.(message);continue;}
+          const id = message?.id;
           const waiting = this.pending.get(id);
           if (!waiting) throw new ServiceError('unexpected_reply');
           const reply = decodeReply(line, waiting.method);
@@ -25,6 +32,7 @@ export class NativeSessionClient implements SessionClient {
           this.pending.delete(reply.id); clearTimeout(waiting.timer);
           // Errors may report a new reset epoch. Do not replay the rejected request.
           this.identity = { session: reply.session, epoch: reply.epoch };
+          this.lastResponseAt=new Date().toISOString();
           waiting.resolve(reply);
         }
         if (this.buffer.length > 196608) throw new ServiceError('reply_too_large');
@@ -48,7 +56,7 @@ export class NativeSessionClient implements SessionClient {
     let wire: string;
     try { wire = encodeRequest(id, identity, method, params, owner); } catch (error) { return Promise.reject(error); }
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => this.fail(new ServiceError('request_timeout')), this.timeoutMs);
+      const timer = setTimeout(() => this.fail(new ServiceError('request_timeout',{component:'native',method,request_id:id,reason:'response_deadline_exceeded',observation:'no_response'})), this.timeoutMs);
       this.pending.set(id, { method, resolve: reply => resolve(reply as SessionReply<ServiceResult<M>>), reject, timer });
       this.input.write(wire, error => { if (error) this.fail(error); });
     });
@@ -57,6 +65,7 @@ export class NativeSessionClient implements SessionClient {
   private fail(error: Error, notify = true): void {
     if (this.closed) return;
     this.closed = true;
+    this.lastFailure={at:new Date().toISOString(),message:error.message};
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); }
     this.pending.clear();
     if (notify) this.onFailure(error);

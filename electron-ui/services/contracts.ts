@@ -67,8 +67,14 @@ export interface SessionReply<Result = SessionStatus> extends SessionIdentity {
 export interface SessionClient {
   request<M extends ServiceMethod>(method: M, identity?: SessionIdentity, params?: ServiceParams<M>, owner?: string): Promise<SessionReply<ServiceResult<M>>>;
 }
+export interface ServiceErrorContext {component:'app'|'native';reason:'response_deadline_exceeded';method:string;request_id:string;observation:'no_response'}
+export function validErrorContext(p:any):p is ServiceErrorContext {
+  return !!p&&['app','native'].includes(p.component)&&p.reason==='response_deadline_exceeded'&&p.observation==='no_response'&&typeof p.method==='string'&&/^[A-Za-z0-9_.:/-]{1,96}$/.test(p.method)&&typeof p.request_id==='string'&&/^[A-Za-z0-9_-]{1,64}$/.test(p.request_id)&&Object.keys(p).length===5;
+}
 export class ServiceError extends Error {
-  constructor(public readonly code: string) { super(code); this.name = 'ServiceError'; }
+  constructor(public readonly code: string,public readonly context?:ServiceErrorContext) {
+    super(code+(context?` (component=${context.component} method=${context.method} request=${context.request_id} reason=${context.reason} observation=${context.observation})`:''));this.name='ServiceError';
+  }
 }
 const token = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 const integer = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
@@ -225,6 +231,7 @@ export function decodeReply<M extends ServiceMethod = 'session.status'>(line: st
     if (method === 'script.observerStart' || method === 'scripts.observe') valid = integer(s?.observer_id) && s.observer_id>0;
     if (method === 'script.prepare' || method === 'script.observerPrepare') valid = s?.ready === true;
     if (method === 'script.write' || method === 'script.observerWrite') valid = s?.written === true;
+    if (method === 'script.ack') valid = s?.released===true;
     if (method === 'script.read' || method === 'script.observerRead') valid = !!s && integer(s.operation_id) && typeof s.hex === 'string' && /^(?:[0-9a-f]{2}){0,16384}$/.test(s.hex) && integer(s.bytes) && s.bytes<=4194304 && typeof s.error==='string' && Array.isArray(s.logs);
     if (method === 'scripts.run' || method === 'script.start') valid = !!s && integer(s.operation_id) && s.operation_id>0 && ['running','done'].includes(s.state) && s.kind==='script' && integer(s.epoch) && typeof s.stop_reason==='string';
     if (method === 'execution.release') valid = !!s && s.released === true;
