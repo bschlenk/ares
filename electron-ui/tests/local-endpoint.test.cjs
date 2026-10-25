@@ -45,7 +45,7 @@ test('fragmented handshake and stale connection requests fail before touching th
     await once(socket, 'connect');
     let buffer = ''; const replies = [];
     socket.on('data', chunk => { buffer += chunk; let index; while ((index = buffer.indexOf('\n')) >= 0) { replies.push(JSON.parse(buffer.slice(0, index))); buffer = buffer.slice(index + 1); } });
-    const hello = JSON.stringify({ protocol: 1, type: 'hello', id: 'hello', instance: host.instance, token: info.token }) + '\n';
+    const hello = JSON.stringify({ protocol: 1, type: 'hello', id: 'hello', instance: host.instance, token: info.token, schema_id:require('../dist/services/build-info.js').buildInfo().schema_id }) + '\n';
     socket.write(hello.slice(0, 9)); socket.write(hello.slice(9));
     for (let i = 0; i < 100 && !replies.length; i++) await sleep(5);
     assert.equal(replies[0]?.ok, true);
@@ -122,4 +122,15 @@ test('native timeout context survives authenticated local transport without chan
  const backend={request:async()=>{throw new ServiceError('request_timeout',context);}};const host=new LocalServiceHost(backend);const file=await host.listen(directory);const client=new LocalServiceClient(file,host.instance);
  try{await assert.rejects(client.request('session.status'),e=>{assert.equal(e.code,'request_timeout');assert.deepEqual(e.context,context);assert.match(e.message,/component=native/);return true;});}
  finally{client.close();await host.close();fs.rmSync(directory,{recursive:true,force:true});}
+});
+
+test('old live adapters are rejected at handshake before any mutation, with app provenance',async()=>{
+ await fixture(async({host,file,writes})=>{
+  const info=JSON.parse(fs.readFileSync(file));
+  for(const schema_id of [undefined,'old-schema']){
+   const socket=net.createConnection(info.endpoint);socket.on('error',()=>{});await once(socket,'connect');
+   const reply=once(socket,'data');socket.write(JSON.stringify({protocol:1,type:'hello',id:'hello',instance:host.instance,token:info.token,schema_id,build_id:'old-adapter'})+'\n');
+   const result=JSON.parse((await reply)[0]);assert.equal(result.error,'adapter_stale');assert.equal(result.adapter_build,'old-adapter');assert(result.app_build.schema_id);assert.match(result.instructions,/Restart/);assert.equal(writes(),0);socket.destroy();
+  }
+ });
 });

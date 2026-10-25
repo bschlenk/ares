@@ -1,3 +1,5 @@
+import { buildInfo } from './build-info.js';
+import { OwnerLeases } from './owner-leases.js';
 import {readWatchdog} from './watchdog.js';
 import { spawn, type ChildProcess } from 'node:child_process'
 import net from 'node:net'
@@ -119,6 +121,7 @@ export async function connectionInstance(file: string): Promise<string> {
 }
 /** Opt-in, private local endpoint. No renderer-owned backend and no TCP listener. */
 export class LocalServiceHost {
+  private leases:OwnerLeases
   readonly instance = randomUUID()
   private server = net.createServer((socket) => this.accept(socket))
   private sockets = new Set<net.Socket>()
@@ -129,7 +132,7 @@ export class LocalServiceHost {
   constructor(
     private client: SessionClient,
     private manage?: (params: any) => Promise<unknown>,
-  ) {}
+  ) {this.leases=new OwnerLeases(client);}
   async listen(directory = defaultServiceDirectory(), name?: string, lockExecutable?: string): Promise<string> {
     if (process.platform === 'win32')
       throw new ServiceError('unsupported_platform')
@@ -208,6 +211,7 @@ export class LocalServiceHost {
     } catch (e) { await this.close(); throw e; }
   }
   async close(): Promise<void> {
+    this.leases.close();
     if (this.claimFile && this.claimLock) {
       try { if (await connectionInstance(this.claimFile) === this.instance) await fs.rm(this.claimFile); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
     }
@@ -229,6 +233,7 @@ export class LocalServiceHost {
     this.sockets.add(socket)
     const connection = randomUUID(),
       seen = new Set<string>()
+    let selectedLease:string|undefined;
     let authenticated = false,
       inFlight = 0,
       lastLocalId = 0
@@ -275,11 +280,16 @@ export class LocalServiceHost {
           error('unauthorized', true)
           return
         }
+        const appBuild=buildInfo();
+        if(message.schema_id!==appBuild.schema_id||!message.schema_id){
+          send(socket,{protocol:1,type:'hello',id:message.id,instance:this.instance,ok:false,error:'adapter_stale',app_build:appBuild,adapter_build:message.build_id??'unknown',instructions:'Restart the MCP adapter from the rebuilt app; requests were not executed.'});socket.end();return;
+        }
         authenticated = true
         clearTimeout(helloTimeout)
         send(socket, {
           protocol: 1,
           type: 'hello',
+          app_build:buildInfo(),
           id: message.id,
           instance: this.instance,
           connection,
@@ -323,7 +333,7 @@ export class LocalServiceHost {
       }
       if (message.method === 'plugin.manage') {
         const resultReader=(this.client as SessionClient & {readScriptResult?:(p:any)=>unknown}).readScriptResult;
-        const manage=message.params?.operation==='script_result'&&resultReader ? async(p:any)=>resultReader.call(this.client,p) : this.manage;
+        const manage=message.params?.operation==='owner_lease' ? async(p:any)=>{const result=this.leases.manage(p);if(p.action==='use')selectedLease=p.lease_id;return result;} : message.params?.operation==='script_result'&&resultReader ? async(p:any)=>resultReader.call(this.client,p) : this.manage;
         if (!manage) {
           error('unavailable')
           return
@@ -387,9 +397,11 @@ export class LocalServiceHost {
         error('invalid_request')
         return
       }
+      let owner:string=connection;
+      try{if(selectedLease)owner=this.leases.owner(selectedLease);}catch(e){error((e as ServiceError).code);return;}
       ++inFlight
       void this.client
-        .request(message.method, message.identity, message.params, connection)
+        .request(message.method, message.identity, message.params, owner)
         .then(
           (reply) => {
             if (!socket.destroyed)
@@ -510,6 +522,7 @@ export class LocalServiceClient implements SessionClient {
             id: 'hello',
             instance: selected,
             token: info.token,
+            schema_id:buildInfo().schema_id,build_id:buildInfo().build_id,
           }),
         )
         lines(socket, (message) => {
@@ -524,11 +537,12 @@ export class LocalServiceClient implements SessionClient {
               message.instance !== selected ||
               !token(message.connection)
             ) {
-              const error = new ServiceError(message.error || 'wrong_instance')
+              const error = new ServiceError(message.error==='adapter_stale'?`adapter_stale: adapter=${buildInfo().build_id} schema=${buildInfo().schema_id}; app=${message.app_build?.build_id??'unknown'} schema=${message.app_build?.schema_id??'unknown'}. Restart the MCP adapter from the rebuilt app; no request was executed.`:message.error || 'wrong_instance')
               socket.destroy()
               reject(error)
               return
             }
+            if(message.app_build?.schema_id!==buildInfo().schema_id){const error=new ServiceError('adapter_stale: App schema differs or is unavailable. Restart the app and MCP adapter from the same build; no request was executed.');socket.destroy();reject(error);return;}
             this.connection = message.connection
             ready = true
             resolve()
