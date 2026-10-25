@@ -17,9 +17,9 @@ export class InputClips {
    return result;
   }
   if(method==='artifact.inputExport'){
-   const status=await request('n64.demo.status');if(status.state!=='ready'||!status.complete||status.overflow||!status.events)throw new ServiceError('input_clip_incomplete');
+   const status=await request('n64.demo.status');if(status.state!=='ready'||!status.complete||status.overflow||!status.events||!status.duration_frames)throw new ServiceError('input_clip_incomplete');
    const events:InputEvent[]=[];
-   for(let offset=0;offset<status.events;offset+=128){const page=await request('n64.demo.read',{offset,length:128});if(page.status.job_id!==status.job_id||page.status.state!=='ready')throw new ServiceError('stale_input_clip');events.push(...page.events);}
+   for(let offset=0;offset<status.events;offset+=128){const page=await request('n64.demo.read',{offset,length:128});if(page.status.job_id!==status.job_id||page.status.state!=='ready')throw new ServiceError('stale_input_clip');if(page.events.some((e:InputEvent)=>e.frame>=status.duration_frames))throw new ServiceError('input_clip_incomplete');events.push(...page.events);}
    const clip={format:'ares-input-clip',version:1,system:'Nintendo 64',status,start_state:this.states.get(status.job_id)??null,events};
    const guard=()=>{if(!current())throw new ServiceError('disconnected');};
    return publishArtifact(p.path,false,async write=>{await write(JSON.stringify(clip)+'\n');const final=await request('n64.demo.read',{offset:status.events,length:1});if(final.status.job_id!==status.job_id||final.status.state!=='ready')throw new ServiceError('stale_input_clip');},guard,24*1024*1024);

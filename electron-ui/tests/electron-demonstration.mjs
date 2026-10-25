@@ -14,7 +14,7 @@ app.whenReady().then(async()=>{try{
  await until(()=>js("!document.querySelector('#demonstration-banner').hidden && document.querySelector('#demonstration-banner').textContent.includes('Show an attack')"));
  assert.equal(await js("document.querySelector('#demonstration-banner button[data-method=\"n64.demo.start\"]').hidden"),false);
  await js("document.querySelector('#demonstration-banner button[data-method=\"n64.demo.start\"]').click()");await until(async()=>(await request('n64.demo.status')).state==='recording');
- await until(()=>js("!document.querySelector('#demonstration-banner button[data-method=\"n64.demo.stop\"]').hidden"));
+ await until(()=>js("document.querySelector('#demonstration-banner').textContent.includes('Recording controller input')"));await sleep(100);
  await window.webContents.capturePage().then(image=>fs.writeFileSync('/tmp/ares-demonstration-preview.png',image.toPNG()));
  await js("document.querySelector('#demonstration-banner button[data-method=\"n64.demo.stop\"]').click()");await until(async()=>(await request('n64.demo.status')).state==='ready');
  await request('artifact.inputRequest',{prompt:'Cancel this demonstration',port:1,source:'human',maxFrames:600,timeoutMs:20000});await until(()=>js("document.querySelector('#demonstration-banner').textContent.includes('Cancel this')"));

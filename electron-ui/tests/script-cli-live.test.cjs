@@ -1,7 +1,7 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const {spawn}=require('node:child_process');const {once}=require('node:events');const fs=require('node:fs');const path=require('node:path');
 const {NativeSessionClient}=require('../dist/services/native-client.js');const {SessionRouter}=require('../dist/services/session-router.js');const {LocalServiceHost}=require('../dist/services/local-endpoint.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-test('direct CLI uses discovery, preserves stdout JSON, writes output and owns SIGINT cancellation',{timeout:20000},async()=>{
+test('direct CLI uses discovery, preserves stdout JSON, writes output and owns SIGINT cancellation',{timeout:30000},async()=>{
  const dir=fs.mkdtempSync('/tmp/ares-script-cli-'),identity={session:'cli-test',epoch:1};
  const nativeProcess=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),['--synthetic','--paused','--silent','--save-dir',dir,'--control-session',identity.session],{stdio:['pipe','pipe','pipe','pipe']});nativeProcess.stdout.resume();nativeProcess.stderr.resume();const closed=once(nativeProcess,'close');
  const native=new NativeSessionClient(nativeProcess.stdin,nativeProcess.stdio[3],identity,()=>{});const router=new SessionRouter();router.attach(native);const host=new LocalServiceHost(router,async p=>p.operation==='script_result'?router.readScriptResult(p):({ready:true}));
@@ -25,11 +25,14 @@ test('direct CLI uses discovery, preserves stdout JSON, writes output and owns S
   const stopVideo=await cli(['call','video_stop','--path',path.join(dir,'leased.avi')],dir,lease).done;assert.equal(stopVideo.code,0,stopVideo.err);assert.equal(JSON.parse(stopVideo.out).frames,4);
   await sleep(2200);const expired=await cli(['call','emu_status'],dir,lease).done;assert.match(expired.err,/owner_lease_expired/);
   fs.writeFileSync(source,'export default async({frames})=>{await frames(200);return true}');const captured=await cli(['run','record.ts','--video','script.avi'],dir).done;assert.equal(captured.code,0,captured.err);const avi=fs.readFileSync(path.join(dir,'script.avi'));assert.equal(avi.toString('ascii',0,4),'RIFF');assert.equal(avi.readUInt32LE(48),200);
+  const failedVideo=path.join(dir,'failed.avi');fs.writeFileSync(source,'export default()=>{throw Error("video_failure")}');const rejectedVideo=await cli(['run','record.ts','--video',failedVideo],dir).done;assert.equal(rejectedVideo.code,1);assert(!fs.existsSync(failedVideo));
+  const existingVideo=fs.readFileSync(path.join(dir,'script.avi'));fs.writeFileSync(source,'export default async({frames})=>{await frames(1);return true}');const overwriteVideo=await cli(['run','record.ts','--video','script.avi'],dir).done;assert.equal(overwriteVideo.code,1);assert.match(overwriteVideo.err,/file_exists/);assert.deepEqual(fs.readFileSync(path.join(dir,'script.avi')),existingVideo);
+  const abandonedLease=JSON.parse((await cli(['call','owner_lease','--action','create','--seconds','1']).done).out).lease_id;const abandonedStart=await cli(['call','video_start'],dir,abandonedLease).done;assert.equal(abandonedStart.code,0,abandonedStart.err);assert.equal((await native.request('video.record.status')).result.available,true);await sleep(1200);assert.equal((await native.request('video.record.status')).result.available,false,'abandoned durable recording must be revoked at expiry');
   const invalid=await cli(['call','run_frames','--n','-1']).done;assert.equal(invalid.code,1);assert.equal(invalid.out,'');assert.match(invalid.err,/too_small/);
   const failed=await cli(['call','read_memory','--region','missing','--addr','0','--length','1']).done;assert.equal(failed.code,1);assert.equal(failed.out,'');assert.match(failed.err,/unknown_region/);
-  fs.writeFileSync(source,'export default({frames})=>frames(1000000)');const interrupt=cli(['run',source]);
+  fs.writeFileSync(source,'export default({frames})=>frames(1000000)');const interrupt=cli(['run',source,'--video',path.join(dir,'cancelled.avi')]);
   let operation;for(let i=0;i<200;i++){const s=await native.request('session.status');if(s.result?.operation_id){operation=s.result.operation_id;break;}await sleep(5)}assert(operation);
-  interrupt.child.kill('SIGINT');const cancelled=await interrupt.done;assert.equal(cancelled.code,130,cancelled.err);assert.equal(cancelled.out,'');assert.match(cancelled.err,/cancelled|script_interrupted/);
+  interrupt.child.kill('SIGINT');const cancelled=await interrupt.done;assert.equal(cancelled.code,130,cancelled.err);assert.equal(cancelled.out,'');assert.match(cancelled.err,/cancelled|script_(?:video_)?interrupted/);assert(!fs.existsSync(path.join(dir,'cancelled.avi')));
   const final=await native.request('execution.status',undefined,{operationId:operation});assert.equal(final.result.state,'done');
   const external=cli(['run',source]);let running;
   for(let i=0;i<200;i++){const s=await native.request('session.status');if(s.result?.operation_id&&s.result.operation_id!==operation){running=s.result.operation_id;break;}await sleep(5)}assert(running);

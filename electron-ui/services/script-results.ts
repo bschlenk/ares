@@ -6,6 +6,11 @@ export class ScriptResults {
   private expired=new Set<string>();
   private released=new Set<string>();
   private reservations=new Set<string>();
+  list(offset=0,limit=8){
+    if(!Number.isSafeInteger(offset)||offset<0||offset>16||!Number.isSafeInteger(limit)||limit<1||limit>8)throw new ServiceError('invalid_request');
+    this.prune();const values=[...this.values.values()];
+    return {results:values.slice(offset,offset+limit).map(v=>({result_handle:v.handle,operation_id:v.operation_id,...v.identity,bytes:v.data.length,consumed:v.consumed??false,expires_at:new Date(v.expires).toISOString()})),total:values.length,pending:this.reservations.size,retained_bytes:this.bytes,max_results:16,max_bytes:16*1024*1024,reservation_bytes:4*1024*1024,retention_seconds:900,next_expiry_at:values.length?new Date(Math.min(...values.map(v=>v.expires))).toISOString():null};
+  }
   consume(handle:string){this.read({handle});this.values.get(handle)!.consumed=true;return {consumed:true};}
   discard(handle:string){if(this.reservations.delete(handle)){this.released.add(handle);while(this.released.size>64)this.released.delete(this.released.values().next().value!);return {released:true};}return this.release(handle);}
   abort(handle:string){this.reservations.delete(handle);}

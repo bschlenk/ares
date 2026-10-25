@@ -10,12 +10,13 @@ struct DemonstrationService {
   std::vector<Event> events;
   std::string owner,state="idle",reason,prompt,source="human",rom,session,stateHash;
   uint64_t id=0,nextId=1,epoch=0,start=0,end=0,limit=600,duration=0,cursor=0,port=1;
-  bool complete=false,overflow=false,importing=false;
+  bool complete=false,overflow=false,importing=false,stopPending=false;
+  uint64_t stopFrame=0;
   Clock::time_point deadline;
   InputService* input=nullptr;ExecutionService* execution=nullptr;bool* paused=nullptr;
   bool active()const{return state=="armed"||state=="recording"||state=="replaying";}
   void finish(const std::string& why,uint64_t f){
-    const bool replay=state=="replaying";end=f;
+    const bool replay=state=="replaying";end=f;stopPending=false;
     if(state=="recording")duration=f>=start?f-start:0;
     complete=(why=="requested"||why=="complete")&&!overflow;reason=why;state=complete?"ready":"cancelled";
     if(replay){input->releaseOwner(owner);if(execution->active&&execution->active->owner==owner&&execution->active->kind=="input_replay")execution->complete(why=="complete"?"target_reached":why,*paused);}
@@ -25,6 +26,7 @@ struct DemonstrationService {
     if(!active())return;
     if(e!=epoch){finish("epoch_changed",f);return;}
     if(Clock::now()>=deadline){finish("timeout",f);return;}
+    if(state=="recording"&&stopPending&&f>stopFrame){finish("requested",f);*paused=true;return;}
     if(state=="recording"&&f-start>=limit){overflow=true;finish("frames_limit",f);}
     if(state=="replaying"&&f-start>=duration)finish(cursor==events.size()?"complete":"replay_diverged",f);
   }
@@ -50,7 +52,7 @@ struct DemonstrationService {
       uint64_t count,ms,p;std::string text;
       if(a.size()!=6||!ExecutionService::number(a[0],count)||!count||count>36000||!ExecutionService::number(a[1],ms)||!ms||ms>600000||!ExecutionService::number(a[2],p)||p<1||p>4||(a[3]!="human"&&a[3]!="merged")||!unhex(a[4],text)||(a[5]!="-"&&(a[5].size()!=64||a[5].find_first_not_of("abcdef0123456789")!=std::string::npos)))return {"invalid_request",{}};
       if(active()||execution->active&&(execution->active->owner!=who||execution->active->kind!="script")||execution->reservation&&execution->reservation->owner!=who||input->hasOverrides())return {"busy",{}};
-      owner=who;id=nextId++;epoch=e;start=end=f;duration=cursor=0;port=p;limit=count;source=a[3];prompt=text;rom=hash;session=nativeSession;stateHash=a[5]=="-"?"":a[5];state="armed";complete=overflow=importing=false;reason.clear();events.clear();deadline=Clock::now()+std::chrono::milliseconds(ms);*paused=true;return {{},status()};
+      owner=who;id=nextId++;epoch=e;start=end=f;duration=cursor=0;port=p;limit=count;source=a[3];prompt=text;rom=hash;session=nativeSession;stateHash=a[5]=="-"?"":a[5];state="armed";complete=overflow=importing=stopPending=false;reason.clear();events.clear();deadline=Clock::now()+std::chrono::milliseconds(ms);*paused=true;return {{},status()};
     }
     if(method!="n64.demo.importBegin"&&who!=owner&&who!="ui")return {"wrong_owner",{}};
     if(method=="n64.demo.start"){
@@ -60,6 +62,7 @@ struct DemonstrationService {
     }
     if(method=="n64.demo.stop"||method=="n64.demo.cancel"){
       if(!a.empty()||!active())return {"invalid_request",{}};
+      if(method=="n64.demo.stop"&&state=="recording"&&!execution->atBoundary){if(!stopPending){stopPending=true;stopFrame=f;}return {{},status()};}
       finish(method=="n64.demo.stop"&&state=="recording"?"requested":"cancelled",f);*paused=true;return {{},status()};
     }
     if(method=="n64.demo.read"){
@@ -79,7 +82,7 @@ struct DemonstrationService {
     if(method=="n64.demo.importCommit"){if(!a.empty()||!importing||events.empty())return {"invalid_request",{}};importing=false;complete=true;overflow=false;state="ready";return {{},status()};}
     if(method=="n64.demo.replay"){
       if(!a.empty()||state!="ready"||!complete||events.empty()||!duration||rom!=hash)return {"invalid_clip",{}};
-      if(input->hasOverrides()||!execution->atBoundary||(execution->active&&(execution->active->owner!=who||execution->active->kind!="script"))||execution->reservation&&execution->reservation->owner!=who)return {"busy",{}};
+      if(input->hasOverrides()||(execution->active&&(execution->active->owner!=who||execution->active->kind!="script"))||execution->reservation&&execution->reservation->owner!=who)return {"busy",{}};
       if(!execution->active){auto op=execution->execute("execution.runFrames",{std::to_string(duration),"600000"},who,e,*paused);if(!op.error.empty())return op;execution->active->kind="input_replay";}
       input->pending[port-1]={who,0,0,0,e};input->service(e,f,Clock::now(),true);state="replaying";start=f;epoch=e;cursor=0;deadline=Clock::now()+std::chrono::minutes(10);return {{},status()};
     }

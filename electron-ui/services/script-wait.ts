@@ -30,8 +30,8 @@ export async function waitForScript(client:LocalServiceClient, started:Execution
       await new Promise(resolve=>setTimeout(resolve,20));
       final=await scriptStatus(client,started.operation_id,identity);
     }
-    if((final as any).script_result?.state==='failed')throw new ServiceError('script_result_failed');
-    if((final as any).script_output?.state==='failed')throw new ServiceError('script_output_failed');
+    if((final as any).script_result?.state==='failed')throw new ServiceError('script_result_failed: '+((final as any).script_result.error??'transfer failed'));
+    if((final as any).script_output?.state==='failed')throw new ServiceError('script_output_failed: '+((final as any).script_output.error??'publication failed'));
     return final;
   }finally{options.signal?.removeEventListener('abort',cancel);}
 }

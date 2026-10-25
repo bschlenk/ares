@@ -43,7 +43,7 @@ export class SessionRouter {
   private scripts = new ScriptJobs(error=>this.diagnose('scripts.run',error));
   private inputClips=new InputClips();
   health() {return this.client?.health()??{connected:false,observation:'cached'};}
-  readScriptResult(params:any) {if(params.discard===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.discard(params.handle);}if(params.consumed===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.consume(params.handle);}if(params.release===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.release(params.handle);}return this.scripts.readResult(params,this.identity);}
+  readScriptResult(params:any) {if(params.list===true)return this.scripts.results.list(params.offset,params.limit);if(params.discard===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.discard(params.handle);}if(params.consumed===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.consume(params.handle);}if(params.release===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.release(params.handle);}return this.scripts.readResult(params,this.identity);}
   private memoryArtifacts = new MemoryArtifacts();
   private batches = new Batches();
   private stateLoading = new StateLoading();

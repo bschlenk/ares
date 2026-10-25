@@ -962,7 +962,9 @@ interval at frame zero in the new owned epoch. External loads/reset invalidate i
 `demonstration_request` arms a job and pauses the game. The in-app nonmodal banner
 shows its prompt and Start/Stop/Cancel buttons; requesting does not start the
 recorded interval. `demonstration_start` begins and resumes; `demonstration_stop`
-pauses and completes it. Status polling is nonblocking. Cancellation, timeout,
+completes it at the current VI boundary, or requests the next boundary before
+pausing when called mid-frame. Poll until status is `ready` before export.
+Status polling is nonblocking. Cancellation, timeout,
 reset/load, owner release and replay takeover invalidate the active interval.
 A lease bounds abandonment even after the requesting CLI exits.
 
@@ -1013,3 +1015,9 @@ A request may return from its script to await the human's later Start interactio
 
 Physical keyboard and physical gamepad demonstration/replay are manual acceptance
 gates; automated synthetic traces and UI button tests do not establish them.
+
+`script_results` lists retained handles in pages of eight with consumption state,
+expiry, pending reservations and byte/slot limits. On backpressure, explicitly
+release an unneeded unconsumed handle or wait for its reported expiry. CLI
+cancellation also discards a pending result before transfer, so a late completion
+cannot silently retain it. Script output failures include the publication reason.
