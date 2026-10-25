@@ -11,8 +11,9 @@ using namespace ares::Nintendo64;
 static void check(bool value,const char* message){if(!value){std::fprintf(stderr,"FAIL %s\n",message);std::exit(1);}}
 static std::vector<uint8_t> readFixture(const std::filesystem::path& path){std::ifstream in(path,std::ios::binary);check(bool(in),"fixture file exists");return {std::istreambuf_iterator<char>(in),{}};}
 static int32_t fixed(const RspMatrixBytes& raw,unsigned n){return int32_t((uint32_t(raw[n*2])<<24)|(uint32_t(raw[n*2+1])<<16)|(uint32_t(raw[32+n*2])<<8)|raw[33+n*2]);}
+#include "task-targets-fixture.hpp"
 int main(int argc,char**argv){
- check(argc==2||argc==3,"fixture directory argument");const std::string yieldMode=argc==3?argv[2]:"";const bool exerciseYield=!yieldMode.empty();const auto code=readFixture(std::filesystem::path(argv[1])/"code.bin"),data=readFixture(std::filesystem::path(argv[1])/"data.bin");
+ check(argc==2||argc==3,"fixture directory argument");const std::string yieldMode=argc==3?argv[2]:"";const bool exerciseYield=yieldMode.rfind("--yield",0)==0;const auto code=readFixture(std::filesystem::path(argv[1])/"code.bin"),data=readFixture(std::filesystem::path(argv[1])/"data.bin");
  ares::Platform platform;ares::platform=&platform;auto root=std::make_shared<ares::Core::Object>("Matrix fixture");
  std::vector<uint8_t> hidden(2*1024*1024);rdram.hidden.data=hidden.data();cpu.load(root);cpu.power(false);rdram.ram.allocate(4*1024*1024);rdram.mapIdentity=1;
  #if defined(VULKAN)
@@ -142,6 +143,7 @@ int main(int argc,char**argv){
     check(!taskProvenance.find(replay)->pendingResume&&!taskProvenance.find(replay)->resumeVerified,"a consumed yield context cannot be replayed into a second logical resumption");
     std::printf("REPLAY_TASK_JSON %s\n",TaskService::execute({std::to_string(replay)},1,executionCoordinate.frame).json.c_str());rsp.writeWord(0x04040010,2,cpu);
   }
+  if(yieldMode=="--targets")verifyTaskTargets(jit);
   #if defined(VULKAN)
   vulkan.unload();
   #endif
