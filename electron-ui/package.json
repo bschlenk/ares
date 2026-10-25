@@ -37,7 +37,8 @@
     "test:controls": "npm run build && electron tests/electron-controls.mjs",
     "test:all": "node scripts/test-all.cjs",
     "test:matrix": "npm run build && node tests/kirby-matrix-live.cjs",
-    "test:skeleton": "npm run build && electron tests/electron-kirby-skeleton.mjs"
+    "test:skeleton": "npm run build && electron tests/electron-kirby-skeleton.mjs",
+    "test:feedback-cost": "npm run build && node tests/kirby-feedback-cost.cjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
