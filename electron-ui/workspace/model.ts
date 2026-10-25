@@ -29,7 +29,8 @@ export function validateLayout(input: unknown): WorkspaceLayout {
   };
   area(value.root, 0);
   for (const item of value.floating) {
-    if (!object(item, ['id', 'panel', 'mode', 'open', 'x', 'y', 'width', 'height', 'shortcut', 'interactive']) || !validPanel(item.panel) || item.panel === 'video' || item.panel === 'empty' || !['overlay', 'popup'].includes(String(item.mode)) || typeof item.open !== 'boolean' || typeof item.interactive !== 'boolean' || !validShortcut(item.shortcut)) throw new Error('invalid_workspace_overlay');
+    if (!object(item, ['id', 'panel', 'mode', 'open', 'x', 'y', 'width', 'height', 'shortcut', 'interactive']) || !validPanel(item.panel) || item.panel === 'empty' || !['overlay', 'popup'].includes(String(item.mode)) || typeof item.open !== 'boolean' || typeof item.interactive !== 'boolean' || !validShortcut(item.shortcut)) throw new Error('invalid_workspace_overlay');
+    if(item.panel==='video')++videos;
     id(item.id);
     if (item.shortcut && shortcuts.has(item.shortcut)) throw new Error('duplicate_workspace_shortcut');
     shortcuts.add(item.shortcut);

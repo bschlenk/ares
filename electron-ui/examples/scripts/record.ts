@@ -6,7 +6,7 @@ export default async function ({ args, emu, mem, input, frames }: any) {
   const rows = [];
   for (let frame = 0; frame < args.frames; frame++) {
     const state = [...(args.inputs ?? [])].reverse().find(change => change.frame <= frame);
-    if (state) input(state.state);
+    if (state) input.set(state.state.port ?? 1, state.state);
     await frames(1);
     rows.push({ frame: emu.frame, ...decode(mem, args.fields, args.clips) });
   }

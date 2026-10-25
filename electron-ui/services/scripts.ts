@@ -1,3 +1,4 @@
+import { ScriptResults } from './script-results.js';
 import { constants } from 'node:fs';
 import { publishArtifact } from './artifact-writer.js';
 import fs from 'node:fs/promises';
@@ -90,17 +91,31 @@ export async function startScript(client:NativeSessionClient,identity:SessionIde
   const status=await request('session.status',undefined);
   const config=await request('runtime.settings',undefined);
   for(let offset=0;offset<data.length;offset+=1024)await request('script.write',{hex:data.subarray(offset,offset+1024).toString('hex')});
-  const op=await request('script.start',{timeoutMs:p.timeoutMs,maxFrames:p.maxFrames});
+  const op=await request('script.start',{timeoutMs:p.timeoutMs,maxFrames:p.maxFrames,...(observe?{every:p.every??4,boundary:p.boundary??'vi',push:p.push??false}:{})});
   return {...op,script_metadata:{rom_sha256:status.game?.sha256??null,runtime_settings_sha256:createHash('sha256').update(JSON.stringify(config)).digest('hex'),source_sha256:prepared.sha256,module_sha256:prepared.hashes,args_sha256:createHash('sha256').update(JSON.stringify(p.args)).digest('hex')}};
 }
 
 /** File work runs in main; the native job retains the reservation while suspended. */
 export class ScriptJobs {
+  readonly results = new ScriptResults();
   private generation=0;
+  readonly publications = new Map<number, Record<string,unknown>>();
+  readonly lineages = new Map<number, {session:string;epochs:number[]}>();
+  metadata(id:number) { const lineage=this.lineages.get(id);return {...(lineage?{script_lineage:lineage}:{}),...(this.publications.has(id)?{script_result:this.publications.get(id)}:{})}; }
   readonly outputs = new Map<number, Record<string, unknown>>();
   private jobs = new Map<string, { cancelled: boolean; id?: number }>();
+  async readResult(params:any,scope?:SessionIdentity) {
+    const until=Date.now()+2000;
+    for(;;){
+      const entries=[...this.publications].filter(([id,p])=>params.handle?p.result_handle===params.handle:scope?.session===this.lineages.get(id)?.session&&(!params.operation_id||id===params.operation_id));
+      const pending=entries.at(-1)?.[1];
+      if(pending?.state!=='pending')return this.results.read(params,scope);
+      if(Date.now()>=until)throw new ServiceError('script_result_pending');
+      await new Promise(resolve=>setTimeout(resolve,10));
+    }
+  }
   release(owner:string) { const job=this.jobs.get(owner);if(job)job.cancelled=true; }
-  close() { ++this.generation;for(const job of this.jobs.values())job.cancelled=true;this.jobs.clear();this.outputs.clear(); }
+  close() { ++this.generation;for(const job of this.jobs.values())job.cancelled=true;this.jobs.clear();this.outputs.clear();this.lineages.clear(); }
   async start(client:NativeSessionClient,invoke:import('./contracts.js').SessionClient,identity:SessionIdentity,p:ScriptRunParams,owner:string,current:()=>boolean) {
     const generation=this.generation;
     const previous=this.jobs.get(owner);
@@ -110,41 +125,57 @@ export class ScriptJobs {
       if(!status.ok||status.result?.state!=='done')throw new ServiceError('busy');
       previous.cancelled=true;
     }
+    const handle=this.results.reserve();
     const job:{cancelled:boolean;id?:number}={cancelled:false};this.jobs.set(owner,job);
     try {
       const op=await startScript(client,identity,p,owner,()=>current()&&!job.cancelled);job.id=op.operation_id;
+      this.publications.set(op.operation_id,{state:'pending',result_handle:handle});
+      while(this.publications.size>32)this.publications.delete(this.publications.keys().next().value!);
+      this.lineages.set(op.operation_id,{session:identity.session,epochs:[identity.epoch]});
+      while(this.lineages.size>32)this.lineages.delete(this.lineages.keys().next().value!);
       if(generation!==this.generation){await client.request('execution.cancel',client.identity,{operationId:op.operation_id},owner).catch(()=>{});throw new ServiceError('native_host_disconnected');}
       if(p.outputPath)this.outputs.set(op.operation_id,{state:'pending',path:path.resolve(p.outputPath)});
       while(this.outputs.size>32)this.outputs.delete(this.outputs.keys().next().value!);
-      void this.drive(client,invoke,op.operation_id,p,owner,()=>current()&&!job.cancelled,generation).finally(()=>{if(this.jobs.get(owner)===job)this.jobs.delete(owner);});
-      return op;
-    } catch(error){if(this.jobs.get(owner)===job)this.jobs.delete(owner);throw error;}
+      void this.drive(client,invoke,op.operation_id,p,owner,current,generation,handle,()=>current()&&!job.cancelled).finally(()=>{this.results.abort(handle);if(this.jobs.get(owner)===job)this.jobs.delete(owner);});
+      return {...op,result_handle:handle,...this.metadata(op.operation_id)};
+    } catch(error){this.results.abort(handle);if(this.jobs.get(owner)===job)this.jobs.delete(owner);throw error;}
   }
-  private async drive(client:NativeSessionClient,invoke:import('./contracts.js').SessionClient,id:number,p:ScriptRunParams,owner:string,current:()=>boolean,generation:number) {
+  private async drive(client:NativeSessionClient,invoke:import('./contracts.js').SessionClient,id:number,p:ScriptRunParams,owner:string,current:()=>boolean,generation:number,handle:string,executionCurrent:()=>boolean) {
     const inputs=new Set((p.statePaths??[]).map(v=>path.resolve(v))),outputs=new Set((p.outputPaths??[]).map(v=>path.resolve(v)));
     const pending=async()=>{
-      if(!current())throw new ServiceError('script_interrupted');
+      if(!current()||!executionCurrent())throw new ServiceError('script_interrupted');
       const r=await client.request('script.pending',client.identity,undefined,owner);
       if(!r.ok||!r.result)throw new ServiceError(r.error??'invalid_reply');return r.result;
     };
     try {
       while(current()) {
-        const state=await pending();if(!state.running){
+        const completed=await client.request('execution.status',client.identity,{operationId:id},owner);
+        const ticket=!completed.ok?await client.request('script.read',client.identity,{offset:0,length:16384,operationId:id},owner):undefined;
+        if(!completed.ok&&!(ticket?.ok&&(ticket.result as any)?.complete))throw new ServiceError(completed.error??'invalid_reply');
+        if(completed.result?.state==='done'||(ticket?.result as any)?.complete){
+          const chunks:Buffer[]=[];let offset=0,page:any;
+          do {
+            const reply=await client.request('script.read',client.identity,{offset,length:16384,operationId:id},owner);
+            if(!reply.ok||!reply.result)throw new ServiceError(reply.error??'invalid_reply');
+            page=reply.result;const bytes=Buffer.from(page.hex,'hex');if(!bytes.length&&offset<page.bytes)throw new ServiceError('invalid_result_page');
+            chunks.push(bytes);offset+=bytes.length;
+          }while(offset<page.bytes);
+          const data=Buffer.concat(chunks);
+          const resultIdentity={session:this.lineages.get(id)?.session??client.identity.session,epoch:page.result_epoch??client.identity.epoch};
+          this.results.publish(handle,id,resultIdentity,data,page);
+          this.publications.set(id,{state:'committed',result_handle:handle});
+          await client.request('script.ack',client.identity,{operationId:id},owner);
           if(p.outputPath){
-            const completed=await client.request('execution.status',client.identity,{operationId:id},owner);
-            if(!completed.ok||completed.result?.stop_reason!=='script_done')throw new ServiceError('script_output_interrupted');
-            const identity={...client.identity};
-            const guard=()=>{if(!current()||client.identity.session!==identity.session||client.identity.epoch!==identity.epoch)throw new ServiceError('script_output_interrupted');};
-            const page=async(offset:number)=>{guard();const r=await client.request('script.read',identity,{offset,length:16384,operationId:id},owner);if(!r.ok||!r.result)throw new ServiceError(r.error??'invalid_reply');return r.result;};
+            if((page.stop_reason??completed.result?.stop_reason)!=='script_done')throw new ServiceError('script_output_interrupted');
+            const identity=resultIdentity;
+            const guard=()=>{if(!current()||!executionCurrent()||client.identity.session!==identity.session||client.identity.epoch!==identity.epoch)throw new ServiceError('script_output_interrupted');};
             const {artifactGuard}=await import('./artifact-guard.js');
-            const artifact=await artifactGuard.run(async()=>{await page(0);},()=>publishArtifact(p.outputPath!,false,async write=>{
-              let offset=0,total=0;do{const r=await page(offset);if(r.error)throw new ServiceError(r.error);const bytes=Buffer.from(r.hex,'hex');if(!bytes.length&&offset<r.bytes)throw new ServiceError('invalid_reply');await write(bytes);offset+=bytes.length;total=r.bytes;}while(offset<total);await write('\n');
-            },guard));
+            const artifact=await artifactGuard.run(async()=>{guard();},()=>publishArtifact(p.outputPath!,false,async write=>{await write(data);await write('\n');},guard));
             if(generation===this.generation)this.outputs.set(id,{state:'committed',...artifact});
           }
           return;
         }
-        const work=state.pending;
+        const work=(await pending()).pending;
         if(work) {
           let ok=true,value:unknown;
           try {
@@ -156,6 +187,10 @@ export class ScriptJobs {
               invoke.request('state.save',client.identity,{path:work.path,overwrite:false,metadata:true},owner):
               invoke.request('artifact.screenshot',client.identity,{path:work.path,inline:false,overwrite:false,source:'framebuffer',region:null,scale:1},owner));
             if(!reply.ok)throw new ServiceError(reply.error??'script_host_work_failed');
+            if(work.kind==='state_load') {
+              const lineage=this.lineages.get(id);
+              if(lineage&&lineage.session===reply.session&&!lineage.epochs.includes(reply.epoch))lineage.epochs.push(reply.epoch);
+            }
             // Native replies carry the new epoch following an intentional load.
             value={epoch:reply.epoch,committed:true,...(work.kind==='state_load'?{state_sha256:(reply.result as any)?.state_sha256}:{})};
           } catch(error){ok=false;value=error instanceof Error?error.message:String(error);}
@@ -164,6 +199,8 @@ export class ScriptJobs {
         } else await new Promise(resolve=>setTimeout(resolve,10));
       }
     } catch(error) {
+      this.results.abort(handle);
+      if(this.publications.get(id)?.state!=='committed')this.publications.set(id,{state:'failed',result_handle:handle,error:error instanceof Error?error.message:String(error)});
       if(p.outputPath&&generation===this.generation)this.outputs.set(id,{state:'failed',error:error instanceof Error?error.message:String(error)});
       await client.request('execution.cancel',client.identity,{operationId:id},owner).catch(()=>{});
     }

@@ -9,14 +9,16 @@
 // Native immutable pixels, independent of video credits and renderer lifetime.
 struct FrameService {
   using Clock = std::chrono::steady_clock;
-  struct Tag { uint64_t epoch = 0, frame = 0; };
+  struct Tag { uint64_t epoch = 0, frame = 0, originCommit=0; uint32_t origin=0,logicalWidth=0,logicalHeight=0; };
+  Tag tag(const void* screen){std::lock_guard guard(mutex);auto it=submissions.find(screen);return it==submissions.end()?Tag{}:it->second;}
   struct Image {
     std::vector<uint8_t> pixels;
     std::shared_ptr<const std::vector<uint8_t>> packet;
-    const uint8_t* data() const { return packet ? packet->data() + 48 : pixels.data(); }
+    const uint8_t* data() const { return packet ? packet->data() + packetOffset : pixels.data(); }
     size_t size() const { return uint64_t(width) * height * 4; }
     uint32_t width = 0, height = 0, origin = 0, depth = 0;
     uint64_t epoch = 0, frame = 0, sequence = 0, nonblack = 0;
+    uint32_t packetOffset=48;
     bool framebuffer = false;
   };
   struct Pin { uint64_t id; std::string owner; std::shared_ptr<const Image> image; Clock::time_point expires; };
@@ -29,16 +31,16 @@ struct FrameService {
   Image presented;
   std::vector<Pin> pins;
   static constexpr uint64_t maxPixels = 4194304;
-  void submitted(const void* screen, uint64_t e, uint64_t f) {
+  void submitted(const void* screen, uint64_t e, uint64_t f,uint64_t commit=0,uint32_t origin=0,uint32_t logicalWidth=0,uint32_t logicalHeight=0) {
     std::lock_guard guard(mutex);
-    if(submissions.size() < 8 || submissions.count(screen)) submissions[screen] = {e, f};
+    if(submissions.size() < 8 || submissions.count(screen)) submissions[screen] = {e, f,commit,origin,logicalWidth,logicalHeight};
   }
   void forget(const void* screen) { std::lock_guard guard(mutex); submissions.erase(screen); }
   void reset(uint64_t e) {
     std::lock_guard guard(mutex); epoch = e; latest.reset(); presented = {}; pins.clear();
     // Keep submission tags: an already queued refresh must retain its old epoch.
   }
-  void observe(const void* screen, const uint8_t* rgba, uint32_t width, uint32_t height, uint64_t sequence, uint64_t syntheticEpoch = 0, uint64_t syntheticFrame = 0, std::shared_ptr<const std::vector<uint8_t>> packet = {}) {
+  void observe(const void* screen, const uint8_t* rgba, uint32_t width, uint32_t height, uint64_t sequence, uint64_t syntheticEpoch = 0, uint64_t syntheticFrame = 0, std::shared_ptr<const std::vector<uint8_t>> packet = {},uint32_t packetOffset=48) {
     if((!enabled && !packet) || !width || !height || uint64_t(width) * height > maxPixels) return;
     std::lock_guard guard(mutex);
     Tag tag{syntheticEpoch, syntheticFrame};
@@ -47,6 +49,7 @@ struct FrameService {
     if(onCapture) onCapture(rgba, width, height, tag.epoch, tag.frame);
     if(packet) {
       presented.width = width; presented.height = height; presented.epoch = tag.epoch;
+      presented.packetOffset=packetOffset;
       presented.frame = tag.frame; presented.sequence = sequence; presented.packet = std::move(packet);
     } else {
       auto image = std::make_shared<Image>();

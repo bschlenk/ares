@@ -616,7 +616,11 @@ struct RSP : Thread, Memory::RCP<RSP> {
 
     struct Block {
       auto execute(RSP& self) -> void {
+        // Scheduling state belongs to the cached block; elapsed time belongs to
+        // this execution. Reusing a block must not restore its compile-time clock.
+        const auto clocksTotal=self.pipeline.clocksTotal;
         self.pipeline = pipeline;  //must be updated first so instructionEpilog() can handle taken branch
+        self.pipeline.clocksTotal=clocksTotal;
         ((void (*)(RSP*, IPU*, VU*))code)(&self, &self.ipu, &self.vpu);
       }
 

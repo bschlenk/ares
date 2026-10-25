@@ -2,6 +2,8 @@
 #include "machine-service.hpp"
 #include "execution-service.hpp"
 #include "capture-config.hpp"
+#include "matrix-service.hpp"
+#include "transform-service.hpp"
 struct ViewerService {
   std::string rspOwner, rdpOwner;
   CaptureConfig config;
@@ -9,13 +11,15 @@ struct ViewerService {
   void reset() { rspOwner.clear(); rdpOwner.clear(); ares::Nintendo64::commandCapture.reset(); }
   void releaseOwner(const std::string& actor) {
     auto& c = ares::Nintendo64::commandCapture;
-    if(rspOwner == actor) { c.rspFlush(); c.rspEnabled = false; rspOwner.clear(); }
+    if(rspOwner == actor) { c.rspFlush(false); c.rspEnabled = false; c.matrices.unknownCommand(); c.transformBatches.clear(); rspOwner.clear(); }
     if(rdpOwner == actor) { c.rdpEnabled = false; rdpOwner.clear(); }
   }
-  ControlResult execute(const std::string& method, const std::vector<std::string>& args, const std::string& actor, uint64_t epoch, bool available, bool busy) {
+  ControlResult execute(const std::string& method, const std::vector<std::string>& args, const std::string& actor, uint64_t epoch, bool available, bool busy, const std::string& session="") {
     using namespace ares::Nintendo64;
     if(!available) return {"unavailable", {}};
     auto& c = commandCapture;
+    if(method == "n64.capture.transforms")return TransformService::execute(args,epoch,session);
+    if(method == "n64.capture.matrices")return MatrixService::execute(args,epoch);
     if(method == "n64.capture.control") {
       if(args.size() != 2) return {"invalid_request", {}};
       for(auto& a : args) if(a != "-1" && a != "0" && a != "1") return {"invalid_request", {}};
@@ -26,8 +30,8 @@ struct ViewerService {
         // Validate both owners before changing either channel.
         if(args[0] != "-1") {
           bool enable = args[0] == "1";
-          if(enable && !c.rspEnabled) { config.apply(); c.rspEnabled = true; c.detectRsp(); }
-          else if(!enable) { c.rspFlush(); c.rspEnabled = false; }
+          if(enable && !c.rspEnabled) { config.apply(); c.matrices.unknownCommand(); c.transformBatches.clear(); c.rspEnabled = true; c.detectRsp(); }
+          else if(!enable) { c.rspFlush(false); c.rspEnabled = false; c.matrices.unknownCommand(); c.transformBatches.clear(); }
           rspOwner = enable ? actor : "";
         }
         if(args[1] != "-1") { c.rdpEnabled = args[1] == "1"; rdpOwner = c.rdpEnabled ? actor : ""; }
@@ -35,7 +39,7 @@ struct ViewerService {
       MachineService::Object out;
       out.add("rsp", c.rspEnabled ? "true" : "false"); out.add("rdp", c.rdpEnabled ? "true" : "false");
       out.add("rsp_owner", rspOwner.empty() ? "null" : controlQuote(rspOwner)); out.add("rdp_owner", rdpOwner.empty() ? "null" : controlQuote(rdpOwner));
-      out.add("rsp_mode", controlQuote(c.queueMode ? "RSPQ" : config.displayName)); out.add("rspq_supported", "true"); out.add("configuration", controlQuote(config.diagnostic)); out.number("capacity", c.Capacity); out.number("presented_frame", c.presentedFrame);
+      out.add("rsp_mode", controlQuote(c.queueMode ? "RSPQ" : config.displayName)); out.add("rspq_supported", "true"); out.add("configuration", controlQuote(config.diagnostic)); out.number("capacity", c.Capacity); out.number("presented_frame", c.presentedFrame);out.add("matrix_stack_available",!c.matrixLatest.empty()?"true":"false");out.add("matrix_operand_support",controlQuote(c.matrixSignatureSupported()?"signature_gated_64_byte_dma":"unsupported_microcode"));
       return {{}, out.end()};
     }
     if(method != "n64.capture.rsp" && method != "n64.capture.rdp") return {"unavailable", {}};
@@ -51,7 +55,7 @@ struct ViewerService {
     MachineService::Object out;
     out.number("epoch", epoch); out.number("generation", c.generation); out.add("kind", isRsp ? "\"rsp\"" : "\"rdp\"");
     out.add("mode", controlQuote(isRsp ? "live dispatch words, frozen semantic arguments and overhead segments" : "last committed VI-origin-swap command buffer; use next_frame=true for exact VI capture"));
-    out.add("frame_kind", "\"vi_origin_swaps\""); out.number("presented_frame", c.presentedFrame);
+    out.add("frame_kind", "\"vi_origin_swaps\""); out.number("presented_frame", c.presentedFrame);out.add("matrix_stack_available",!c.matrixLatest.empty()?"true":"false");out.add("matrix_operand_support",controlQuote(c.matrixSignatureSupported()?"signature_gated_64_byte_dma":"unsupported_microcode"));
     out.add("configured", !isRsp || c.sigPc >= 0 ? "true" : "false"); out.add("rspq_supported", "true");
     out.number("committed", observed); out.number("retained", retained); out.number("dropped", observed - retained);
     out.add("truncated", observed > retained ? "true" : "false"); out.number("capacity", c.Capacity); out.number("offset", offset);
@@ -68,6 +72,14 @@ struct ViewerService {
         std::string words = "[";
         for(unsigned w = 0; w < r.wordCount; ++w) { if(w) words += ','; words += controlQuote(N64Service::hex(r.words[w])); }
         row.add("words", words + ']');
+        row.add("task_id",r.taskId?std::to_string(r.taskId):"null");row.number("source_vi",r.sourceVi);
+        row.add("command_complete",r.commandComplete?"true":"false");row.add("matrix_before_id",r.matrixBefore?std::to_string(r.matrixBefore->id):"null");row.add("matrix_after_id",r.matrixAfter?std::to_string(r.matrixAfter->id):"null");
+        std::string vertices="[";for(auto& v:r.drawVertices){if(vertices.back()!='[')vertices+=',';vertices+=MatrixService::vertex(v);}row.add("draw_vertices",vertices+"]");
+        if(r.matrixCandidate){
+          MachineService::Object operand;operand.add("provenance","\"consumed_dma_operand_only\"");operand.add("microcode_gate","\"f3dex2_dispatch_signature\"");operand.number("dma_count",r.matrixDmaCount);operand.add("ambiguous",r.matrixDmaCount>1?"true":"false");operand.hex("dram_address",r.matrixDram);operand.hex("dmem_address",r.matrixDmem);operand.add("rsp_matrix_stack","null");
+          if(r.matrixDmaCount){static const char* digits="0123456789abcdef";std::string bytes;for(auto byte:r.matrixOperand){bytes+=digits[byte>>4];bytes+=digits[byte&15];}operand.add("raw",controlQuote(bytes));}else operand.add("raw","null");
+          row.add("consumed_matrix",operand.end());
+        }else row.add("consumed_matrix","null");
       } else {
         auto& r = c.rdpLatest[i];
         row.number("seq", r.seq); row.number("frame", r.frame); row.hex("opcode", r.opcode); row.add("name", controlQuote(c.rdpName(r.opcode)));

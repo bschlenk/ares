@@ -82,6 +82,7 @@ auto RDP::writeWord(u32 address, u32 data_, Thread& thread) -> void {
       command.current = command.start;
       command.startValid = 0;
     }
+    taskProvenance.submissionTask=&thread==&rsp?taskProvenance.active:0;
     flushCommands();
     if(&thread == &cpu) cpu.forceSynchronize();
   }

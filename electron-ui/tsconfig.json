@@ -24,6 +24,7 @@
     "services/**/*.ts",
     "mcp/**/*.ts",
     "tools/**/*.ts",
-    "cli.ts"
+    "cli.ts",
+    "launcher.ts"
   ]
 }

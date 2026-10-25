@@ -47,7 +47,7 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
   const child = spawn(host, ['--rom', rom, '--system', 'Nintendo 64', '--settings', settings, '--silent', '--paused', '--save-dir', path.join(dir, 'saves'), '--control-session', identity.session], { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
   const closed = once(child, 'close'); let log = ''; child.stderr.on('data', b => log = (log + b).slice(-20000)); child.stdout.resume();
   const native = new NativeSessionClient(child.stdin, child.stdio[3], identity, () => {}), router = new SessionRouter(); router.attach(native);
-  const endpoint = new LocalServiceHost(router); let peer, other;
+  const endpoint = new LocalServiceHost(router,async p=>{if(p.operation==='app_status')return {ready:true};throw new Error('unavailable');}); let peer, other;
   try {
     unwrap(await native.request('session.status')); await endpoint.listen(path.join(dir, 'ipc'));
     peer = new StdioPeer(process.execPath, [path.resolve(__dirname, '../dist/mcp/server.js'), '--connection', endpoint.metadataFile, '--instance', endpoint.instance]); await peer.initialize();
@@ -60,6 +60,11 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     assert.equal((await peer.tool('state_load', { path: initializedFile })).error, undefined);
     const baseline = path.join(dir, 'baseline.bs'); assert.equal((await peer.tool('state_save', { path: baseline })).error, undefined);
     const recorderRegions=await peer.tool('memory_regions');const rdramRegion=recorderRegions.regions.find(r=>r.name==='RDRAM');
+    const sample=await peer.tool('memory_sample',{reads:Array.from({length:128},(_,i)=>({region:rdramRegion.id,offset:0x2000+i*4,length:1024}))});assert.equal(sample.error,undefined,JSON.stringify(sample));
+    const samplePage=await peer.tool('memory_capture_read',{handle:sample.handle,range:127,length:4});assert.equal(samplePage.frame_reference.native_session,identity.session);assert.equal(samplePage.frame_reference.presentation,null);
+    await peer.tool('write_memory',{region:rdramRegion.id,addr:0x2000+127*4,hex_bytes:'aabbccdd'});
+    assert.equal((await peer.tool('memory_capture_read',{handle:sample.handle,range:127,length:4})).hex,samplePage.hex);
+    await peer.tool('memory_capture_release',{handle:sample.handle});
     const pairedRecorder=await peer.tool('memory_record_start',{reads:Array.from({length:7},(_,i)=>({region:rdramRegion.id,offset:0x2000+i,length:1})),capacity:200,duration:200});
     const recordingSource=`export default async({mem,frames,input})=>{
       mem.writeU32(0x2000,0x12345678,'rdram');
@@ -230,6 +235,9 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     unwrap(await native.request('session.pause'));
     assert.equal((await native.request('n64.memory.write', undefined, { address: '0x2000', view: 'rdram', hex: 'ee' }, 'batch-idle')).error, 'busy');
     unwrap(await native.request('execution.release', undefined, undefined, 'batch-idle'));
+    const ownedSource=path.join(dir,'owned-load.ts'),ownedOutput=path.join(dir,'owned-load.json');
+    fs.writeFileSync(ownedSource,`export default async({emu,frames,input})=>{await emu.loadState(${JSON.stringify(baseline)});input({right:true});await frames(1);await emu.loadState(${JSON.stringify(baseline)});input.set(1,{left:true});await frames(2);return emu.info()}`);
+    const cli=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),'run',ownedSource,'--state',baseline,'--output',ownedOutput],{env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc')}});let cliOut='',cliErr='';cli.stdout.on('data',b=>cliOut+=b);cli.stderr.on('data',b=>cliErr+=b);const [cliCode]=await once(cli,'close');assert.equal(cliCode,0,cliErr);assert.equal(JSON.parse(cliOut).frame,2);assert.equal(fs.readFileSync(ownedOutput,'utf8'),cliOut);
     await peer.close(); peer = undefined; other.close(); await endpoint.close(); router.detach(); native.close(); child.stdin.end('quit\n'); assert.equal((await closed)[0], 0, log);
   } finally {
     if (peer) await peer.close(); other?.close(); await endpoint.close(); router.detach(); native.close();

@@ -155,7 +155,7 @@ struct MachineService {
     if(!args.empty()) return {"invalid_request", {}};
     if(method == "n64.rsp.registers") return {{}, rspRegisters()};
     if(method == "n64.rdp.state") return {{}, rdpState()};
-    if(method == "n64.peripheral.registers") return {{}, peripherals()};
+    if(method == "n64.peripheral.registers") {auto value=peripherals();value.pop_back();return {{},value+",\"epoch\":"+std::to_string(epoch)+",\"frame\":"+std::to_string(frame)+"}"};}
     return {"unavailable", {}};
   }
 };

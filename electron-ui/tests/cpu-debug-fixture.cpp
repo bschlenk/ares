@@ -41,6 +41,26 @@ static void steps(unsigned count) {
 }
 int main(int argc, char** argv) {
   {
+    struct GeometryPlatform:ares::Platform {
+      void video(ares::Node::Video::Screen screen,const u32* data,u32 pitch,u32 width,u32 height) override {
+        const auto g=screen->presentationGeometry();
+        std::printf("SCREEN_GEOMETRY_JSON {\"canvasWidth\":%u,\"canvasHeight\":%u,\"cropX\":%u,\"cropY\":%u,\"rotation\":%u,\"width\":%u,\"height\":%u,\"pixels\":[",g.canvasWidth,g.canvasHeight,g.cropX,g.cropY,g.rotation,width,height);
+        for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x){if(y||x)std::putchar(',');const auto row=reinterpret_cast<const u32*>(reinterpret_cast<const uint8_t*>(data)+y*pitch);std::printf("%u",(row[x]>>16)&255);}
+        std::puts("]}");
+      }
+    } sink;
+    auto* previous=ares::platform;ares::platform=&sink;
+    auto screen=std::make_shared<ares::Core::Video::Screen>("Geometry fixture",6,4);
+    screen->colors(32,[](n32 index)->n64{return (uint64_t(index)*257)<<32;});
+    screen->power();screen->setViewport(1,1,3,2);
+    for(auto rotation:{0,90,180,270}){
+      screen->setRotation(rotation);
+      auto pixels=screen->pixels(1);for(unsigned n=0;n<24;++n)pixels[n]=n;
+      screen->refresh();
+    }
+    screen.reset();ares::platform=previous;
+  }
+  {
     RecordingService video;
     std::vector<uint8_t> rgba{255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,255,255};
     check(video.execute("video.record.start", {"2", "1048576", "60", "1000", "0"}, "one", 1, 0).error.empty(), "record start");

@@ -12,7 +12,7 @@ export class ToolRegistry implements ToolRegistrar {
   }) as McpServer['registerTool'];
   list() {
     return [...this.entries].map(([name, { config }]) => ({ name, description: config.description,
-      inputSchema: z.toJSONSchema(config.inputSchema, { target: 'draft-7' }),
+      inputSchema: z.toJSONSchema(config.inputSchema, { target: 'draft-7', io: 'input' }),
       ...(config.annotations ? { annotations: config.annotations } : {}) }));
   }
   async call(name: string, args: unknown, signal: AbortSignal = new AbortController().signal) {

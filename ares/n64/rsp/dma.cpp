@@ -30,6 +30,8 @@ auto RSP::dmaTransferStart(Thread& thread) -> void {
 
 auto RSP::dmaTransferStep() -> void {
   if(dma.busy.read) {
+    const uint32_t provenanceDram=dma.current.dramAddress,provenancePbus=dma.current.pbusAddress;
+    const bool captureMatrix=!dma.current.pbusRegion&&dma.current.length+8==64&&dma.current.count==0&&commandCapture.wantsMatrixOperand();uint8_t consumedMatrix[64];
     commandCapture.rspDma(dma.current.length + 8, false);
     if constexpr(Accuracy::RSP::Recompiler) {
       if(dma.current.pbusRegion) {
@@ -43,6 +45,7 @@ auto RSP::dmaTransferStep() -> void {
       } else {
         u32 dataLo = rdram.ram.read<Word>(dma.current.dramAddress + 0, RBusDevice::SP_DMA);
         u32 dataHi = rdram.ram.read<Word>(dma.current.dramAddress + 4, RBusDevice::SP_DMA);
+        if(captureMatrix)for(unsigned b=0;b<4;++b){consumedMatrix[uint32_t(i)+b]=dataLo>>(24-b*8);consumedMatrix[uint32_t(i)+4+b]=dataHi>>(24-b*8);}
         dmem.write<Word>(dma.current.pbusAddress + 0, dataLo);
         dmem.write<Word>(dma.current.pbusAddress + 4, dataHi);
       }
@@ -52,8 +55,16 @@ auto RSP::dmaTransferStep() -> void {
       dma.current.dramAddress += 8;
       dma.current.pbusAddress += 8;
     }
+    if(captureMatrix)commandCapture.rspMatrixOperand(provenanceDram,provenancePbus,consumedMatrix);
+    if(dma.current.pbusRegion){
+      taskProvenance.imemDma(provenanceDram,provenancePbus,dma.current.length+8);
+      commandCapture.rspCodeChanged();
+    }
   }
   if(dma.busy.write) {
+    const uint32_t stackDram=dma.current.dramAddress;
+    const bool stackWrite=!dma.current.pbusRegion&&dma.current.pbusAddress==0&&dma.current.length+8==64&&dma.current.count==0&&commandCapture.rspEnabled&&commandCapture.matrices.refreshCode();
+    uint8_t stackBytes[64];
     commandCapture.rspDma(dma.current.length + 8, true);
     for(u32 i = 0; i <= dma.current.length; i += 8) {
       if(dma.current.pbusRegion) {
@@ -62,12 +73,14 @@ auto RSP::dmaTransferStep() -> void {
       } else {
         u32 dataLo = dmem.read<Word>(dma.current.pbusAddress + 0);
         u32 dataHi = dmem.read<Word>(dma.current.pbusAddress + 4);
+        if(stackWrite)for(unsigned b=0;b<4;++b){stackBytes[uint32_t(i)+b]=dataLo>>(24-b*8);stackBytes[uint32_t(i)+4+b]=dataHi>>(24-b*8);}
         rdram.ram.write<Word>(dma.current.dramAddress + 0, dataLo, RBusDevice::SP_DMA);
         rdram.ram.write<Word>(dma.current.dramAddress + 4, dataHi, RBusDevice::SP_DMA);
       }
       dma.current.dramAddress += 8;
       dma.current.pbusAddress += 8;
     }
+    if(stackWrite)commandCapture.matrices.pushed(stackDram,stackBytes);
   }
 
   if(dma.current.count) {

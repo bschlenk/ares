@@ -4,6 +4,8 @@ namespace ares::Nintendo64 {
 
 RSP rsp;
 #include "command-capture.cpp"
+#include "f3dex2-state.cpp"
+#include "task-provenance.cpp"
 #include "decoder.cpp"
 #include "dma.cpp"
 #include "io.cpp"

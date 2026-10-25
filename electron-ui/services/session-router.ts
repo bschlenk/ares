@@ -27,7 +27,21 @@ function mainCapabilities(reply: SessionReply<any>): void {
 
 /** Electron main owns this router, independently of renderer/plugin lifetimes. */
 export class SessionRouter {
+  onObserverSample?:(sample:import('./observer-contracts.js').ObserverSample)=>void;
+  private observerStartTail:Promise<unknown>=Promise.resolve();
+  private observerStarts=new Map<string,{count:number;cancelled:boolean}>();
+  private async startObserver(client:NativeSessionClient,identity:SessionIdentity,params:ScriptRunParams,owner:string){
+    let entry=this.observerStarts.get(owner);
+    if(entry?.cancelled||(entry?.count??0)>=4||[...this.observerStarts.values()].reduce((n,e)=>n+e.count,0)>=8)throw new ServiceError('observer_limit');
+    if(!entry){entry={count:0,cancelled:false};this.observerStarts.set(owner,entry);}
+    ++entry.count;const owned=entry;
+    const result=this.observerStartTail.then(()=>{if(owned.cancelled||this.client!==client)throw new ServiceError('disconnected');return startScript(client,identity,params,owner,()=>this.client===client&&!owned.cancelled,true);});
+    this.observerStartTail=result.catch(()=>{});
+    try{return await result;}finally{if(!--owned.count&&this.observerStarts.get(owner)===owned)this.observerStarts.delete(owner);}
+  }
   private scripts = new ScriptJobs();
+  health() {return this.client?.health()??{connected:false,observation:'cached'};}
+  readScriptResult(params:any) {if(params.release===true){if(typeof params.handle!=='string')throw new ServiceError('invalid_request');return this.scripts.results.release(params.handle);}return this.scripts.readResult(params,this.identity);}
   private memoryArtifacts = new MemoryArtifacts();
   private batches = new Batches();
   private stateLoading = new StateLoading();
@@ -46,6 +60,7 @@ export class SessionRouter {
   constructor(private onSessionState?: (reply: SessionReply) => void) {}
   attach(client: NativeSessionClient): void {
     this.detach(); this.client = client;
+    client.onObserverSample=sample=>{if(this.client===client)this.onObserverSample?.(sample);};
     if (!this.onSessionState) return;
     // CPU break/watch hits can stop ordinary play without a request or a video
     // frame. Main observes that state independently of the renderer's lifetime.
@@ -63,13 +78,14 @@ export class SessionRouter {
     this.stateTimer.unref();
   }
   detach(): void {
+    for(const entry of this.observerStarts.values())entry.cancelled=true;
     this.scripts.close(); this.memoryArtifacts.close(); this.memoryDumps.close(); this.rdpArtifacts.close(); this.batches.close(); this.artifacts.close(); this.screenshots.close(); this.audio.close(); this.recording.close(); this.states.close(); this.stateArtifacts.close(); this.stateLoading.close();
     clearInterval(this.stateTimer); this.stateTimer = undefined;
     this.client?.close(); this.client = undefined;
   }
   async request<M extends ServiceMethod>(method: M, identity?: SessionIdentity, params?: ServiceParams<M>, owner = 'ui'): Promise<SessionReply<ServiceResult<M>>> {
     if (!METHODS.includes(method)) throw new ServiceError('invalid_request');
-    if (method === 'execution.release') { this.scripts.release(owner); this.memoryArtifacts.release(owner); this.memoryDumps.release(owner); this.rdpArtifacts.release(owner); this.batches.release(owner); this.artifacts.release(owner); this.screenshots.release(owner); this.audio.release(owner); this.recording.release(owner); this.states.release(owner); this.stateArtifacts.release(owner); this.stateLoading.release(owner); }
+    if (method === 'execution.release') { const start=this.observerStarts.get(owner);if(start)start.cancelled=true; this.scripts.release(owner); this.memoryArtifacts.release(owner); this.memoryDumps.release(owner); this.rdpArtifacts.release(owner); this.batches.release(owner); this.artifacts.release(owner); this.screenshots.release(owner); this.audio.release(owner); this.recording.release(owner); this.states.release(owner); this.stateArtifacts.release(owner); this.stateLoading.release(owner); }
     if (!this.client) throw new ServiceError('native_host_disconnected');
     const client = this.client;
     if (method.startsWith('artifact.') || method.startsWith('state.') || method.startsWith('experiment.') || (method === 'scripts.run' || method === 'scripts.observe')) {
@@ -79,7 +95,7 @@ export class SessionRouter {
       try {
         let result;
         if (method === 'scripts.run') result = await this.scripts.start(client, this, startingIdentity, params as ScriptRunParams, owner, () => this.client === client);
-        else if (method === 'scripts.observe') result = await startScript(client, startingIdentity, params as ScriptRunParams, owner, () => this.client === client, true);
+        else if (method === 'scripts.observe') result = await this.startObserver(client,startingIdentity,params as ScriptRunParams,owner);
         else if (method === 'experiment.cancelBatch') {
           if(startingIdentity.session !== client.identity.session) throw new ServiceError('wrong_session');
           result={cancelled:this.batches.cancel(owner,(params as {token:string}).token)};
@@ -106,7 +122,7 @@ export class SessionRouter {
     // keep their own generation and remain subject to native ownership checks.
     const child = (method === 'session.pause' || method === 'execution.cancel') ? this.batches.child(owner) : undefined;
     const reply = await client.request(method, identity, params, child ?? owner);
-    if(method==='execution.status'&&reply.ok&&reply.result){const output=this.scripts.outputs.get((reply.result as {operation_id:number}).operation_id);if(output)(reply.result as any).script_output=output;}
+    if(method==='execution.status'&&reply.ok&&reply.result){const output=this.scripts.outputs.get((reply.result as {operation_id:number}).operation_id);if(output)(reply.result as any).script_output=output;Object.assign(reply.result,this.scripts.metadata((reply.result as any).operation_id));}
     const cancelled = reply.result as { owner?: string; stop_reason?: string };
     if (child && reply.ok && (method === 'session.pause' || cancelled.owner === child && cancelled.stop_reason === 'cancelled')) this.batches.interrupt(owner, method === 'session.pause' ? 'paused' : 'cancelled');
     if (method.startsWith('session.')) mainCapabilities(reply);

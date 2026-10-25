@@ -30,6 +30,7 @@
 #include "native/n64-service.hpp"
 #include "native/machine-service.hpp"
 #include "native/rsp-debug-service.hpp"
+#include "native/task-service.hpp"
 #include "native/rdp-capture-service.hpp"
 #include "native/inspection-service.hpp"
 #include "native/stack-service.hpp"
@@ -179,9 +180,9 @@ struct Host : ares::Platform {
     latest.reset();
     for(auto& buffer : framePool) if(buffer.use_count() == 1) { latest = buffer; break; }
     if(!latest) { latest = std::make_shared<std::vector<uint8_t>>(); framePool.push_back(latest); }
-    latest->resize(48 + size_t(width) * height * 4);
+    latest->resize(128 + size_t(width) * height * 4);
     auto p = latest->data();
-    std::memcpy(p, "AEF2", 4);
+    std::memcpy(p, "AEF4", 4);
     put32(p + 4, width * height * 4); put32(p + 8, width); put32(p + 12, height);
     put32(p + 16, ++sequence); put32(p + 20, appliedInput);
     put64(p + 24, std::chrono::duration<double, std::milli>(now - started).count());
@@ -193,7 +194,27 @@ struct Host : ares::Platform {
       if(screen->rotation() == 90 || screen->rotation() == 270) aspect = 1.0 / aspect;
     }
     put64(p + 40, aspect);
-    p += 48;
+    auto tag=screen?captures.tag(screen.get()):FrameService::Tag{service.epoch,service.execution.frame};
+    put64(p+48,double(tag.epoch));put64(p+56,double(tag.frame));put64(p+64,double(tag.originCommit));
+    put32(p+72,tag.origin);put32(p+76,(tag.epoch?1u:0u)|(systemName=="Nintendo 64"?2u:0u)|(!screen?4u:systemName!="Nintendo 64"?8u:0u));
+    uint32_t logicalHeight=tag.logicalHeight?tag.logicalHeight:height;
+    if(systemName=="Nintendo 64"){
+      logicalHeight=height;
+      #if defined(VULKAN)
+      if(ares::Nintendo64::vulkan.enable)logicalHeight=height/std::max(1u,uint32_t(ares::Nintendo64::vulkan.outputUpscale));
+      #endif
+    }
+    put32(p+80,tag.logicalWidth?tag.logicalWidth:width);put32(p+84,logicalHeight);put64(p+88,0);
+    put32(p+96,0);put32(p+100,0);put32(p+104,0);put32(p+108,0);put32(p+112,0);put32(p+116,0);put64(p+120,0);
+    if(screen){
+      const auto g=screen->presentationGeometry();
+      put32(p+96,g.canvasWidth);put32(p+100,g.canvasHeight);put32(p+104,g.cropX);put32(p+108,g.cropY);put32(p+112,g.rotation);
+      const bool turns=g.rotation==90||g.rotation==270;
+      const auto cw=turns?g.canvasHeight:g.canvasWidth,ch=turns?g.canvasWidth:g.canvasHeight;
+      const bool known=g.rotation==0||g.rotation==90||g.rotation==180||g.rotation==270;
+      put32(p+116,known&&g.cropX<=cw&&g.cropY<=ch&&width<=cw-g.cropX&&height<=ch-g.cropY?1:0);
+    }
+    p += 128;
     for(uint32_t y = 0; y < height; y++) {
       auto row = reinterpret_cast<const u32*>(reinterpret_cast<const uint8_t*>(data) + y * pitch);
       for(uint32_t x = 0; x < width; x++) {
@@ -201,7 +222,7 @@ struct Host : ares::Platform {
         *p++ = color >> 16; *p++ = color >> 8; *p++ = color; *p++ = 255;
       }
     }
-    captures.observe(screen.get(), latest->data() + 48, width, height, sequence, screen ? 0 : service.epoch, screen ? 0 : service.execution.frame, latest);
+    captures.observe(screen.get(), latest->data() + 128, width, height, sequence, screen ? 0 : service.epoch, screen ? 0 : service.execution.frame, latest,128);
     captured = now; available = true; wake.notify_one();
   }
   void writeFrames() {
@@ -359,6 +380,7 @@ int main(int argc, char** argv) {
     else { std::cerr << "Usage: ares-electron-host [--rom file | --identify file | --synthetic [--1080p]] [--silent] [--save-dir directory] [--resource-dir directory]\n"; return 2; }
   }
   ares::Nintendo64::dmaProvenance.reset(host.service.epoch);
+  ares::Nintendo64::taskProvenance.reset(host.service.epoch);
   if(!resourceDirectory.endsWith("/")) resourceDirectory.append("/");
   mia::setResourceResolver([resourceDirectory](const string& name) -> string {
     return {resourceDirectory, name};
@@ -449,6 +471,12 @@ int main(int argc, char** argv) {
   // The core debugger's RDRAM callback follows chip initialization/degradation
   // and can consume guest RNG. Universal host offsets mean raw physical storage.
   if(memoryRoot && memoryRoot->name() == "Nintendo 64") for(auto& region : host.memory.regions) if(region.node->name() == "RDRAM") {
+    region.hostCpuRead = [](uint32_t offset) -> uint8_t {
+      using namespace ares::Nintendo64;
+      auto& line=cpu.dcache.line(0xffffffff80000000ull|offset);
+      if(line.hit(offset))return cpu.dcache.readDebug<Byte>(0xffffffff80000000ull|offset,offset);
+      return static_cast<Memory::Writable&>(rdram.ram).read<Byte>(offset);
+    };
     region.hostRead = [](uint32_t offset) -> uint8_t { return static_cast<ares::Nintendo64::Memory::Writable&>(ares::Nintendo64::rdram.ram).read<ares::Nintendo64::Byte>(offset); };
   }
   std::thread reader([&] { host.readCommands(); });
@@ -462,7 +490,10 @@ int main(int argc, char** argv) {
   unsigned syntheticPhase = 0;
   bool n64 = !synthetic && host.root && host.root->name() == "Nintendo 64";
   auto& execution = host.service.execution;
-  ScriptService scriptService, observerService;
+  ScriptService scriptService;
+  std::map<uint64_t,std::unique_ptr<ScriptService>> observers;
+  std::map<std::string,std::unique_ptr<ScriptService>> observerPreparations;
+  uint64_t observerRotation=0;
   N64Service n64Service; n64Service.available = n64;
   TraceService traceService; traceService.available = n64;
   TapService tapService;
@@ -522,6 +553,14 @@ int main(int argc, char** argv) {
   DmaService dmaService; dmaService.available = n64;
   execution.cpuSupported = n64;
   host.injectedInput.available = n64;
+  bool samplingOrigin=false;
+  host.service.memoryTools.frameReference=[&](uint64_t frame,bool boundary){
+    boundary=boundary||samplingOrigin;
+    std::string candidates="[";
+    if(n64)for(auto it=ares::Nintendo64::taskProvenance.scanouts.rbegin();it!=ares::Nintendo64::taskProvenance.scanouts.rend();++it)if(it->frame==frame&&it->originCommit==ares::Nintendo64::executionCoordinate.originCommit){for(auto id:it->candidates){if(candidates.back()!='[')candidates+=',';candidates+=std::to_string(id);}break;}
+    candidates+=']';
+    return "{\"task_mapping\":\"candidate_only\",\"task_candidates\":"+candidates+",\"native_session\":"+controlQuote(host.service.session)+",\"epoch\":"+std::to_string(host.service.epoch)+",\"vi\":"+(execution.frameKind=="vi"||execution.frameKind=="synthetic-vi"?std::to_string(frame):"null")+",\"boundary\":"+controlQuote(!boundary?"safe_point":samplingOrigin?"vi_origin":execution.frameKind=="unavailable"?host.service.memoryTools.observedKind:execution.frameKind)+",\"origin\":"+(n64?std::to_string(uint32_t(ares::Nintendo64::vi.io.dramAddress)):"null")+",\"origin_commit\":"+(n64?std::to_string(ares::Nintendo64::executionCoordinate.originCommit):"null")+",\"video_sequence\":null,\"presentation\":null,\"provenance\":\"unmatched\"}";
+  };
   const void* memoryScreen = nullptr;
   if(!n64 && !synthetic && memoryRoot) for(auto screen : memoryRoot->find<ares::Node::Video::Screen>()) { if(!memoryScreen) memoryScreen = screen.get(); }
   if(memoryScreen) host.service.memoryTools.observedKind = "primary-screen-frame";
@@ -531,7 +570,10 @@ int main(int argc, char** argv) {
       tools.sync(host.service.epoch);
       tools.boundary(host.service.epoch, ++tools.observedFrame);
     }
-    host.captures.submitted(screen, host.service.epoch, n64 ? ares::Nintendo64::executionCoordinate.frame : execution.frame);
+    auto& vi=ares::Nintendo64::vi.io;
+    uint32_t logicalHeight=n64?uint32_t((uint64_t(vi.vend>vi.vstart?(uint32_t(vi.vend)-uint32_t(vi.vstart))>>1:0)*(uint32_t(vi.yscale)&0xfff))>>10):0;
+    if(n64)ares::Nintendo64::taskProvenance.scanout(ares::Nintendo64::executionCoordinate.frame,ares::Nintendo64::executionCoordinate.originCommit,vi.dramAddress,vi.width,logicalHeight);
+    host.captures.submitted(screen,host.service.epoch,n64?ares::Nintendo64::executionCoordinate.frame:execution.frame,n64?ares::Nintendo64::executionCoordinate.originCommit:0,n64?uint32_t(vi.dramAddress):0,n64?uint32_t(vi.width):0,logicalHeight);
   };
   host.captures.onCapture = [&](const uint8_t* pixels, uint32_t w, uint32_t h, uint64_t epoch, uint64_t frame) { host.recording.capture(pixels, w, h, epoch, frame); };
   host.service.videoRequest = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
@@ -553,7 +595,7 @@ int main(int argc, char** argv) {
   host.service.audioRequest = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
     return host.audioCapture.execute(method, args, owner, !host.streams.empty());
   };
-  host.service.onReleaseOwner = [&](const std::string& owner) { if(observerService.owner==owner)observerService.finish("disconnected"); host.injectedInput.releaseOwner(owner); profilerService.releaseOwner(owner); host.captures.releaseOwner(owner); host.audioCapture.releaseOwner(owner); host.recording.releaseOwner(owner); host.stateSnapshot.releaseOwner(owner); host.stateLoader.releaseOwner(owner); rspDebugService.releaseOwner(owner); rdpCaptureService.releaseOwner(owner); inspectionService.releaseOwner(owner); callService.releaseOwner(owner); viewerService.releaseOwner(owner); };
+  host.service.onReleaseOwner = [&](const std::string& owner) { for(auto it=observers.begin();it!=observers.end();)if(it->second->owner==owner){it->second->finish("disconnected");it=observers.erase(it);}else ++it;observerPreparations.erase(owner); host.injectedInput.releaseOwner(owner); profilerService.releaseOwner(owner); host.captures.releaseOwner(owner); host.audioCapture.releaseOwner(owner); host.recording.releaseOwner(owner); host.stateSnapshot.releaseOwner(owner); host.stateLoader.releaseOwner(owner); rspDebugService.releaseOwner(owner); rdpCaptureService.releaseOwner(owner); inspectionService.releaseOwner(owner); callService.releaseOwner(owner); viewerService.releaseOwner(owner); };
   host.service.beforeRequest = [&](const std::string& method, const std::string& owner) -> std::string {
     rspDebugService.service(execution, host.service.paused);
     if(!rspDebugService.permitted(method, owner, bool(execution.active))) return "busy";
@@ -563,7 +605,7 @@ int main(int argc, char** argv) {
     if(!load.upload || method.starts_with("n64.state.load")) return {};
     static const std::vector<std::string> allowed = {
       "runtime.settings", "session.status", "session.pause", "session.resume", "session.reset", "execution.status", "execution.cancel", "execution.release", "execution.batchCheck",
-      "n64.capture.control", "n64.capture.rsp", "n64.capture.rdp", "n64.cpu.stack", "n64.render.probe", "n64.dump.read", "n64.dump.release", "n64.cpu.disassemble", "n64.rsp.registers", "n64.rdp.state", "n64.peripheral.registers",
+      "n64.capture.control", "n64.capture.rsp", "n64.capture.rdp", "n64.capture.matrices", "n64.capture.transforms", "n64.cpu.stack", "n64.render.probe", "n64.dump.read", "n64.dump.release", "n64.cpu.disassemble", "n64.rsp.registers", "n64.rdp.state", "n64.peripheral.registers", "n64.rsp.lastTask",
       "memory.regions", "memory.read", "memory.readMany", "memory.snapshot.capture", "memory.recorder.start", "memory.recorder.stop", "memory.capture.status", "memory.capture.read", "memory.capture.release", "memory.snapshot.compare", "memory.capture.freeze", "memory.query.start", "memory.query.advance", "memory.query.page", "memory.query.release", "memory.snapshot.changes", "n64.memory.read", "n64.memory.readMany", "n64.debug.registers", "n64.debug.lastStop", "n64.debug.breakList", "n64.debug.watchList",
       "n64.input.state", "n64.profiler.top", "n64.dma.log", "n64.trace.page", "n64.state.format", "n64.state.layout", "n64.state.read", "n64.state.release",
       "video.begin", "video.read", "video.release", "video.record.status", "video.record.read", "video.record.release", "audio.status", "audio.read", "audio.release"
@@ -571,7 +613,8 @@ int main(int argc, char** argv) {
     return std::find(allowed.begin(), allowed.end(), method) != allowed.end() ? std::string{} : "busy";
   };
   host.service.n64Request = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
-    if(method.starts_with("n64.capture.")) return viewerService.execute(method, args, owner, host.service.epoch, n64, bool(execution.active) || bool(execution.reservation) || host.stateLoader.upload.has_value());
+    if(method=="n64.rsp.lastTask")return n64?TaskService::execute(args,host.service.epoch,execution.frame):ControlResult{"unavailable",{}};
+    if(method.starts_with("n64.capture.")) return viewerService.execute(method, args, owner, host.service.epoch, n64, bool(execution.active) || bool(execution.reservation) || host.stateLoader.upload.has_value(),host.service.session);
     if(method == "n64.cpu.call" || method == "n64.cpu.callRecover") return callService.execute(method, args, owner, host.service.epoch, n64, execution, host.service.paused);
     if(method == "n64.cpu.stack") return StackService::execute(args, n64, host.service.epoch, execution.frame);
     if(method == "n64.render.probe" || method.starts_with("n64.dump.")) return inspectionService.execute(method, args, owner, host.service.epoch, execution.frame, n64, bool(execution.active) || bool(execution.reservation), host.service.paused);
@@ -600,6 +643,7 @@ int main(int argc, char** argv) {
         ares::Nintendo64::executionCoordinate.reset();
         ares::Nintendo64::executionCoordinate.atBoundary = false; // restored VI phase is not an observed boundary
         ares::Nintendo64::dmaProvenance.reset(host.service.epoch);
+        ares::Nintendo64::taskProvenance.reset(host.service.epoch);
         ares::Nintendo64::cpu.debugControl.power();
         execution.frame = 0; execution.atBoundary = false; execution.finished.clear();
         if(scriptService.running && scriptService.hostWaiting && scriptService.hostKind=="state_load" && scriptService.owner==owner && execution.active) {
@@ -702,7 +746,7 @@ int main(int argc, char** argv) {
     return false;
   };
   const std::string scriptConfiguration=BML::serialize(settings).data();
-  auto scriptInfo=[&](const ScriptService& job){auto config=scriptConfiguration+host.service.runtimeRequest("runtime.settings",{}).json;auto configHash=nall::Hash::SHA256({reinterpret_cast<const uint8_t*>(config.data()),config.size()}).digest();auto sourceHash=nall::Hash::SHA256({reinterpret_cast<const uint8_t*>(job.source.data()),job.source.size()}).digest();return "{\"epoch\":"+std::to_string(host.service.epoch)+",\"frame\":"+std::to_string(execution.frame)+",\"frame_kind\":"+controlQuote(execution.frameKind)+",\"executor\":"+controlQuote(execution.executor)+",\"rom_sha256\":"+controlQuote(host.contentHash.data())+",\"config_sha256\":"+controlQuote(configHash.data())+",\"source_sha256\":"+controlQuote(sourceHash.data())+",\"n64_memory\":"+(n64?"true":"false")+"}";};
+  auto scriptInfo=[&](const ScriptService& job){auto config=scriptConfiguration+host.service.runtimeRequest("runtime.settings",{}).json;auto configHash=nall::Hash::SHA256({reinterpret_cast<const uint8_t*>(config.data()),config.size()}).digest();auto sourceHash=nall::Hash::SHA256({reinterpret_cast<const uint8_t*>(job.source.data()),job.source.size()}).digest();return "{\"capture_generation\":"+std::to_string(ares::Nintendo64::commandCapture.transformGeneration)+",\"frame_reference\":"+host.service.memoryTools.frameReference(execution.frame,execution.atBoundary)+",\"epoch\":"+std::to_string(host.service.epoch)+",\"frame\":"+std::to_string(execution.frame)+",\"frame_kind\":"+controlQuote(execution.frameKind)+",\"executor\":"+controlQuote(execution.executor)+",\"rom_sha256\":"+controlQuote(host.contentHash.data())+",\"config_sha256\":"+controlQuote(configHash.data())+",\"source_sha256\":"+controlQuote(sourceHash.data())+",\"n64_memory\":"+(n64?"true":"false")+"}";};
   scriptService.info=[&]{return scriptInfo(scriptService);};
   scriptService.regionRead=[&](const std::string& name,uint32_t offset,uint32_t length,std::vector<uint8_t>& bytes)->ControlResult {
     MemoryService::Region* match=nullptr;
@@ -732,16 +776,67 @@ int main(int argc, char** argv) {
     debug.updateActive();
   };
   scriptService.cleanup=[&] {host.injectedInput.releaseOwner(scriptService.owner);};
-  observerService.execution=&execution;observerService.paused=&host.service.paused;
-  observerService.read=scriptService.read;observerService.regionRead=scriptService.regionRead;observerService.info=[&]{return scriptInfo(observerService);};
-  observerService.cancelled=[&]{return host.quit.load();};
+  auto configureObserver=[&](ScriptService& job){
+    job.execution=&execution;job.paused=&host.service.paused;
+    job.read=scriptService.read;job.regionRead=scriptService.regionRead;
+    job.info=[&,ptr=&job]{return scriptInfo(*ptr);};
+    job.cancelled=[&]{return host.quit.load();};
+    job.onSample=[&](const ScriptService& sample){
+      auto reference=host.service.memoryTools.frameReference(sample.publishedFrame,true);
+      host.service.notify(sample.lastOperation,"{\"event\":\"observer_sample\",\"session\":"+controlQuote(host.service.session)+",\"epoch\":"+std::to_string(host.service.epoch)+",\"owner\":"+controlQuote(sample.owner)+",\"observer_id\":"+std::to_string(sample.lastOperation)+",\"sequence\":"+std::to_string(sample.publishedSequence)+",\"native_skipped\":"+std::to_string(sample.observerSkipped)+",\"frame_reference\":"+reference+",\"value\":"+(sample.result.empty()?"null":sample.result)+",\"error\":"+controlQuote(sample.error)+"}\n");
+    };
+  };
   host.service.scriptRequest=[&](const std::string& method,const std::vector<std::string>& args,const std::string& owner){
     if(method.starts_with("script.observer")) {
-      auto suffix=method.substr(15);auto translated=suffix=="Start"?"script.observe":suffix=="Prepare"?"script.prepare":suffix=="Write"?"script.write":suffix=="Read"?"script.read":"script.stop";
-      return observerService.execute(translated,args,owner,host.service.epoch);
+      const auto suffix=method.substr(15);
+      if(suffix=="Prepare"){
+        if(observerPreparations.count(owner))return ControlResult{"observer_preparation_busy",{}};
+        for(auto it=observers.begin();it!=observers.end();)if(!it->second->running)it=observers.erase(it);else ++it;
+        unsigned owned=0;for(auto& [id,job]:observers)if(job->owner==owner)++owned;
+        if(observers.size()+observerPreparations.size()>=8||owned>=4)return ControlResult{"observer_limit",{}};
+        auto job=std::make_unique<ScriptService>();configureObserver(*job);
+        auto reply=job->execute("script.prepare",args,owner,host.service.epoch);
+        if(reply.error.empty())observerPreparations.emplace(owner,std::move(job));
+        return reply;
+      }
+      if(suffix=="Write"||suffix=="Start"){
+        auto it=observerPreparations.find(owner);if(it==observerPreparations.end())return ControlResult{"stale_observer",{}};
+        auto reply=it->second->execute(suffix=="Write"?"script.write":"script.observe",args,owner,host.service.epoch);
+        if(suffix=="Start"){if(reply.error.empty())observers.emplace(it->second->lastOperation,std::move(it->second));observerPreparations.erase(it);}
+        return reply;
+      }
+      uint64_t id=0;auto values=args;
+      if((suffix=="Read"&&values.size()==3)||(suffix=="Stop"&&values.size()==1)){
+        if(!ExecutionService::number(values.back(),id)||!id)return ControlResult{"invalid_request",{}};
+        if(suffix=="Stop")values.clear();
+      }else{
+        for(auto& [key,job]:observers)if(job->owner==owner){if(id)return ControlResult{"ambiguous_observer",{}};id=key;}
+      }
+      auto it=observers.find(id);if(it==observers.end()||it->second->owner!=owner)return ControlResult{"stale_observer",{}};
+      auto reply=it->second->execute(suffix=="Read"?"script.read":"script.stop",values,owner,host.service.epoch);
+      if(suffix=="Stop"&&reply.error.empty())observers.erase(it);
+      return reply;
     }
     return scriptService.execute(method,args,owner,host.service.epoch);
   };
+  uint64_t observerBudgetFrame=UINT64_MAX,observerBudgetEpoch=0;
+  Clock::duration observerSpent{};
+  auto pumpObservers=[&](bool origin){
+    if(observers.empty())return;
+    const auto frame=execution.frame;
+    if(observerBudgetFrame!=frame||observerBudgetEpoch!=host.service.epoch){observerBudgetFrame=frame;observerBudgetEpoch=host.service.epoch;observerSpent={};}
+    const auto started=Clock::now();std::vector<uint64_t> order;
+    for(auto& [id,job]:observers)order.push_back(id);
+    const auto first=observerRotation++%order.size();samplingOrigin=origin;
+    for(size_t n=0;n<order.size();++n){
+      auto& job=*observers.at(order[(first+n)%order.size()]);
+      if(job.running&&job.epoch!=host.service.epoch)job.finish("reset");
+      if(observerSpent+Clock::now()-started>=std::chrono::milliseconds(6))break;
+      job.pump(origin);
+    }
+    samplingOrigin=false;observerSpent+=Clock::now()-started;
+  };
+  if(n64)ares::Nintendo64::executionCoordinate.originObserver=[&]{pumpObservers(true);};
   while(!host.quit) {
     if(n64) {
       execution.frame = ares::Nintendo64::executionCoordinate.frame;
@@ -762,6 +857,7 @@ int main(int argc, char** argv) {
       host.stateLoader.reset(); rspDebugService.reset(); rdpCaptureService.reset(); inspectionService.reset(); callService.reset(); viewerService.reset();
       ares::Nintendo64::executionCoordinate.reset(); syntheticPhase = 0;
       ares::Nintendo64::dmaProvenance.reset(host.service.epoch + 1);
+      ares::Nintendo64::taskProvenance.reset(host.service.epoch+1);
       if(host.root) { host.output.clear(); host.root->power(); }
     }, host.memory)) { host.quit = true; break; }
     bool takeover = host.takeoverRequested.exchange(false);
@@ -780,8 +876,7 @@ int main(int argc, char** argv) {
     }
     if(!wasControlled && execution.active && host.sound) host.output.clear();
     scriptService.pump();
-    if(observerService.running && observerService.epoch!=host.service.epoch)observerService.finish("reset");
-    observerService.pump();
+    pumpObservers(false);
     if(host.service.paused && (!execution.active || scriptService.running)) {
       if(host.sound && !synthetic) host.output.clear();
       host.service.waitForRequest(std::chrono::milliseconds(10));
@@ -815,6 +910,10 @@ int main(int argc, char** argv) {
       if(debug.halted) { execution.complete(scriptService.running && !scriptService.error.empty() ? "script_failed" : N64Service::reason(debug.stop.reason), host.service.paused); host.service.paused = true; }
     }
     execution.service(host.service.paused);
+    // Freeze ordinary-play VI observers before the next control dispatch can
+    // pause or mutate this boundary. This also leaves a matching final sample
+    // when the user pauses; the loop-head pump remains for origin/idle handling.
+    if(execution.atBoundary && execution.frame != frameBefore) pumpObservers(false);
     if(controlled) { deadline = Clock::now(); continue; }
     if((synthetic || !host.sound) && (!n64 || execution.frame != frameBefore || ares::Nintendo64::executionCoordinate.livenessYield)) {
       deadline += std::chrono::nanoseconds(synthetic ? 16666667 : int64_t(1e9 / host.refreshRate.load()));
@@ -822,7 +921,7 @@ int main(int argc, char** argv) {
       if(Clock::now() - deadline > std::chrono::milliseconds(100)) deadline = Clock::now();
     }
   }
-  observerService.finish("shutdown");
+  for(auto& [id,job]:observers)job->finish("shutdown");
   scriptService.finish("shutdown");
   execution.complete("shutdown", host.service.paused);
   host.quit = true; host.wake.notify_all();
@@ -832,6 +931,7 @@ int main(int argc, char** argv) {
   if(host.root) {
     emulator->unload(); host.streams.clear(); host.root.reset(); emulator.reset();
   }
+  ares::Nintendo64::executionCoordinate.originObserver = {};
   ares::Video::frameSubmittedObserver = {};
   std::cerr << "stopped\n";
   ares::platform = nullptr;

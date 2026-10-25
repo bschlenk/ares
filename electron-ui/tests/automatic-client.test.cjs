@@ -38,3 +38,12 @@ test('automatic selection waits for an existing app to initialize without launch
   assert.equal((await client.request('session.status')).ok, true);
   assert.ok(polls >= 3); assert.equal(client.launchedApp, false);
 });
+
+test('a session-bound operation poll never autostarts a replacement app after disconnect',async t=>{
+ const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+ const {AutomaticServiceClient}=await import('../dist/services/automatic-client.js');
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ares-bound-poll-'));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+ const client=new AutomaticServiceClient(directory,'stopped');t.after(()=>client.close());
+ await assert.rejects(client.request('execution.status',{session:'stopped-native-session',epoch:1},{operationId:42}),/app_disconnected/);
+ assert.equal(client.launchedApp,false);assert.deepEqual(fs.readdirSync(directory),[]);
+});

@@ -37,6 +37,7 @@ struct Vulkan::Implementation {
   //commands are u64 words, but the backend uses u32 swapped words.
   //size and offset are in u64 words.
   u32 buffer[0x10000] = {};
+  uint64_t taskIds[0x8000] = {};
   u32 queueSize = 0;
   u32 queueOffset = 0;
 
@@ -105,6 +106,7 @@ auto Vulkan::render() -> bool {
     do {
       buffer[queueSize * 2 + 0] = rdram.ram.read<Word>(current, RBusDevice::DP_DMA); current += 4;
       buffer[queueSize * 2 + 1] = rdram.ram.read<Word>(current, RBusDevice::DP_DMA); current += 4;
+      implementation->taskIds[queueSize]=taskProvenance.submissionTask;
       queueSize++;
     } while(--length);
   } else {
@@ -114,6 +116,7 @@ auto Vulkan::render() -> bool {
       if(system.homebrewMode) {
         rsp.debugger.dmemReadWord(current - 8, 8, "RDP XBUS");
       }
+      implementation->taskIds[queueSize]=taskProvenance.submissionTask;
       queueSize++;
     } while(--length);
   }
@@ -129,6 +132,9 @@ auto Vulkan::render() -> bool {
       return true;
     }
 
+    uint64_t taskId=implementation->taskIds[queueOffset];
+    for(u32 n=1;n<length;++n)if(implementation->taskIds[queueOffset+n]!=taskId){taskId=0;break;}
+    taskProvenance.consume(code,(uint64_t(buffer[queueOffset*2])<<32)|buffer[queueOffset*2+1],taskId);
     commandCapture.rdpCommand(code, (uint64_t(buffer[queueOffset * 2]) << 32) | buffer[queueOffset * 2 + 1], 0, length);
 
     if(code >= 8) {

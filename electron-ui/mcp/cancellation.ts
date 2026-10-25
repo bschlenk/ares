@@ -1,3 +1,4 @@
+import { scriptStatus } from '../services/script-wait.js';
 import type { ToolRegistrar } from '../tools/registry.js';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -9,11 +10,11 @@ import { ServiceError, type SessionIdentity } from '../services/contracts.js';
 // operation started by that call, retaining its original session/epoch and ID.
 // In particular, aborting operation_status must never cancel the polled handle.
 export function installCancellation(server: ToolRegistrar, client: LocalServiceClient) {
-  const scope = new AsyncLocalStorage<{signal:AbortSignal; operation?:{id:number;identity:SessionIdentity}; batch?:{identity:SessionIdentity;token:string}; cancel?:Promise<unknown>}>();
+  const scope = new AsyncLocalStorage<{signal:AbortSignal; operation?:{id:number;identity:SessionIdentity;script?:boolean}; batch?:{identity:SessionIdentity;token:string}; cancel?:Promise<unknown>}>();
   const request = client.request.bind(client);
   function cancel(s: NonNullable<ReturnType<typeof scope.getStore>>) {
     if(s.batch && !s.cancel) s.cancel=request('experiment.cancelBatch',s.batch.identity,{token:s.batch.token}).catch(()=>undefined);
-    if(s.operation && !s.cancel) s.cancel = request('execution.cancel',s.operation.identity,{operationId:s.operation.id}).catch(()=>undefined);
+    if(s.operation && !s.cancel){const op=s.operation;s.cancel=(async()=>{if(op.script)await scriptStatus({request} as LocalServiceClient,op.id,op.identity);return request('execution.cancel',op.identity,{operationId:op.id});})().catch(()=>undefined);}
   }
   client.request = (async (method: any, identity?: SessionIdentity, params?: any) => {
     const s=scope.getStore();
@@ -24,7 +25,7 @@ export function installCancellation(server: ToolRegistrar, client: LocalServiceC
     if(s && method === 'experiment.batch') s.batch=undefined;
     const result=reply.ok ? reply.result as any : undefined;
     if(s && result?.state === 'running' && Number.isSafeInteger(result.operation_id) && !['execution.status','execution.cancel'].includes(method)) {
-      s.operation={id:result.operation_id,identity:{session:reply.session,epoch:reply.epoch}};
+      s.operation={id:result.operation_id,script:method==='scripts.run',identity:{session:reply.session,epoch:reply.epoch}};
       if(s.signal.aborted) cancel(s);
     }
     return reply;

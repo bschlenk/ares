@@ -24,7 +24,7 @@ async function fixture(check) {
 test('explicit instance selection, private metadata, disconnect/reconnect and timeout never replay a mutation', async () => {
   await fixture(async ({ host, file, client, writes, releasePause }) => {
     assert.equal((await client.request('session.status')).session, 'fixture');
-    await assert.rejects(client.request('session.pause'), /request_timeout/);
+    await assert.rejects(client.request('session.pause'), e=>{assert.equal(e.code,'request_timeout');assert.equal(e.context.component,'app');assert.equal(e.context.method,'session.pause');assert.equal(e.context.observation,'no_response');return true;});
     assert.equal(writes(), 1);
     releasePause();
     assert.equal((await client.request('session.status')).session, 'fixture');
@@ -114,4 +114,12 @@ test('named stale recovery fails closed when authenticated liveness is inconclus
   await assert.rejects(next.listen(directory,'kirby',binary),/instance_liveness_uncertain/);
   assert.deepEqual(JSON.parse(fs.readFileSync(claim)),info,'inconclusive probe does not remove or replace the existing record');
  }finally{await next.close();await old.close();fs.rmSync(directory,{recursive:true,force:true})}
+});
+
+
+test('native timeout context survives authenticated local transport without changing its code',async()=>{
+ const directory=fs.mkdtempSync('/tmp/ares-native-timeout-context-');const context={component:'native',method:'session.pause',request_id:'req42',reason:'response_deadline_exceeded',observation:'no_response'};
+ const backend={request:async()=>{throw new ServiceError('request_timeout',context);}};const host=new LocalServiceHost(backend);const file=await host.listen(directory);const client=new LocalServiceClient(file,host.instance);
+ try{await assert.rejects(client.request('session.status'),e=>{assert.equal(e.code,'request_timeout');assert.deepEqual(e.context,context);assert.match(e.message,/component=native/);return true;});}
+ finally{client.close();await host.close();fs.rmSync(directory,{recursive:true,force:true});}
 });

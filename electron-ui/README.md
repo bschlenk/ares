@@ -592,3 +592,41 @@ adapter. `load_rom` and `close_rom` manage the game and invalidate old handles.
 `memory_record_start` / `memory_record_stop` steps, so a baseline load and recorded
 input timeline can execute in one call. See [the MCP guide](mcp/README.md) for the
 configuration and timeline example.
+
+## Full local tests with no skips
+
+The normal Node suite has one optional private-media test: verified Kirby game
+identity across renamed and byte-swapped ROM copies, including denial for another
+game identity. It skips only when `ARES_PLUGIN_TEST_ROM` is absent. The fixture-only
+`accept` lane explicitly excludes private media and enforces zero skips separately.
+
+To rebuild the native host/fixtures and TypeScript, select **all** Node tests and
+fail on any skip, supply your own verified US-revision-0 Kirby ROM:
+
+```sh
+cd electron-ui
+npm run test:all -- --rom '/path/to/Kirby 64 - The Crystal Shards.z64'
+```
+
+`ARES_PLUGIN_TEST_ROM` can supply the same path instead. Missing media fails this
+lane before tests run. `ARES_NATIVE_BUILD` selects an already configured CMake
+build directory; the default is `../build-electron-make`. Tests work on disposable
+ROM copies and verify that the original bytes remain unchanged. No private ROM is
+included in the repository.
+
+Actual graphics-microcode matrix-consumption acceptance also needs your saved
+state:
+
+```sh
+ARES_PLUGIN_TEST_ROM='/path/to/Kirby.z64' \
+ARES_PLUGIN_TEST_STATE='/path/to/Kirby.bs1' npm run test:matrix
+```
+
+This checks interpreter and JIT capture, late IMEM microcode loads, frozen consumed
+bytes after source rewrites, reset invalidation and cycle accounting. It reports
+bounded-capture truncation explicitly and checks verified F3DEX2 FIFO 2.04H
+state references under both executors. The generated, ROM-free matrix fixture
+also runs in `test:all`: actual microcode executes nested lists, segmented
+addresses, stack/load/multiply/pop and viewport changes, with fixed-point
+rounding, cached-vertex and rendered-pixel assertions. `matrix_capture` exposes
+these immutable native states; unsupported microcode remains unavailable.

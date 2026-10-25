@@ -24,6 +24,7 @@ test('timeout rejects all pending work, closes the connection and never replays'
   await assert.rejects(client.request('session.pause'), /native_host_disconnected/);
   assert.equal(sent.split('\n').filter(Boolean).length, 1);
   assert.equal(failure.code, 'request_timeout');
+  assert.deepEqual(failure.context,{component:'native',method:'session.pause',request_id:'req1',reason:'response_deadline_exceeded',observation:'no_response'});
 });
 test('disconnection rejects pending requests; router detach revokes old connection', async () => {
   const input = new PassThrough(), output = new PassThrough();

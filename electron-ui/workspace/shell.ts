@@ -71,7 +71,7 @@ function updateWorkspaceSettings(): void {
   element('edit-layout').textContent = workspace.isEditing() ? 'Finish customizing' : 'Customize layout';
   const select = element<HTMLSelectElement>('floating-panel'), selected = select.value;
   select.replaceChildren();
-  for (const panel of workspace.panels()) { const option = document.createElement('option'); option.value = panel.key; option.textContent = panel.title; select.append(option); }
+  for (const panel of [{key:'video',title:'Viewport'},...workspace.panels()]) { const option = document.createElement('option'); option.value = panel.key; option.textContent = panel.title; select.append(option); }
   if ([...select.options].some(option => option.value === selected)) select.value = selected;
   element<HTMLButtonElement>('add-floating').disabled = !select.value;
   const list = element('floating-settings'); list.replaceChildren();

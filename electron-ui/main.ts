@@ -1,3 +1,9 @@
+import {ServiceError} from './services/contracts.js'
+import {PluginExports} from './services/plugin-exports.js'
+import { ObserverDeliveries } from './services/observer-delivery.js'
+import { attachDiagnostics } from './services/diagnostic-guard.js'
+import { buildInfo } from './services/build-info.js'
+import { AppLogs } from './services/app-logs.js'
 import { pluginBridgeResult } from './plugins/admission.js'
 import { WorkspaceStore } from './workspace/store.js'
 import { PluginSettingsService } from './settings/plugins.js'
@@ -69,6 +75,14 @@ const saveDirectory = (() => {
   }
 })()
 
+const appLogs = new AppLogs(path.join(app.getPath('userData'), 'logs'))
+const fatal = (error: unknown) => {
+  appLogs.write('main', 'fatal', error)
+  const fallback = setTimeout(() => app.exit(1), 1500)
+  void appLogs.flush().finally(() => { clearTimeout(fallback); app.exit(1) })
+}
+attachDiagnostics((source,error,isFatal)=>{if(isFatal)fatal(error);else appLogs.write(source,'error',error)})
+
 interface NativeSession {
   child: ChildProcessByStdio<Writable, Readable, Readable>
   system: string
@@ -78,6 +92,7 @@ interface NativeSession {
   lastSequence: number
   diagnostic: string
   failure?: string
+  lastPresentation?:import('./services/frame-contracts.js').FrameReference
   lastFrame?: NativeFrame
   closed: Promise<void>
 }
@@ -107,6 +122,29 @@ export const plugins = new PluginRegistry(
       window.webContents.send('plugin-catalog', catalog)
   },
 )
+const observerDeliveries=new ObserverDeliveries(owner=>{
+  if(!owner.startsWith('plugin-'))return false;
+  try{plugins.authorize(owner.slice(7));return true;}catch{return false;}
+},sample=>{if(window&&!window.isDestroyed())window.webContents.send('plugin-frame',sample.owner.slice(7),sample)});
+ipcMain.on('plugin.frameAck',(event,token:unknown,id:unknown,delivery:unknown)=>{
+  if(!window||event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||typeof token!=='string'||!Number.isSafeInteger(id)||!Number.isSafeInteger(delivery))return;
+  observerDeliveries.ack('plugin-'+token,id as number,delivery as number);
+});
+const pluginExports=new PluginExports({
+  authorize(token,capability){const info=plugins.authorize(token);if(!info.manifest?.capabilities.includes(capability)||!info.lease)throw new ServiceError('plugin_capability_denied');return {pluginId:info.manifest.id,identity:info.lease.identity};},
+  async choose(name){if(!window||window.isDestroyed())throw new Error('window_closed');const result=await dialog.showSaveDialog(window,{title:'Export plugin data',defaultPath:name,properties:['showOverwriteConfirmation','createDirectory']});return result.canceled?undefined:result.filePath;},
+  clipboard(text){clipboard.writeText(text);},
+  async start(owner,identity,params){const reply=await sessions.request('scripts.observe',identity,params,owner);if(!reply.ok||!reply.result)throw new ServiceError(reply.error??'observer_start_failed');return reply.result.observer_id;},
+  stop(owner){return sessions.request('execution.release',undefined,undefined,owner);},
+});
+sessions.onObserverSample=sample=>{const value={...sample,frame_reference:{...sample.frame_reference,app_instance:serviceHost.instance}};pluginExports.observe(value);observerDeliveries.publish(value);};
+for(const operation of ['clipboard','exportText','recordFrames','finishExport'] as const)ipcMain.handle('plugin.'+operation,(event,token:unknown,params:unknown,extra:unknown)=>pluginBridgeResult(async()=>{
+  if(!window||event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||typeof token!=='string')throw new Error('invalid_sender');
+  if(operation==='clipboard'){if(typeof params!=='string')throw new Error('invalid_export_request');return pluginExports.clipboard(token,params,extra===true);}
+  if(operation==='exportText')return pluginExports.save(token,params as import('./services/export-contracts.js').TextExport,extra===true);
+  if(operation==='recordFrames')return pluginExports.record(token,params as import('./services/export-contracts.js').FrameExport,extra===true);
+  if(typeof params!=='string'||typeof extra!=='boolean')throw new Error('invalid_export_request');return pluginExports.finish(token,params,extra);
+}));
 const pluginCatalog = (offset = 0, limit = 4) => {
   if (
     !Number.isInteger(offset) ||
@@ -162,6 +200,11 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
       (key) =>
         ![
           'operation',
+          'handle',
+          'release',
+          'operation_id',
+          'job_id',
+          'length',
           'id',
           'source',
           'enabled',
@@ -179,6 +222,11 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
   )
     throw new Error('invalid_plugin_request')
   switch (params.operation) {
+    case 'plugin_exports': return pluginExports.page(params)
+    case 'script_result': return sessions.readScriptResult(params)
+    case 'build_info': return {...buildInfo(),native_sha256:await hashRom(hostPath),app_instance:appLogs.instance,app_root:appRoot,executable:process.execPath}
+    case 'app_logs': return appLogs.read(params)
+    case 'app_health': return { instance: appLogs.instance, observed_at: new Date().toISOString(), native: { generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() }
     case 'app_status': return { ready: sessions.identity !== undefined, pid: process.pid }
     case 'load_rom': {
       if (Object.keys(params).some(key => !['operation', 'path', 'system'].includes(key)) || typeof params.path !== 'string' || !path.isAbsolute(params.path) || params.path.includes('\0') || (params.system !== undefined && typeof params.system !== 'string')) throw new Error('invalid_rom_request')
@@ -218,9 +266,13 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
         rect = await window.webContents.executeJavaScript(`(() => {const all=[...document.querySelectorAll('[data-plugin-panel]')];const e=all.find(e=>e.dataset.pluginPanel===${selector} && e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0);if(!e)return;const r=e.getBoundingClientRect();return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)}})()`)
         if (!rect) throw new Error('panel_not_open')
       }
+      const before=await window.webContents.executeJavaScript('window.overlaySnapshot?.()??null')
       const image = await window.webContents.capturePage(rect)
+      const after=await window.webContents.executeJavaScript('window.overlaySnapshot?.()??null')
+      const frame_reference=before?.frame&&after?.frame&&JSON.stringify(before)===JSON.stringify(after)?after.frame:null
+      const overlay_geometry=frame_reference?{coordinate_space:'overlay_css',rect_coordinate_space:'window_css',...after.size,rect:after.rect,capture_rect:rect??null}:null
       await fs.promises.writeFile(params.path, image.toPNG(), { flag: 'wx' })
-      return { path: params.path, source: params.panel === undefined ? 'window' : 'panel', panel: params.panel ?? null, ...image.getSize() }
+      return { frame_reference,overlay_geometry,frame_match:frame_reference?'renderer_submit':'unavailable_or_changed',path: params.path, source: params.panel === undefined ? 'window' : 'panel', panel: params.panel ?? null, ...image.getSize() }
     }
     case 'list':
       return pluginCatalog(params.offset ?? 0, params.limit ?? 4)
@@ -471,6 +523,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     identity,
     (error) => {
       if (active === session) {
+        appLogs.write('native','error',error,session.generation)
         session.failure = String(error)
         status(session.failure)
         child.kill()
@@ -485,19 +538,19 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
       preferences.markApplied(startupSettings, 'live', [...nativeRuntimeSettings.map(descriptor => descriptor.id), 'debug.provenance'])
     }
   }).catch(error => status(String(error)))
-  child.on('error', (error) =>
-    status(`Cannot start native host: ${error.message}`),
-  )
+  child.on('error', (error) => { appLogs.write('native', 'error', error, session.generation); status(`Cannot start native host: ${error.message}`) })
+  child.on('close', (code, signal) => { appLogs.endNative(session.generation); appLogs.write('native', code ? 'error' : 'info', JSON.stringify({event:'exit',code,signal}), session.generation) })
   child.stdin.on('error', () => {}) // exit races are reported by close/error
   child.stderr.on('data', (data) => {
-    process.stderr.write(data)
-    session.diagnostic = data.toString().trim()
+    appLogs.native(data, session.generation)
+    session.diagnostic = data.toString().trim().slice(0,8192)
     if (active === session) status(session.diagnostic)
   })
   const parser = new FrameParser((frame) => {
     if (active !== session) return
     session.outstanding = true
     session.lastSequence = frame.sequence
+    if(frame.frameReference)frame.frameReference={...frame.frameReference,native_session:identity.session,app_instance:serviceHost.instance}
     session.lastFrame = frame
     // This is intentionally a copied baseline. MessagePortMain does not transfer ArrayBuffers.
     port?.postMessage({
@@ -616,12 +669,15 @@ app
     })
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     window.webContents.on('will-navigate', (event) => event.preventDefault())
-    window.webContents.on('render-process-gone', () => {
+    window.webContents.on('render-process-gone', (_event, details) => {
+      appLogs.write('renderer', 'error', JSON.stringify(details))
+      observerDeliveries.clear()
       plugins.detach()
       port?.close()
       port = null
     })
     window.webContents.on('did-start-loading', () => {
+      observerDeliveries.clear()
       plugins.detach()
       port?.close()
       port = null
@@ -639,6 +695,7 @@ app
           data?.ack === active.lastSequence &&
           active.outstanding
         ) {
+          if(data.submitted&&active.lastFrame?.frameReference)active.lastPresentation={...active.lastFrame.frameReference,presentation:{window:'main',sequence:data.ack,stage:'renderer_submit'},provenance:'matched'}
           active.outstanding = false
           command('ack')
         }
@@ -725,7 +782,7 @@ app
           case 'refresh':
             return plugins.refresh()
           case 'request':
-            return pluginBridgeResult(() => plugins.request(args[0], args[1], args[2]))
+            return pluginBridgeResult(async() => {const result=await plugins.request(args[0],args[1],args[2]);if(args[1]==='script.observerStop'&&args[2]?.observerId)observerDeliveries.stop('plugin-'+args[0],args[2].observerId);return result;})
           case 'settings':
             return pluginBridgeResult(() => plugins.settings(args[0], args[1]))
           case 'storage':
@@ -879,15 +936,21 @@ app
     app.quit()
   })
 app.on('window-all-closed', () => app.quit())
+let quitReady=false
 app.on('before-quit', (event) => {
-  if (quitting) return
+  if (quitReady) return
   event.preventDefault()
+  if(quitting)return
   quitting = true
-  enqueue(stop).finally(async () => {
-    await plugins.close()
-    await serviceHost.close()
+  void (async()=>{
+    // Window closure or another signal can request quit again while these await.
+    // Keep every request blocked until all owners and service claims are released.
+    for(const close of [()=>enqueue(stop),()=>plugins.close(),()=>serviceHost.close()]){
+      try{await close()}catch(error){appLogs.write('main','error',error)}
+    }
+    quitReady=true
     app.quit()
-  })
+  })()
 })
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => app.quit())

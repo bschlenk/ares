@@ -71,7 +71,7 @@ auto RSP::ioRead(u32 address, Thread &thread) -> u32 {
 
 auto RSP::writeWord(u32 address, u32 data, Thread& thread) -> void {
   if(address <= 0x0403'ffff) {
-    if(address & 0x1000) return recompiler.invalidate(address & 0xfff), imem.write<Word>(address, data);
+    if(address & 0x1000) {commandCapture.matrices.dirty=true;return recompiler.invalidate(address & 0xfff), imem.write<Word>(address, data); }
     else                 return dmem.write<Word>(address, data);
   }
   return ioWrite(address, data, thread);
@@ -120,10 +120,10 @@ auto RSP::ioWrite(u32 address, u32 data_, Thread& thread) -> void {
   if(address == 4) {
     //SP_STATUS
     if(data.bit( 0) && !data.bit( 1)) {
-      if(status.halted) { rdp.debugCapture.onRspStart(cpu.ipu.pc); commandCapture.detectRsp(); }
+      if(status.halted) { taskProvenance.started(cpu.ipu.pc); rdp.debugCapture.onRspStart(cpu.ipu.pc); commandCapture.detectRsp(); }
       status.halted = 0;
     }
-    if(data.bit( 1) && !data.bit( 0)) status.halted = 1;
+    if(data.bit( 1) && !data.bit( 0)) {status.halted = 1;taskProvenance.stopped(0);commandCapture.rspFlush(false);}
     if(data.bit( 2)) status.broken = 0;
     if(data.bit( 3) && !data.bit( 4)) mi.lower(MI::IRQ::SP);
     if(data.bit( 4) && !data.bit( 3)) mi.raise(MI::IRQ::SP);

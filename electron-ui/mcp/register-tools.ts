@@ -1,3 +1,5 @@
+import { buildInfo } from '../services/build-info.js';
+import { scriptStatus, waitForScript } from '../services/script-wait.js';
 import type { ToolRegistrar } from '../tools/registry.js';
 import { registerMemoryTools } from './memory-tools.js';
 import { registerViewerTools } from './viewer-tools.js';
@@ -54,20 +56,25 @@ const failure = (error: unknown) => ({ ...output({ error: error instanceof Servi
   server.registerTool('run_script', {description:'Run a confined JavaScript/TypeScript module on the native emulation thread. Exactly one of path/source. Returns an operation handle promptly; poll operation_status and use script_result after completion. frames(n) advances exact VIs; memory uses explicit CPU/RDRAM views and big-endian types. Completion leaves paused; cancellation retains earlier effects. No filesystem/network/Node globals.',inputSchema:z.object({path:z.string().min(1).max(4096).optional(),source:z.string().min(1).max(131072).optional(),args:z.unknown().default({}),max_seconds:z.number().min(0.001).max(600).default(60),wait_ms:z.number().int().min(0).max(1000).default(0),output_path:z.string().min(1).max(4096).optional(),state_paths:z.array(z.string().min(1).max(4096)).max(32).default([]),output_paths:z.array(z.string().min(1).max(4096)).max(32).default([]),max_frames:z.number().int().min(0).max(1000000).default(1000000)}).strict().refine(p=>(p.path===undefined)!==(p.source===undefined),'Supply exactly one of path/source')},p=>call(async()=>{
     let r=unwrap(await local.request('scripts.run',await status(),{...(p.path?{path:p.path}:{source:p.source}),args:p.args,timeoutMs:Math.ceil(p.max_seconds*1000),maxFrames:p.max_frames,statePaths:p.state_paths,outputPaths:p.output_paths,...(p.output_path?{outputPath:p.output_path}:{})}));
     rememberOperation(r.operation_id,local.identity!);scriptOperations.add(r.operation_id);
-    const until=Date.now()+p.wait_ms;
-    while(Date.now()<until&&(r.state==='running'||(r as any).script_output?.state==='pending')){
-      await new Promise(resolve=>setTimeout(resolve,10));const current=await status();
-      const poll=await local.request('execution.status',current,{operationId:r.operation_id});
-      if(poll.ok&&poll.result){r={...r,...poll.result};operationIdentities.set(r.operation_id,current);}
-      else if(poll.error!=='stale_epoch')throw new ServiceError(poll.error??'invalid_reply');
+    if(p.wait_ms) {
+      const identity={...local.identity!};
+      // A short MCP wait returns the handle when its budget expires.
+      try { r=await waitForScript(local,r,identity,{timeoutMs:p.wait_ms}); }
+      catch(error) { if(!(error instanceof ServiceError)||error.code!=='script_wait_timeout')throw error; }
+      operationIdentities.set(r.operation_id,identity);
     }
     return r;
   }));
-  server.registerTool('script_result',{description:'Read completed native script JSON in bounded UTF-8 hex pages. The most recent script result is retained on its owning connection. bytes is the full length; errors and bounded logs accompany every page.',inputSchema:z.object({operation_id:z.number().int().nonnegative().default(0),offset:z.number().int().min(0).max(4194304).default(0),length:z.number().int().min(1).max(16384).default(16384)}).strict()},p=>call(async()=>unwrap(await local.request('script.read',await status(),{offset:p.offset,length:p.length,operationId:p.operation_id}))));
+  server.registerTool('script_result',{description:'Read an immutable completed script result retained for 15 minutes (16 results / 16 MiB). Prefer result_handle; operation_id=0 selects the latest completed result in the current native session. Available to fresh authorized local clients.',inputSchema:z.object({result_handle:z.string().uuid().optional(),operation_id:z.number().int().nonnegative().default(0),offset:z.number().int().min(0).max(4194304).default(0),length:z.number().int().min(1).max(16384).default(16384)}).strict()},p=>call(()=>local.manage({operation:'script_result',...(p.result_handle?{handle:p.result_handle}:{}),operation_id:p.operation_id,offset:p.offset,length:p.length})));
+  server.registerTool('script_result_release',{description:'Release an immutable completed result handle. Does not cancel or mutate active execution.',inputSchema:z.object({result_handle:z.string().uuid()}).strict()},p=>call(()=>local.manage({operation:'script_result',release:true,handle:p.result_handle})));
   registerMemoryTools(server, local, status);
   server.registerTool('provenance_control', { description: 'Query or explicitly enable/disable bounded N64 ROM-to-RAM DMA provenance. Omit enabled to query. Applies immediately and to subsequent ROM loads, so enable before loading/resetting the ROM to capture boot transfers. Disabling frees the history. Reading overlay_log never enables recording.', inputSchema: z.object({ enabled: z.boolean().optional() }).strict() }, p => call(() => local.manage({ operation: 'provenance', ...p })));
+  server.registerTool('build_info',{description:'Adapter build provenance and, when requested, the connected app build for mixed-install diagnosis.',inputSchema:z.object({app:z.boolean().default(false)}).strict(),annotations:{readOnlyHint:true}},p=>call(async()=>({adapter:buildInfo(),...(p.app?{app:await local.manage({operation:'build_info'})}:{})})));
+  server.registerTool('plugin_exports',{description:'Inspect bounded user-authorized plugin export jobs and committed artifact metadata. Does not grant a destination or mutate/cancel another plugin job.',inputSchema:z.object({job_id:z.string().uuid().optional(),offset:z.number().int().min(0).max(32).default(0),limit:z.number().int().min(1).max(8).default(8)}).strict(),annotations:{readOnlyHint:true}},p=>call(()=>local.manage({operation:'plugin_exports',...p})));
+  server.registerTool('app_logs', { description: 'Bounded app diagnostics, available without a ROM. Returns log directory, generation, loss and expiry metadata.', inputSchema: z.object({cursor:z.number().int().nonnegative().default(0),limit:z.number().int().min(1).max(64).default(32),generation:z.string().optional(),source:z.string().max(128).optional()}).strict(),annotations:{readOnlyHint:true}}, p => call(() => local.manage({operation:'app_logs',...p})));
+  server.registerTool('app_health', { description: 'Cheap main-process observation of native connectivity and recent errors. Does not probe native or claim independent event-loop stall detection.', inputSchema:z.object({}).strict(),annotations:{readOnlyHint:true}}, () => call(() => local.manage({operation:'app_health'})));
   server.registerTool('plugin_logs', { description: 'Bounded plugin runtime logs with generation and loss counters.', inputSchema: z.object({ id: z.string(), cursor: z.number().int().nonnegative().default(0), limit: z.number().int().min(1).max(32).default(32), generation: z.string().optional() }).strict(), annotations: {readOnlyHint:true} }, p => call(() => local.manage({operation:'logs',...p})));
-  server.registerTool('ui_screenshot', { description: 'Explicit app window or open plugin panel screenshot, separate from game framebuffer capture. Writes a new PNG file.', inputSchema: z.object({path:z.string(),panel:z.string().optional()}).strict() }, p => call(() => local.manage({operation:'screenshot',...p})));
+  server.registerTool('ui_screenshot', { description: 'Explicit app window or open plugin panel screenshot, separate from game framebuffer capture. Writes a new PNG file. Returns renderer-submit frame and overlay crop/rotation/DPR geometry only when both stay stable across capture.', inputSchema: z.object({path:z.string(),panel:z.string().optional()}).strict() }, p => call(() => local.manage({operation:'screenshot',...p})));
   server.registerTool('emu_status', { description: 'Native safe-point status: system, VI/epoch/PC, execution/debug ownership, input, save metadata and presentation counters. Verbose retains renderer/configuration details.', inputSchema: z.object({ verbose: z.boolean().default(false) }).strict(), annotations: { readOnlyHint: true } }, async ({verbose}) => call(async()=>{
     const result=await status() as Awaited<ReturnType<typeof status>> & {last_stop?:import('../services/n64-contracts.js').Stop;debug_mode?:Record<string,unknown>};
     if(result.last_stop) result.last_stop=formatStop(result.last_stop) as any;
@@ -138,14 +145,13 @@ const failure = (error: unknown) => ({ ...output({ error: error instanceof Servi
   server.registerTool('operation_status', { description: 'Poll running state or the immutable final result. The last 16 completed operations are retained.', inputSchema: z.object({ operation_id: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), ...flags }).strict(), annotations: { readOnlyHint: true } }, async ({ operation_id, fpr, cop0, verbose }) => call(async () => {
     if ((fpr || cop0) && (await status()).system !== 'Nintendo 64') throw new ServiceError('unavailable');
     if (!local.identity) await status();
-    if(scriptOperations.has(operation_id)) {const current=await status();if(operationIdentities.get(operation_id)?.session!==current.session)throw new ServiceError('stale_session');operationIdentities.set(operation_id,current);}
-    let reply=await local.request('execution.status', operationIdentities.get(operation_id), { operationId: operation_id });
-    if(!reply.ok&&reply.error==='stale_epoch'&&scriptOperations.has(operation_id)){const current=await status();if(operationIdentities.get(operation_id)?.session!==current.session)throw new ServiceError('stale_session');operationIdentities.set(operation_id,current);reply=await local.request('execution.status',current,{operationId:operation_id});}
+    if(scriptOperations.has(operation_id))return formatOperation(await scriptStatus(local,operation_id,operationIdentities.get(operation_id)!),fpr,cop0,verbose);
+    const reply=await local.request('execution.status',operationIdentities.get(operation_id),{operationId:operation_id});
     return formatOperation(unwrap(reply),fpr,cop0,verbose);
   }));
   server.registerTool('cancel_operation', { description: 'Cancel this connection’s current operation, or a specific ID. UI pause can interrupt any owner.', inputSchema: z.object({ operation_id: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).nullable().default(null) }).strict() }, async ({ operation_id }) => call(async () => {
     if (operation_id === null || !local.identity) await status();
-    if(operation_id!==null&&scriptOperations.has(operation_id)){const current=await status();if(operationIdentities.get(operation_id)?.session!==current.session)throw new ServiceError('stale_session');operationIdentities.set(operation_id,current);}
+    if(operation_id!==null&&scriptOperations.has(operation_id))await scriptStatus(local,operation_id,operationIdentities.get(operation_id)!);
     return unwrap(await local.request('execution.cancel', operation_id === null ? undefined : operationIdentities.get(operation_id), { operationId: operation_id ?? 0 }));
   }));
   registerViewerTools(server, local, status);

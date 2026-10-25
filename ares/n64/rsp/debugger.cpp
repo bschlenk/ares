@@ -17,6 +17,7 @@ auto RSP::Debugger::load(Node::Object parent) -> void {
   });
   memory.imem->setWrite([&](u32 address, u8 data) -> void {
     rsp.imem.write<Byte>(address, data);
+    commandCapture.matrices.dirty=true;
     if constexpr(Accuracy::RSP::Recompiler) rsp.recompiler.invalidate(address);
   });
 

@@ -1,0 +1,60 @@
+.kirby-skeleton {
+  font-size: 13px;
+  max-width: 460px;
+}
+.kirby-skeleton .ks-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+}
+.kirby-skeleton .ks-frame {
+  margin-left: auto;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.kirby-skeleton h3 {
+  font-size: 12px;
+  margin: 10px 0 4px;
+  opacity: 0.8;
+}
+.kirby-skeleton .ks-cam {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0;
+}
+.kirby-skeleton .ks-cam dt {
+  opacity: 0.7;
+}
+.kirby-skeleton .ks-cam dd,
+.kirby-skeleton .ks-num {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.kirby-skeleton .ks-objs {
+  border-collapse: collapse;
+  width: 100%;
+}
+.kirby-skeleton .ks-objs th {
+  text-align: left;
+  font-weight: normal;
+  opacity: 0.7;
+}
+.kirby-skeleton .ks-objs td {
+  padding: 1px 6px 1px 0;
+}
+.kirby-skeleton .ks-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+}
+.kirby-skeleton .ks-status:empty {
+  display: none;
+}
+
+.kirby-skeleton .ks-objs td:nth-child(2) { overflow-wrap: anywhere; }

@@ -20,6 +20,7 @@ async function run() {
     mode: fs.constants.COPYFILE_FICLONE,
   })
   const resources = path.join(bundle, 'Contents/Resources')
+  const iconName=execFileSync('plutil',['-extract','CFBundleIconFile','raw',path.join(bundle,'Contents/Info.plist')],{encoding:'utf8'}).trim();assert.equal(iconName,'Ares.icns');const icon=fs.readFileSync(path.join(resources,iconName));assert.equal(icon.toString('ascii',0,4),'icns');assert.equal(icon.readUInt32BE(4),icon.length)
   const rom = path.join(temporary, 'fixture.gb'),
     report = path.join(temporary, 'renderer.json')
   fs.writeFileSync(rom, makeFixture())

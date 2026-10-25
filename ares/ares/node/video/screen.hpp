@@ -29,6 +29,12 @@ struct Screen : Video {
   auto phosphor() const -> bool { return _phosphor; }
   auto interframeBlending() const -> bool { return _interframeBlending; }
   auto rotation() const -> u32 { return _rotation; }
+  // Actual crop applied after refresh and rotation, in rotated canvas pixels.
+  // Hosts call this synchronously from Platform::video while refresh owns _mutex.
+  struct PresentationGeometry { u32 canvasWidth, canvasHeight, cropX, cropY, rotation; };
+  auto presentationGeometry() const -> PresentationGeometry {
+    return {_canvasWidth, _canvasHeight, _viewportX, _viewportY, _rotation};
+  }
 
   auto resetPalette() -> void;
   auto resetSprites() -> void;
