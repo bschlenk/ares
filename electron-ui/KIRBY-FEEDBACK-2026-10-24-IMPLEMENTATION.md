@@ -594,3 +594,21 @@ Six focused tests pass with zero skips. Full-suite result follows below.
 Yield/resume full regression: **178 passed, 0 failures, 0 skips**. This closes
 verified resume for the supported F3DEX2 profile; arbitrary microcode remains
 explicitly unverified, and displayed-pixel association remains candidate-only.
+
+## Rendered task-association ambiguity acceptance
+
+A generated GPU fixture now submits real RDP fills through RSP DPC under both
+executors, with full command capture disabled. Three targets produce the expected
+red/green/blue interior pixels. Repeated origins have distinct commit identities;
+reused buffers select matching dispatch candidates. A second task in the same VI
+fully overwrites the first target with white: both dispatches remain candidates,
+which is correct because target-address evidence cannot prove surviving pixels.
+A later CPU-origin pixel write changes that source to green without inventing an
+RSP author. An unobserved target has no candidates. Late descriptor rewrites do
+not change the frozen submission. The typed service preserves `candidate_only`
+and its explicit reason throughout. Both executor paths pass.
+
+Together with the genuine yield/resume, nested-list, task-reuse, bounded-history
+and reset fixtures, this completes E's supported provenance contract. It does not
+add general pixel authorship: arbitrary microcode, CPU writes, partial coverage,
+blends and overwritten targets remain unknown/ambiguous as allowed by the plan.
