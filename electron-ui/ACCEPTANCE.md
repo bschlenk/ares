@@ -97,6 +97,13 @@ the remaining native script error after the executable-path fixes. Corrections:
   after budget expiry and promise storms spanning many yields.
 - Electron MCP acceptance lists the current public tools. Workspace acceptance
   checks visible default chrome while allowing the inactive demonstration banner.
+- Named service shutdown waits for its claim helper to exit. Restart retries a
+  briefly retained kernel lock only after the private authenticated record proves
+  the old endpoint is gone; live/inconclusive records still fail closed. A native
+  helper regression forces delayed lock release instead of relying on a race.
+- Origin-observer tests preserve both frozen native captures in their payload,
+  honoring the bounded latest-value notification transport rather than assuming
+  its writer flushes between adjacent CPU instructions.
 - Isolated development launches copy `tools/` along with the other TypeScript
   source directories, so their builds can resolve the tool registry.
 - Smoke-test FPS is diagnostic in the correctness lane. Hosted run `40257051286`
