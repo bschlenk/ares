@@ -34,12 +34,11 @@ if(SDL_FOUND)
   target_link_libraries(ruby PRIVATE "$<LINK_LIBRARY:WEAK_FRAMEWORK,SDL::SDL>")
 endif()
 
-if(librashader_FOUND)
-  target_link_libraries(
-    ruby
-    PRIVATE "$<LINK_LIBRARY:WEAK_LIBRARY,librashader::librashader>"
-    # "$<$<BOOL:TRUE>:librashader::librashader>"
-  )
+if(librashader_FOUND AND ARES_ENABLE_LIBRASHADER)
+  target_link_libraries(ruby PRIVATE "$<LINK_LIBRARY:WEAK_LIBRARY,librashader::librashader>")
+elseif(TARGET librashader::librashader)
+  # The fallback target only provides headers; library link features do not apply to it.
+  target_link_libraries(ruby PRIVATE librashader::librashader)
 endif()
 
 target_enable_feature(ruby "Metal video driver" VIDEO_METAL)
