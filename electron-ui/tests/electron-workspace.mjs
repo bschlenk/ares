@@ -30,7 +30,9 @@ app.whenReady().then(async () => {
     const window = await until(() => BrowserWindow.getAllWindows()[0]);
     const js = code => window.webContents.executeJavaScript(code);
     await until(() => js("typeof window.stats === 'function' && !!document.querySelector('[data-plugin-command]')"));
-    assert.equal(await js("!!document.querySelector('body > header, body > nav, body > aside, #metrics, #stress, #synthetic')"), false);
+    // Inactive UI such as the demonstration banner may exist, but default video
+    // presentation must have no visible legacy chrome or diagnostic controls.
+    assert.equal(await js("[...document.querySelectorAll('body > header, body > nav, body > aside, #metrics, #stress, #synthetic')].some(element => element.getClientRects().length > 0)"), false);
     assert.equal(await js("document.querySelector('#settings-dialog').open"), false);
     assert.equal(await js("getComputedStyle(document.querySelector('.area-toolbar')).display"), 'none');
     const identity = await sessions.request('session.status');

@@ -56,15 +56,18 @@ test('native script VI waits, zero frames, promise storm, OOM, loops and cleanup
   await sleep(20);assert.equal((await request('session.status')).batch_id,null);
   const again=await run('export default()=>42');assert.equal(again.value,42);
   const observer=await request('scripts.observe',{source:'export default({emu})=>({frame:emu.info().frame})',args:{},timeoutMs:10000,maxFrames:0});assert(observer.observer_id);
-  await request('session.resume');await sleep(150);await request('session.pause');
-  const observed=await request('script.observerRead',{offset:0,length:16384});assert(observed.bytes>0,JSON.stringify(observed));
+  const waitObserver=async predicate=>{const deadline=Date.now()+5000;let page;do{page=await request('script.observerRead',{offset:0,length:16384});if(predicate(page))return page;await sleep(10)}while(Date.now()<deadline);assert.fail('observer state timeout: '+JSON.stringify(page));};
+  await request('session.resume');
+  await waitObserver(page=>page.bytes>0);await request('session.pause');
+  const observed=await request('script.observerRead',{offset:0,length:16384});
   assert.equal(observed.active,true);assert.equal(JSON.parse(Buffer.from(observed.hex,'hex').toString()).frame,observed.frame);
   const exclusive=await run('export default async({frames})=>{await frames(8);return true}');assert.equal(exclusive.value,true);
   assert.equal((await request('script.observerRead',{offset:0,length:16384})).hex,observed.hex);
   await request('script.observerStop');
   await request('scripts.observe',{source:'export default({frames})=>frames(1)',args:{},timeoutMs:10000,maxFrames:0});
-  await request('session.resume');await sleep(150);await request('session.pause');
-  const denied=await request('script.observerRead',{offset:0,length:16384});assert.match(denied.error,/read_only/);assert.equal(denied.active,false);
+  await request('session.resume');
+  const denied=await waitObserver(page=>!page.active);await request('session.pause');
+  assert.match(denied.error,/read_only/);assert.equal(denied.active,false);
 
  }finally{router.detach();child.stdin.end('quit\n');const timer=setTimeout(()=>child.kill('SIGKILL'),1000);await closed;clearTimeout(timer);fs.rmSync(dir,{recursive:true,force:true})}
 });
