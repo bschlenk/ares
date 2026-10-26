@@ -37,9 +37,9 @@ app.whenReady().then(async () => {
     await js('window.ares.preferences.set("agent.enabled", true)');
     await js('window.ares.agentAction("copy")');
     const config = JSON.parse(await clipboard.readText());
-    assert.equal(config.mcpServers.ares.command, '/bin/sh');
-    assert.ok(config.mcpServers.ares.args[1].startsWith('exec ~/.local/bin/ares-mcp '));
-    assert.equal(JSON.stringify(config).includes(process.env.HOME), false);
+    assert.equal(config.mcpServers.ares.command, helper);
+    assert.deepEqual(config.mcpServers.ares.args, []);
+    assert.equal(JSON.stringify(config).includes(app.getAppPath()), false, 'installed helper configuration is independent of the bundle location');
     assert.deepEqual(JSON.parse(await js('window.ares.agentAction(\"preview\")')), config);
     const peer = new StdioPeer(config.mcpServers.ares.command, config.mcpServers.ares.args);
     try { await peer.initialize(); assert.ok((await peer.tool('emu_status')).system); } finally { await peer.close(); }
