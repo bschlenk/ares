@@ -141,9 +141,13 @@ app.whenReady().then(async () => {
     await js(`document.querySelector('[data-plugin-panel="ares.examples.memory:diff"] [data-field="capacity"]').value='1';document.querySelector('[data-plugin-panel="ares.examples.memory:diff"] [data-field="duration"]').value='3'`)
     await diffAction('record'); assert.equal((await sessions.request('session.status')).result.paused,true)
     await sessions.request('session.resume')
-    await new Promise(r=>setTimeout(r,100))
-    await diffAction('recordStatus')
-    assert.match(await js(`document.querySelector('[data-plugin-panel="ares.examples.memory:diff"] [data-recording]').textContent`), /2 overwritten/)
+    let recordingStatus = ''
+    await until(async () => {
+      await diffAction('recordStatus')
+      recordingStatus = await js(`document.querySelector('[data-plugin-panel="ares.examples.memory:diff"] [data-recording]').textContent`)
+      return recordingStatus.startsWith('Stopped') && recordingStatus.includes(' · 2 overwritten · ')
+    }).catch(error => { error.message += `; last recording status: ${recordingStatus}`; throw error })
+    assert.match(recordingStatus, /2 overwritten/)
     await diffAction('frameBefore')
     assert.match(await js(`document.querySelector('[data-plugin-panel="ares.examples.memory:diff"] [role="status"]').textContent`), /frame [0-9]+/)
     await sessions.request('session.pause')
