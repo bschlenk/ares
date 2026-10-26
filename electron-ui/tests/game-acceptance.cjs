@@ -17,7 +17,7 @@ async function main() {
   if(before.save) fs.copyFileSync(originalSave,path.join(saves,'Nintendo 64',path.basename(originalSave)));
   const settings=path.join(dir,'settings.bml');fs.writeFileSync(settings,'');
   const identity={session:'task9-game-acceptance',epoch:1};
-  const host=path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host');
+  const host=(process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'));
   const child=spawn(host,['--rom',rom,'--system','Nintendo 64','--settings',settings,'--save-dir',saves,'--silent','--paused','--control-session',identity.session],{stdio:['pipe','pipe','pipe','pipe']});
   const closed=once(child,'close');let log='';child.stdout.resume();child.stderr.on('data',b=>{log=(log+b).slice(-50000);});
   const native=new NativeSessionClient(child.stdin,child.stdio[3],identity,()=>{}),router=new SessionRouter();router.attach(native);

@@ -83,7 +83,7 @@ test('operation polling can outlive the arbitrary-ID quota without reconnecting 
 });
 test('named selection uses a kernel claim lock and fresh credentials across launches without replay', async () => {
   const directory=fs.mkdtempSync('/tmp/ares-named-');fs.chmodSync(directory,0o700);
-  const binary=path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host');
+  const binary=(process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'));
   let epoch=1,writes=0,complete;
   const backend={request:async method=>{if(method==='session.pause'){writes++;await new Promise(r=>complete=r)};return {protocol:1,id:'native',session:'launch'+epoch,epoch:1,ok:true,result:{paused:true,system:'Fixture',synthetic:true,capabilities:['session.status']}}}};
   const a=new LocalServiceHost(backend),b=new LocalServiceHost(backend),duplicate=new LocalServiceHost(backend),client=LocalServiceClient.named(directory,'kirby',1000);
@@ -106,7 +106,7 @@ test('named selection uses a kernel claim lock and fresh credentials across laun
 });
 test('named stale recovery fails closed when authenticated liveness is inconclusive',async()=>{
  const directory=fs.mkdtempSync('/tmp/ares-live-');fs.chmodSync(directory,0o700);
- const binary=path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host');
+ const binary=(process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'));
  const backend={request:async()=>({protocol:1,id:'x',session:'live',epoch:1,ok:true,result:{paused:true,system:'Fixture',synthetic:true,capabilities:['session.status']}})};
  const old=new LocalServiceHost(backend),next=new LocalServiceHost(backend);
  try{

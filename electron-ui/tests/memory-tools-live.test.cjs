@@ -3,7 +3,7 @@ const {NativeSessionClient}=require('../dist/services/native-client.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('native snapshot immutability, compare paging, ring wrap and owner/epoch cleanup',async()=>{
  const saves=fs.mkdtempSync('/tmp/ares-memory-tools-'),identity={session:'tools',epoch:1};
- const child=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),['--synthetic','--paused','--silent','--save-dir',saves,'--control-session','tools'],{stdio:['pipe','pipe','pipe','pipe']});child.stdout.resume();child.stderr.resume();const closed=once(child,'close');const client=new NativeSessionClient(child.stdin,child.stdio[3],identity,()=>{});
+ const child=spawn((process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host')),['--synthetic','--paused','--silent','--save-dir',saves,'--control-session','tools'],{stdio:['pipe','pipe','pipe','pipe']});child.stdout.resume();child.stderr.resume();const closed=once(child,'close');const client=new NativeSessionClient(child.stdin,child.stdio[3],identity,()=>{});
  async function request(method,p,owner='owner'){const r=await client.request(method,undefined,p,owner);assert.equal(r.ok,true,`${method}: ${r.error}`);return r.result}
  try {
   const region=(await request('memory.regions')).regions[0];const reads=[{region:region.id,offset:0,length:128}];

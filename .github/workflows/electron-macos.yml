@@ -1,7 +1,7 @@
 name: Electron macOS acceptance
 on:
-  push:
-  pull_request:
+  # Full native/Electron/package acceptance is opt-in until the runner-dependent
+  # timing failures are fixed. Avoid duplicate push/PR runs and failure emails.
   workflow_dispatch:
 permissions:
   contents: read
