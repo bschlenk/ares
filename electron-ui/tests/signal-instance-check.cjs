@@ -21,7 +21,11 @@ module.exports = async function checkSignals(bundle) {
     const child=spawn(electron,[...entry,`--user-data-dir=${path.join(directory,profile)}`,'--instance-name','kirby'],{env:baseEnv,stdio:['ignore','pipe','pipe']});
     child.stdout.resume();let log='';child.stderr.on('data',b=>log+=b);const closed=once(child,'close');const value={child,closed,log:()=>log};children.push(value);return value;
   };
-  async function until(fn,label){for(let i=0;i<300;i++){try{const value=await fn();if(value)return value}catch{}await sleep(10)}throw new Error(label+'\n'+children.map(c=>c.log()).join('\n'));}
+  async function until(fn,label){
+    const deadline=Date.now()+15000;let lastError;
+    do{try{const value=await fn();if(value)return value}catch(error){lastError=error}await sleep(20)}while(Date.now()<deadline);
+    throw new Error(label+' timed out waiting for readiness'+(lastError?'\n'+String(lastError):'')+'\n'+children.map(c=>c.log()).join('\n'));
+  }
   async function stopped(value,signal){value.child.kill(signal);const timer=setTimeout(()=>value.child.kill('SIGKILL'),5000);try{const [code,ended]=await value.closed;if(signal!=='SIGKILL'){assert.equal(ended,null,value.log());assert.equal(code,0,value.log())}}finally{clearTimeout(timer)}}
   const client=LocalServiceClient.named(serviceDirectory,'kirby',2000);
   const peer=new StdioPeer(electron,[bridge,'--service-dir',serviceDirectory,'--instance-name','kirby'],{env:{...baseEnv,ELECTRON_RUN_AS_NODE:'1',NODE_OPTIONS:''}});
