@@ -13,7 +13,7 @@ async function fixture(args, check) {
   const image = Buffer.alloc(0x1000);image.writeUInt32BE(0x80371240);image.write('QUERY FIXTURE',0x20);image[0x3e]=0x45;
   if(gba) {const cart=Buffer.alloc(0x8000);cart.writeUInt32LE(0xeafffffe);cart[0xb2]=0x96;fs.writeFileSync(rom,cart);const bios=Buffer.alloc(0x4000);bios.writeUInt32LE(0xeafffffe);const biosPath=path.join(directory,'bios.bin');fs.writeFileSync(biosPath,bios);fs.writeFileSync(path.join(directory,'settings.bml'),`GameBoyAdvance\n  Firmware\n    BIOS.World: ${biosPath}\n`);}
   else {fs.writeFileSync(rom,gb?require('../fixture.cjs').makeFixture():image);fs.writeFileSync(path.join(directory,'settings.bml'),'');}
-  const child=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),[...args.map(a=>a==='ROM'?rom:a),'--silent','--paused','--settings',path.join(directory,'settings.bml'),'--save-dir',directory,'--control-session','queries'],{stdio:['pipe','pipe','pipe','pipe']});
+  const child=spawn((process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host')),[...args.map(a=>a==='ROM'?rom:a),'--silent','--paused','--settings',path.join(directory,'settings.bml'),'--save-dir',directory,'--control-session','queries'],{stdio:['pipe','pipe','pipe','pipe']});
   child.stdout.resume();child.stderr.resume();const closed=once(child,'close');
   const client=new NativeSessionClient(child.stdin,child.stdio[3],{session:'queries',epoch:1},()=>{});
   const request=async(method,p,owner='query-owner')=>{const r=await client.request(method,undefined,p,owner);assert.equal(r.ok,true,`${method}: ${r.error}`);return r.result};

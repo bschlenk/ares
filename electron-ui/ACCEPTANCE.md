@@ -66,3 +66,26 @@ Automated startup recovery is required and included in the fixture lane: persist
 infinite-loop code is never built/imported, renderer controls stay responsive,
 CLI disable/reset works, reload remains safe and profile/plugin storage survives.
 This differs from serializer rollback-failure fault injection above.
+
+## GitHub Actions scheduling
+
+The full macOS acceptance workflow is manual-only (`workflow_dispatch`). It builds
+all cores, runs native/service and Electron UI tests, and validates a packaged app.
+It no longer runs twice on every PR branch push. Run it deliberately from Actions
+when acceptance evidence is needed; `npm run accept` remains available locally.
+The workflow is also disabled in repository Actions settings to stop existing
+branches from scheduling their older YAML. After merging the manual-only trigger
+change, re-enable it in Actions to permit manual dispatches.
+
+Audit of PR #23 run `40249899219` and main run `40237317906`: both failed the same
+17 fixture tests before UI/package gates. Most failures were `ENOENT` because
+several test helpers hardcoded `build-electron-make` instead of respecting
+`ARES_HOST` (CI builds `build-electron-acceptance`). Those helpers now honor the
+same override as the other tests. Separate script, input-delivery and app-startup
+failures remain to be verified on the hosted runner before automatic acceptance
+is restored. No test failures are suppressed or skipped by the acceptance script.
+
+Validation of the host-path fix: rebuilt the native host on macOS arm64 and ran
+21 affected integration tests with `ARES_HOST` set to a separate wrapper
+executable; all passed, with 17 wrapper invocations recorded. This verifies the
+custom executable path locally; it does not claim the full hosted suite is green.

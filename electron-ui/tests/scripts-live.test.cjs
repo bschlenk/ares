@@ -23,7 +23,7 @@ test('confined TS module graphs reject node, remote, parent and symlink escapes'
 });
 test('native script VI waits, zero frames, promise storm, OOM, loops and cleanup', {timeout:30000}, async()=>{
  const dir=fs.mkdtempSync('/tmp/ares-script-native-'),identity={session:'script-test',epoch:1};
- const child=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),['--synthetic','--paused','--silent','--save-dir',dir,'--control-session',identity.session],{stdio:['pipe','pipe','pipe','pipe']});child.stdout.resume();let stderr='';child.stderr.on('data',b=>stderr+=b);const closed=once(child,'close');const native=new NativeSessionClient(child.stdin,child.stdio[3],identity,()=>{},3000);const router=new SessionRouter();router.attach(native);
+ const child=spawn((process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host')),['--synthetic','--paused','--silent','--save-dir',dir,'--control-session',identity.session],{stdio:['pipe','pipe','pipe','pipe']});child.stdout.resume();let stderr='';child.stderr.on('data',b=>stderr+=b);const closed=once(child,'close');const native=new NativeSessionClient(child.stdin,child.stdio[3],identity,()=>{},3000);const router=new SessionRouter();router.attach(native);
  const request=async(method,p)=>{if(process.env.SCRIPT_DEBUG)console.error('request',method);const r=await router.request(method,undefined,p,'script-owner');assert(r.ok,`${method}: ${r.error} ${stderr}`);return r.result};
  async function run(source,args={},maxFrames=1000){
   const started=await request('scripts.run',{source,args,timeoutMs:1000,maxFrames});let op=started;
@@ -71,7 +71,7 @@ test('native script VI waits, zero frames, promise storm, OOM, loops and cleanup
 
 test('non-N64 scripts can read debugger regions and report unsupported VI stepping',{timeout:10000},async()=>{
  const dir=fs.mkdtempSync('/tmp/ares-script-gb-'),rom=path.join(dir,'fixture.gb');fs.writeFileSync(rom,require('../fixture.cjs').makeFixture());
- const child=spawn(path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'),['--rom',rom,'--system','Game Boy','--paused','--silent','--save-dir',dir,'--control-session','script-gb'],{stdio:['pipe','pipe','pipe','pipe']});child.stdout.resume();child.stderr.resume();const closed=once(child,'close');const native=new NativeSessionClient(child.stdin,child.stdio[3],{session:'script-gb',epoch:1},()=>{}),router=new SessionRouter();router.attach(native);
+ const child=spawn((process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host')),['--rom',rom,'--system','Game Boy','--paused','--silent','--save-dir',dir,'--control-session','script-gb'],{stdio:['pipe','pipe','pipe','pipe']});child.stdout.resume();child.stderr.resume();const closed=once(child,'close');const native=new NativeSessionClient(child.stdin,child.stdio[3],{session:'script-gb',epoch:1},()=>{}),router=new SessionRouter();router.attach(native);
  const request=async(m,p)=>{const r=await router.request(m,undefined,p,'owner');assert(r.ok,r.error);return r.result};
  async function run(source,args={}){let op=await request('scripts.run',{source,args,timeoutMs:1000,maxFrames:1});while(op.state==='running'){await sleep(5);op=await request('execution.status',{operationId:op.operation_id})}return {op,page:await request('script.read',{offset:0,length:16384,operationId:op.operation_id})};}
  try{
