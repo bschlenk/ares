@@ -15,7 +15,7 @@ if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
 fi
 cmake -S "$ROOT" -B "$BUILD" -G 'Unix Makefiles' \
   -UARES_CORES -DARES_BUILD_ELECTRON_UI=ON \
-  -DARES_BUILD_OPTIONAL_TARGETS=OFF -DARES_ENABLE_LIBRASHADER=OFF \
+  -DARES_BUILD_OPTIONAL_TARGETS=OFF \
   -DENABLE_CCACHE=OFF -DENABLE_IPO=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build "$BUILD" --target ares-electron-host -j "$JOBS"
 if ! npm ls --prefix "$ROOT/electron-ui" --depth=0 >/dev/null 2>&1; then

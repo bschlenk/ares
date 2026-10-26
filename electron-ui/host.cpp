@@ -134,7 +134,6 @@ struct Host : ares::Platform {
         if(pair.directMappingHi) pair.directMappingHi->unbind();
       }
     }
-    runtime.externalInput = true;
     runtime.keyboardCaptured = true;
   }
   auto status(string_view message) -> void override { std::cerr << string{message}.data() << "\n"; }

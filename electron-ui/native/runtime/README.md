@@ -7,7 +7,8 @@ coverage and explicit deferrals.
 - `emulator/`: compiled-system registry, loaders, firmware, peripheral configuration,
   save/media routing and per-system input nodes.
 - `input/`: virtual ports and inherited/direct mappings, without desktop hotkeys,
-  assignment windows or icon helpers.
+  assignment windows or icon helpers. Physical keyboard/mouse/gamepad input comes
+  from Electron; no native hardware polling/capture backend remains.
 - `settings/`: imported BML data and binding process, without desktop windows or
   implicit writing/import migration.
 - `runtime.*`: cross-thread input mutex/capture flags, explicit companion-media

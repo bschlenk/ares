@@ -71,9 +71,6 @@ auto hexString(std::span<const u8> view) -> string {
 #include "system/system.cpp"
 #include "medium/medium.cpp"
 #include "pak/pak.cpp"
-#if !defined(MIA_LIBRARY)
-#include "program/program.cpp"
-#endif
 
 auto setHomeLocation(std::function<string ()> callback) -> void {
   homeLocation = callback;
@@ -198,86 +195,4 @@ auto import(std::shared_ptr<Pak> pak, const string& filename) -> bool {
   return false;
 }
 
-auto main(Arguments arguments) -> void {
-  #if !defined(MIA_LIBRARY)
-  Application::setName("mia");
-  #endif
-
-  construct();
-
-  auto document = file::read(locate("settings.bml"));
-  if(!document.empty()) {
-    settings.unserialize(document);
-  }
-
-  if(arguments.take("--name")) {
-    return print("mia");
-  }
-
-  if(string filename; arguments.take("--identify", filename)) {
-    return print(identify(filename), "\n");
-  }
-
-  if(string system; arguments.take("--system", system)) {
-    auto pak = mia::Medium::create(system);
-    if(!pak) return;
-
-    if(string manifest; arguments.take("--manifest", manifest)) {
-      if(pak->load(manifest) == successful) {
-        if(auto fp = pak->pak->read("manifest.bml")) return print(fp->reads());
-      }
-      return;
-    }
-
-    if(string import; arguments.take("--import", import)) {
-      return (void)mia::import(pak, import);
-    }
-
-    #if !defined(MIA_LIBRARY)
-    if(arguments.take("--import")) {
-      if(auto import = BrowserDialog()
-      .setTitle({"Import ", system, " Game"})
-      .setPath(settings.recent)
-      .setAlignment(Alignment::Center)
-      .openFile()
-      ) {
-        if(!mia::import(pak, import)) {
-          MessageDialog()
-          .setTitle("Error")
-          .setAlignment(Alignment::Center)
-          .setText({"Failed to import: ", Location::file(import)})
-          .error();
-        }
-      }
-      return;
-    }
-    #endif
-  }
-
-  #if !defined(MIA_LIBRARY)
-  Instances::programWindow.construct();
-
-  #if defined(PLATFORM_MACOS)
-  Application::Cocoa::onAbout([&] { programWindow.aboutAction.doActivate(); });
-  Application::Cocoa::onPreferences([&] {});
-  Application::Cocoa::onQuit([&] { Application::quit(); });
-  #endif
-
-  programWindow.setVisible();
-  Application::run();
-
-  Instances::programWindow.destruct();
-  #endif
-
-  file::write(locate("settings.bml"), settings.serialize());
 }
-
-}
-
-#if !defined(MIA_LIBRARY)
-#include <nall/main.hpp>
-
-auto nall::main(Arguments arguments) -> void {
-  mia::main(arguments);
-}
-#endif

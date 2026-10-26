@@ -20,7 +20,7 @@ parity. Source can be recovered with `git show b9f42e052:desktop-ui/<path>`.
 | `settings/` firmware scan, paths, core/video/audio/input/hotkey editors, home and import/export pages | Task 13 owns real settings and configurable input. Firmware can already be supplied through an explicit settings file. No physical-device/audio-output gate is closed by removing these editors. |
 | `resource/`, `desktop-ui.cpp`, desktop CMake/platform launch, icons, font, entitlements and JIT window fixes | Retired with the desktop executable; none is needed by the extracted runtime. Core/MIA embedded firmware resources and media databases remain. Development macOS packaging remains the existing Electron pipeline; public releases/notarization and other OS frontends remain deferred. |
 | `.github` desktop build/archive/sign/release workflows, wrappers and `scripts/macos-make-universal.sh` | Retired because their desktop target/artifact paths no longer exist. The fixture-only macOS Electron acceptance lane now replaces the automated frontend checks. No replacement public-release workflow is promised. |
-| `hiro/` toolkit | Retained only for optional independent MIA/genius utilities, not an Electron include/link/build dependency in the normal configuration. |
+| `hiro/` toolkit | Initially retained for MIA/genius; removed in issue #21 along with those standalone GUIs (see follow-up audit below). |
 
 The extraction is licensed under the repository's ISC license. Loader, mapping
 and BML behavior derive from the existing ares frontend at the checkpoint above;
@@ -33,3 +33,59 @@ The Electron host no longer embeds source-tree paths or falls back to desktop
 resources/configuration. Default profile settings are `<profile>/settings.bml`;
 `ARES_SETTINGS` remains an explicit read-only override. Native standalone tests
 resolve default resources alongside their built/copied runtime.
+
+## Follow-up audit: issue #21
+
+Recovery reference before this cleanup: commit
+`1f56ca14f1365955e7ae92d5729d8f41b17556a1`. Future Electron versions of the
+MIA import/manifest manager and genius BML database editor are tracked in
+[issue #24](https://github.com/bschlenk/ares/issues/24). Their former sources are
+`mia/program/`, `tools/genius/` and the standalone entry point in `mia/mia.cpp`.
+
+Removed:
+
+- Standalone MIA/genius GUIs, packaging assets and build targets; Hiro and its
+  GTK finder; the unused Qt preset and Hiro maintenance-script references.
+- Ruby's Video API, Metal/CGL/GLX/WGL/Direct3D/OpenGL presentation code, Metal debug
+  script, librashader headers, shader finders and presentation dependencies.
+- Ruby's hardware-input backends (SDL joypads, Quartz/Cocoa, Xlib and Windows Raw
+  Input), unused native polling/capture methods, the uninitialized Ruby input
+  singleton and the redundant external-input toggle.
+- Unused desktop video-driver/window/shader settings and audio/input driver fields.
+
+The active input path was already Electron DOM keyboard/mouse events and the
+browser Gamepad API, through IPC/host commands to virtual HID devices. The host
+never initialized or polled Ruby's hardware-input backend. Its old rumble calls
+also reached only an uninitialized stub; the retained core rumble mapping is
+explicitly a no-op until an Electron output transport is implemented. This
+cleanup does not change input transport, polling cadence or supported rumble.
+
+Retained code with live consumers:
+
+| Code | Consumer |
+| --- | --- |
+| Ruby SDL audio | Native host audio playback. Ruby no longer requires native GUI/input frameworks or Objective-C compilation. |
+| Runtime input mappings and virtual HID device types | Translate Electron input into per-system core controls, including relative mouse movement. |
+| Core graphics backends and MoltenVK | Emulation/rendering, independent of the retired frontend. |
+| MIA media library, databases and firmware resources | Media identification/loading, firmware discovery, saves and core options; no standalone GUI entry point remains. |
+| Core video settings | Color emulation, overscan, luminance/saturation/gamma and pixel accuracy. |
+
+Historical migration plans and execution logs retain old paths as provenance;
+they are not current build dependencies. This cleanup does not implement the
+previously deferred frontend features listed above. Source can be retrieved, for
+example, with `git show 1f56ca14f1365955e7ae92d5729d8f41b17556a1:tools/genius/genius.cpp`.
+
+Validation on macOS arm64:
+
+- Configured the default all-core Electron build with optional targets both off
+  and on; remaining supplemental tools/tests still configure.
+- Built `ares-electron-host` with SDL audio as ordinary C++.
+- Passed 13 tests across runtime-settings, input-settings, input-clips,
+  audio-live, session-live and n64-live. Socket-based integration tests required
+  execution outside the sandbox because it denied local Unix socket listeners.
+- Passed synthetic 640x480/1080p and Game Boy/Famicom frame-transport smoke checks
+  with input echo, pause/resume and SDL dummy-audio playback enabled.
+- Checked linked dependencies and Ruby symbols: no Hiro, librashader, native
+  video/input backend, Carbon or Metal/MetalKit presentation dependency remains.
+  Cocoa remains a separate nall dependency. Physical audio/gamepads and
+  Windows/Linux builds were not tested on this machine.

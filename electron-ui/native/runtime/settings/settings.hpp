@@ -12,24 +12,6 @@ struct Settings : Markup::Node {
   string filePath;
 
   struct Video {
-    string driver;
-    string monitor;
-    string format;
-    bool exclusive = false;
-    bool blocking = false;
-    bool forceSRGB = false;
-    bool threadedRenderer = true;
-    bool nativeFullScreen = false;
-    bool flush = false;
-    string shader = "None";
-    u32 windowWidth = 800;
-    u32 windowHeight = 576;
-    string output = "Scale";
-    u32 fixedScale = 2;
-    string aspectCorrection = "Standard";
-    bool adaptiveSizing = true;
-    bool autoCentering = false;
-
     f64 luminance = 1.0;
     f64 saturation = 1.0;
     f64 gamma = 1.0;
@@ -41,7 +23,6 @@ struct Settings : Markup::Node {
   } video;
 
   struct Audio {
-    string driver;
     string device;
     u32 frequency = 0;
     u32 latency = 0;
@@ -55,7 +36,6 @@ struct Settings : Markup::Node {
   } audio;
 
   struct Input {
-    string driver;
     string defocus = "Pause";
     string digitalToAnalog = "Immediate";
     u32 digitalToAnalogTime = 500;

@@ -5,7 +5,6 @@ add_executable(ares-electron-host host.cpp
   native/runtime/emulator/emulator.cpp
   native/runtime/settings/settings.cpp)
 target_include_directories(ares-electron-host PRIVATE ${CMAKE_SOURCE_DIR})
-target_compile_definitions(ares-electron-host PRIVATE MIA_LIBRARY)
 target_link_libraries(ares-electron-host PRIVATE ares::ares ares::mia ares::ruby ares::nall)
 if(ARES_ENABLE_CHD)
   target_link_libraries(ares-electron-host PRIVATE chdr-static)
