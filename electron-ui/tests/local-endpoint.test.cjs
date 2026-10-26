@@ -134,3 +134,44 @@ test('old live adapters are rejected at handshake before any mutation, with app 
   }
  });
 });
+
+test('named restart waits for a dead owner helper to release its kernel claim', { timeout: 15000 }, async () => {
+  const directory = fs.mkdtempSync('/tmp/ares-claim-recovery-');
+  const binary = process.env.ARES_HOST || path.resolve(__dirname, '../../build-electron-make/bin/ares-electron-host');
+  const { randomUUID } = require('node:crypto');
+  const holder = require('node:child_process').spawn(binary, ['--service-lock', path.join(directory, 'named-retry.lock')], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const closed = once(holder, 'close');
+  const backend = { request: async () => ({ protocol: 1, id: 'x', session: 'recovered', epoch: 1, ok: true, result: { paused: true, system: 'Fixture', synthetic: true, capabilities: ['session.status'] } }) };
+  const host = new LocalServiceHost(backend);
+  let listening, client;
+  try {
+    assert.equal((await once(holder.stdout, 'data'))[0].toString(), 'locked\n');
+    const instance = randomUUID();
+    fs.writeFileSync(path.join(directory, 'named-retry.json'), JSON.stringify({ protocol: 1, instance, endpoint: path.join(directory, `${instance}.sock`), token: '1'.repeat(64) }), { mode: 0o600 });
+    const attempts = path.join(directory, 'attempts');
+    const wrapper = path.join(directory, 'claim');
+    const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+    fs.writeFileSync(wrapper, `#!/bin/sh\nprintf 'attempt\\n' >> ${quote(attempts)}\nexec ${quote(binary)} "$@"\n`, { mode: 0o755 });
+    let acquired = false, failure;
+    listening = host.listen(directory, 'retry', wrapper);
+    listening.then(() => { acquired = true; }, error => { failure = error; });
+    const deadline = Date.now() + 5000;
+    while (!fs.existsSync(attempts) || fs.readFileSync(attempts, 'utf8').trim().split('\n').length < 2) {
+      if (failure) throw failure;
+      assert(Date.now() < deadline, 'claim acquisition did not retry a proven dead owner');
+      await sleep(10);
+    }
+    assert.equal(acquired, false, 'the held kernel lock was not stolen');
+    holder.stdin.end();
+    await listening;
+    assert.notEqual(host.info.instance, instance);
+    client = LocalServiceClient.named(directory, 'retry');
+    assert.equal((await client.request('session.status')).session, 'recovered');
+  } finally {
+    holder.stdin.end();
+    if (holder.exitCode === null && holder.signalCode === null) holder.kill('SIGKILL');
+    await closed; await listening?.catch(() => {});
+    client?.close(); await host.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

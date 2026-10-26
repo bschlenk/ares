@@ -145,33 +145,52 @@ export class LocalServiceHost {
     if (name) {
       this.claimFile = namedConnection(directory, name);
       if (!lockExecutable) throw new ServiceError('service_lock_unavailable');
-      const child = spawn(lockExecutable, ['--service-lock', path.join(directory, `named-${name}.lock`)], { stdio: ['pipe', 'pipe', 'pipe'] });
-      this.claimLock = child;
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => { child.kill(); reject(new ServiceError('instance_claim_timeout')); }, 3000);
-          child.once('error', e => { clearTimeout(timer); reject(e); });
-          child.once('exit', () => { clearTimeout(timer); reject(new ServiceError('instance_name_in_use')); });
-          child.stdout!.once('data', b => { clearTimeout(timer); b.toString() === 'locked\n' ? resolve() : reject(new ServiceError('service_lock_unavailable')); });
-        });
-        // Probe the existing private record with its own fresh credentials. A live
-        // pre-existing owner is never displaced, even if its claim lock was lost.
+      const claimFile = this.claimFile;
+      // A helper can briefly retain the kernel lock after a killed app closes
+      // its pipe. Retry only when the private record proves the old endpoint is
+      // gone; a live or inconclusive owner must never be displaced.
+      const ownerState = async (): Promise<'live' | 'gone' | 'missing'> => {
         try {
-          const instance = await connectionInstance(this.claimFile);
-          await readConnection(this.claimFile, instance);
-          const probe = new LocalServiceClient(this.claimFile, instance, 1000);
-          let live = false;
-          try { await probe.request('session.status'); live = true; }
+          const instance = await connectionInstance(claimFile);
+          await readConnection(claimFile, instance);
+          const probe = new LocalServiceClient(claimFile, instance, 1000);
+          try { await probe.request('session.status'); return 'live'; }
           catch (e) {
-            // Only a refused/missing endpoint proves the old launch is gone.
-            // Authentication failures, saturation and timeouts are inconclusive.
-            if (!(e instanceof ServiceError && e.code === 'app_not_running')) throw new ServiceError('instance_liveness_uncertain');
+            if (e instanceof ServiceError && e.code === 'app_not_running') return 'gone';
+            throw new ServiceError('instance_liveness_uncertain');
           } finally { probe.close(); }
-          if (live) throw new ServiceError('instance_name_in_use');
         } catch (e) {
-          if (!(e instanceof ServiceError && e.code === 'app_not_running') && (e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+          if ((e as NodeJS.ErrnoException).code === 'ENOENT' || e instanceof ServiceError && e.code === 'app_not_running') return 'missing';
+          throw e;
         }
-      } catch (e) { child.stdin!.end(); this.claimLock = undefined; throw e; }
+      };
+      const claimDeadline = Date.now() + 5000;
+      let recovering = false;
+      for (;;) {
+        const child = spawn(lockExecutable, ['--service-lock', path.join(directory, `named-${name}.lock`)], { stdio: ['pipe', 'pipe', 'pipe'] });
+        this.claimLock = child;
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => { child.kill(); reject(new ServiceError('instance_claim_timeout')); }, 3000);
+            child.once('error', e => { clearTimeout(timer); reject(e); });
+            child.once('exit', () => { clearTimeout(timer); reject(new ServiceError('instance_name_in_use')); });
+            child.stdout!.once('data', b => { clearTimeout(timer); b.toString() === 'locked\n' ? resolve() : reject(new ServiceError('service_lock_unavailable')); });
+          });
+        } catch (e) {
+          child.stdin!.end(); this.claimLock = undefined;
+          if (!(e instanceof ServiceError && e.code === 'instance_name_in_use')) throw e;
+          const state = await ownerState();
+          if (state === 'live' || (state === 'missing' && !recovering) || Date.now() >= claimDeadline) throw e;
+          recovering = true;
+          await new Promise(resolve => setTimeout(resolve, 25));
+          continue;
+        }
+        try {
+          // Even an acquired lock does not authorize replacing a live record.
+          if (await ownerState() === 'live') throw new ServiceError('instance_name_in_use');
+          break;
+        } catch (e) { child.stdin!.end(); this.claimLock = undefined; throw e; }
+      }
     }
     try {
     const endpoint = path.join(directory, `${this.instance}.sock`)
@@ -215,12 +234,21 @@ export class LocalServiceHost {
     if (this.claimFile && this.claimLock) {
       try { if (await connectionInstance(this.claimFile) === this.instance) await fs.rm(this.claimFile); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
     }
-    this.claimLock?.stdin?.end(); this.claimLock = undefined;
     for (const socket of this.sockets) socket.destroy()
     if (this.server.listening)
       await new Promise<void>((resolve) => this.server.close(() => resolve()))
     if (this.metadataFile) await fs.rm(this.metadataFile, { force: true })
     if (this.info) await fs.rm(this.info.endpoint, { force: true })
+    // Do not advertise a completed close until our helper actually releases
+    // the lock. Keep it held while endpoint and metadata cleanup is in flight.
+    const claimLock = this.claimLock; this.claimLock = undefined;
+    if (claimLock) {
+      const exited = claimLock.exitCode !== null || claimLock.signalCode !== null
+        ? Promise.resolve() : new Promise<void>(resolve => claimLock.once('close', () => resolve()));
+      const timer = setTimeout(() => claimLock.kill('SIGKILL'), 3000);
+      claimLock.stdin?.end();
+      try { await exited; } finally { clearTimeout(timer); }
+    }
     this.info = undefined
     this.metadataFile = undefined
     this.claimFile = undefined

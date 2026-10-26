@@ -8,10 +8,16 @@ test('VI-origin observers freeze repeated-origin writes at consumption, before l
  try{
   const region=(await request('memory.regions')).regions.find(r=>r.name==='RSP DMEM');assert(region);
   await request('n64.cpu.setRegisters',{gpr:[],pc:'0xb0000040',hi:null,lo:null,llbit:null,status:null});
-  const observer=await request('scripts.observe',{source:`export default({emu,mem})=>({ref:emu.info().frame_reference,byte:mem.region(${JSON.stringify(region.id)},256,1)[0]})`,args:{},timeoutMs:5000,maxFrames:0,every:1,boundary:'vi_origin',push:true});
-  await request('session.resume');for(let n=0;n<150&&samples.length<2;n++)await sleep(10);await request('session.pause');
-  assert.equal(samples.length,2,JSON.stringify(samples));assert(samples.every(s=>s.error===''),JSON.stringify(samples));assert.deepEqual(samples.map(s=>s.value.byte),[0x11,0x22]);
-  const [a,b]=samples;assert.equal(a.frame_reference.boundary,'vi_origin');assert.equal(b.frame_reference.boundary,'vi_origin');assert.equal(a.frame_reference.vi,b.frame_reference.vi);assert.equal(a.frame_reference.origin,b.frame_reference.origin);assert.equal(b.frame_reference.origin_commit,a.frame_reference.origin_commit+1);assert.deepEqual(a.value.ref,a.frame_reference);assert.equal(a.frame_reference.provenance,'unmatched');assert.equal((await request('memory.read',{region:region.id,offset:256,length:1})).hex,'33');
+  const observer=await request('scripts.observe',{source:`const history=[];export default({emu,mem})=>{history.push({ref:emu.info().frame_reference,byte:mem.region(${JSON.stringify(region.id)},256,1)[0]});return history}`,args:{},timeoutMs:5000,maxFrames:0,every:1,boundary:'vi_origin',push:true});
+  // Native notifications are bounded latest-value delivery, so two fast origin
+  // writes may coalesce. Preserve both captures in the observer's value instead
+  // of assuming the writer thread flushes between adjacent CPU instructions.
+  await request('session.resume');const deadline=Date.now()+5000;
+  while(Date.now()<deadline&&!samples.some(s=>Array.isArray(s.value)&&s.value.length===2))await sleep(10);
+  await request('session.pause');
+  assert(samples.length>0,JSON.stringify(samples));assert(samples.every(s=>s.error===''),JSON.stringify(samples));
+  const latest=samples.at(-1),history=latest.value;assert.equal(history.length,2,JSON.stringify(samples));assert.deepEqual(history.map(s=>s.byte),[0x11,0x22]);
+  const [a,b]=history.map(s=>s.ref);assert.equal(a.boundary,'vi_origin');assert.equal(b.boundary,'vi_origin');assert.equal(a.vi,b.vi);assert.equal(a.origin,b.origin);assert.equal(b.origin_commit,a.origin_commit+1);assert.deepEqual(b,latest.frame_reference);assert.equal(a.provenance,'unmatched');assert.equal((await request('memory.read',{region:region.id,offset:256,length:1})).hex,'33');
   await request('script.observerStop',{observerId:observer.observer_id});
  }finally{router.detach();child.stdin.end('quit\n');await closed;fs.rmSync(dir,{recursive:true,force:true});}
 });
