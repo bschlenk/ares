@@ -107,6 +107,12 @@ the remaining native script error after the executable-path fixes. Corrections:
   for native-session readiness, and uses a private service directory to avoid
   discovering unrelated apps running on the same machine.
 
+The full sequential fixture suite has a 10-minute suite budget; individual test
+and native operation deadlines remain unchanged. Hosted run `40259040052` reached
+the final watchdog tests without assertion failures but was terminated by the
+previous 3-minute suite timer. Gate summaries record the configured timeout, and
+timeout errors are distinguished from child-process exit failures.
+
 Per-gate logs and revision-tagged summaries remain the source of validation
 results. A configured workflow alone is not evidence that a particular revision
 passed on GitHub's hosted runner.

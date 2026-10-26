@@ -37,18 +37,19 @@ async function gate(name, command, args, cwd = root, timeoutMs = 180000) {
   if (interrupted) throw new Error('Acceptance interrupted')
   console.log(`ACCEPTANCE: ${name}`)
   const log = path.join(runDirectory, `${name}.log`), fd = fs.openSync(log, 'w')
-  const result = { name, status: 'running', log, started: new Date().toISOString() }
+  const result = { name, status: 'running', timeoutMs, log, started: new Date().toISOString() }
   summary.gates.push(result); record()
   try {
     await new Promise((resolve, reject) => {
       const child = active = spawn(command, args, { cwd, env, detached: true, stdio: ['ignore', fd, fd] })
-      const timer = setTimeout(() => stopGroup(child, 'SIGTERM'), timeoutMs)
+      let timedOut = false
+      const timer = setTimeout(() => { timedOut = true; stopGroup(child, 'SIGTERM') }, timeoutMs)
       const force = setTimeout(() => stopGroup(child, 'SIGKILL'), timeoutMs + 5000)
       child.once('error', reject)
       child.once('close', (code, signal) => {
         clearTimeout(timer); clearTimeout(force); active = undefined
-        if (code === 0) resolve()
-        else reject(new Error(`${name}: exit ${code ?? signal}; see ${log}`))
+        if (code === 0 && !timedOut) resolve()
+        else reject(new Error(`${name}: ${timedOut ? `timed out after ${timeoutMs} ms` : `exit ${code ?? signal}`}; see ${log}`))
       })
     })
     result.status = 'passed'
@@ -94,7 +95,9 @@ async function main() {
   await gate('native-build', cmake, ['--build', build, '--target', 'ares-electron-host', 'ares-electron-cpu-fixture', 'ares-electron-task-fixture', 'ares-electron-matrix-fixture', '-j', String(jobs)], repository, 1800000)
   await gate('typescript', 'npm', ['run', 'build'])
   const tests = fs.readdirSync(path.join(root, 'tests')).filter(name => name.endsWith('.test.cjs') && name !== 'plugins-game-live.test.cjs').sort().map(name => `tests/${name}`)
-  const unitLog = await gate('fixture-regressions', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'protocol.test.cjs', ...tests])
+  // The full sequential suite can exceed three minutes on shared runners.
+  // Individual tests retain their own tighter timeouts.
+  const unitLog = await gate('fixture-regressions', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'protocol.test.cjs', ...tests], root, 600000)
   const tap = fs.readFileSync(unitLog, 'utf8')
   if (!/^# fail 0$/m.test(tap) || !/^# skipped 0$/m.test(tap)) throw new Error('Fixture lane must report zero failed and skipped tests')
   summary.fixtureTests = Number(tap.match(/^# tests (\d+)$/m)?.[1])
