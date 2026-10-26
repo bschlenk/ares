@@ -2,6 +2,9 @@ import {app} from 'electron';
 import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';
 const dir=fs.mkdtempSync('/tmp/ares-quit-regression-');app.setPath('userData',path.join(dir,'profile'));
 Object.assign(process.env,{ARES_PROFILE_DIR:path.join(dir,'profile'),ARES_SERVICE_DIR:path.join(dir,'ipc'),ARES_ENABLE_SERVICES:'1',ARES_DEFAULT_PLUGINS:'0',ARES_BACKGROUND_TEST:'1',ARES_SILENT:'1'});delete process.env.ARES_ROM;delete process.env.ARES_AUTOTEST;
+// Keep fatal diagnostics visible even when the profile is removed at quit.
+process.on('uncaughtExceptionMonitor', error => console.error('SHUTDOWN_UNCAUGHT', error));
+process.on('unhandledRejection', error => console.error('SHUTDOWN_REJECTION', error));
 const {serviceHost}=await import('../dist/main.js');
 const until=async fn=>{for(let n=0;n<300;n++){if(await fn())return;await new Promise(r=>setTimeout(r,10));}throw Error('shutdown fixture timed out');};
 const timeout=setTimeout(()=>{console.error('SHUTDOWN_TIMEOUT');app.exit(1);},10000);
