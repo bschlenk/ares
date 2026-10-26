@@ -161,20 +161,26 @@ app.whenReady().then(async () => {
   dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [n64File] });
   try { await window.webContents.executeJavaScript('window.ares.open({system: "Nintendo 64"})'); }
   finally { dialog.showOpenDialog = showOpenDialog; }
+  enter('N64 session readiness');
   await until(async () => (await sessions.request('session.status')).result.system === 'Nintendo 64');
   await mcp.tool('emu_status'); assert.equal((await mcp.tool('pause')).paused, true);
+  enter('N64 boot provenance');
   const bootProvenance = await mcp.tool('overlay_log');
   assert.equal(bootProvenance.enabled, true);
   assert.equal(bootProvenance.recording_from_epoch_start, true, 'MCP enabled before ROM loading records from the new epoch start');
   assert.equal((await mcp.tool('provenance_control', { enabled: false })).enabled, false);
   assert.equal((await mcp.tool('overlay_log')).entries.length, 0, 'disabling clears provenance history');
+  enter('N64 batch read');
   const batchRead = await mcp.tool('batch', { steps: [{ kind: 'read', addr: '0x2000', length: 1 }] });
   assert.equal(batchRead.stop_reason, 'batch_done'); assert.equal(batchRead.results[0].data.hex, '00');
+  enter('N64 reset');
   await sessions.request('session.reset'); await mcp.tool('emu_status');
   const rdpFile = path.join(temporary, 'electron rdp.json');
+  enter('N64 bounded RDP capture');
   const emptyRdp = await mcp.tool('rdp_capture', { max_seconds: 0.01, path: rdpFile, max_commands: 4 });
   assert.equal(emptyRdp.complete, false, JSON.stringify(emptyRdp)); assert.equal(emptyRdp.stop_reason, 'timeout');
   assert.equal(JSON.parse(fs.readFileSync(rdpFile, 'utf8')).words.length, 0);
+  enter('N64 inspection tools');
   assert.equal((await mcp.tool('render_probe')).originChanged, null);
   assert.equal((await mcp.tool('render_probe')).originChanged, false);
   assert.equal((await mcp.tool('stack')).heuristic, true);
