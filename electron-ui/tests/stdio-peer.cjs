@@ -31,7 +31,7 @@ class StdioPeer {
   request(method, params, timeoutMs = 8000) {
     const id = ++this.id;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`MCP timeout ${method}: ${this.stderr}`)); }, timeoutMs);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`MCP timeout ${method}${method === 'tools/call' ? ` (${params.name})` : ''} after ${timeoutMs} ms: ${this.stderr}`)); }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer, tool:method==='tools/call' ? params.name : undefined }); this.child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
     });
   }
