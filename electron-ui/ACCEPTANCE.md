@@ -18,9 +18,11 @@ contains original instructions and verifies firmware loading, input and persiste
 SRAM. Live settings checks verify native pixels/PCM, core options, persistence,
 scoped plugin registration, reload/nonreplay and SDK type checking. Existing bounds, session/epoch ownership and nonreplay contracts remain.
 
-Prerequisites: macOS arm64, Xcode command-line tools, CMake 3.28+, Node 24–26,
-locked npm dependencies, and ffmpeg/ffprobe. CI pins Node via `.node-version`;
-use that version for matching its toolchain. `brew install cmake ffmpeg` supplies
+Prerequisites: macOS arm64, Xcode command-line tools, CMake 3.28+, Node 24 LTS,
+locked npm dependencies, and ffmpeg/ffprobe. The repository pins Node 24.22.0 in `mise.toml`, matching CI's
+`electron-ui/.node-version`; run `mise install` and
+`mise exec -- npm run accept --prefix electron-ui` from the repository root.
+Acceptance rejects a different Node version. `brew install cmake ffmpeg` supplies
 the additional macOS tools. Native dependencies download through CMake using
 `deps.json` version/hash pins. No developer Node is needed by a copied app.
 
@@ -32,6 +34,9 @@ inherited `ARES_*` variables are cleared so a caller's media, profile, enabled
 plugins or service endpoint cannot become test inputs. Run one acceptance lane
 per checkout at a time; normal `npm start` apps keep independent runtime snapshots.
 The test suite is sequential and the fixture lane rejects failures and skips.
+The shutdown regression holds navigation pending until quit, verifies that
+`ERR_ABORTED` does not become a fatal exit, and still checks reentrant quit
+requests wait for service cleanup and metadata removal.
 
 The smoke gate validates frame contents/progression, input echo, frame-credit
 backpressure, pause/resume and clean shutdown. It records measured FPS without

@@ -68,8 +68,8 @@ function executable(command) {
 }
 async function main() {
   if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new Error('Acceptance is currently supported on macOS arm64')
-  const major = Number(process.versions.node.split('.')[0])
-  if (major < 24 || major >= 27) throw new Error('Use Node 24–26; CI pins the version in .node-version')
+  const pinnedNode = fs.readFileSync(path.join(root, '.node-version'), 'utf8').trim()
+  if (process.versions.node !== pinnedNode) throw new Error(`Use Node ${pinnedNode} LTS (mise exec -- npm run accept); current runtime is ${process.version}`)
   const cmake = executable('cmake')
   const version = spawnSync(cmake, ['--version'], { encoding: 'utf8' }).stdout.match(/version (\d+)\.(\d+)/)
   if (!version || Number(version[1]) < 3 || (Number(version[1]) === 3 && Number(version[2]) < 28)) throw new Error('CMake 3.28 or newer is required')

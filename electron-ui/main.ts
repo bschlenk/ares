@@ -928,11 +928,15 @@ app
         if (process.env.ARES_AUTOTEST === '1') app.quit()
       }
     })
-    window.loadFile(path.join(appRoot, 'index.html'), {
+    void window.loadFile(path.join(appRoot, 'index.html'), {
       query: {
         autotest: process.env.ARES_AUTOTEST || '',
         duration: process.env.ARES_TEST_SECONDS || '12',
       },
+    }).catch((error: NodeJS.ErrnoException) => {
+      // Closing the window during startup aborts its pending navigation.
+      if (quitting && error.code === 'ERR_ABORTED') return
+      fatal(error)
     })
   })
   .catch((error) => {
