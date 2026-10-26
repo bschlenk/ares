@@ -1,7 +1,9 @@
 name: Electron macOS acceptance
 on:
-  # Full native/Electron/package acceptance is opt-in until the runner-dependent
-  # timing failures are fixed. Avoid duplicate push/PR runs and failure emails.
+  # PR branches run once through pull_request, rather than also running on push.
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
