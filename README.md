@@ -61,9 +61,8 @@ High-level Components
 
 * __ares__:       emulator cores and component implementations
 * __electron-ui__: Electron frontend, native host, tools and shared services
-* __hiro__:       native GUI toolkit for optional standalone MIA/genius utilities
 * __nall__:       Near's alternative to the C++ standard library
-* __ruby__:       platform-specific APIs for emulator video, audio, and input
+* __ruby__:       SDL audio output for the native host
 * __mia__:        internal ROM database and ROM/image loader
 * __libco__:      cooperative multithreading library
 

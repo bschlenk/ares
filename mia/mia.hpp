@@ -17,11 +17,6 @@
 #include <nall/encode/wav.hpp>
 using namespace nall;
 
-#if !defined(MIA_LIBRARY)
-#include <hiro/hiro.hpp>
-using namespace hiro;
-#endif
-
 #include <ares/ares.hpp>
 #include <ares/resource/resource.hpp>
 #include <mia/resource/resource.hpp>
@@ -66,9 +61,6 @@ namespace mia {
   #include "pak/pak.hpp"
   #include "system/system.hpp"
   #include "medium/medium.hpp"
-  #if !defined(MIA_LIBRARY)
-  #include "program/program.hpp"
-  #endif
 
   extern std::function<string ()> homeLocation;
   extern std::function<string ()> saveLocation;

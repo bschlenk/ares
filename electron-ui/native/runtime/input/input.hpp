@@ -316,15 +316,8 @@ struct VirtualPort {
 
 struct InputManager {
   auto bind() -> void;
-  auto acquired() -> bool;
-  auto acquire() -> bool;
-  auto release() -> bool;
   auto synchronize() -> void;
-  auto poll(bool force = false) -> void;
   std::vector<std::shared_ptr<HID::Device>> devices;
-
-  u64 pollFrequency = 5;
-  u64 lastPoll = 0;
 };
 
 extern VirtualPort virtualPorts[5];

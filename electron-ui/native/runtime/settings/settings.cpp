@@ -3,13 +3,6 @@
 Settings settings;
 
 auto Settings::process(bool load) -> void {
-  if(load) {
-    //initialize non-static default settings
-    video.driver = ruby::Video::optimalDriver();
-    audio.driver = "SDL";
-    input.driver = "SDL";
-  }
-
   #define bind(type, path, name) \
     if(load) { \
       if(auto node = operator[](path)) name = node.type(); \
@@ -17,23 +10,6 @@ auto Settings::process(bool load) -> void {
       operator()(path).setValue(name); \
     } \
 
-  bind(string,  "Video/Driver", video.driver);
-  bind(string,  "Video/Monitor", video.monitor);
-  bind(string,  "Video/Format", video.format);
-  bind(boolean, "Video/Exclusive", video.exclusive);
-  bind(boolean, "Video/Blocking", video.blocking);
-  bind(boolean, "Video/PresentSRGB", video.forceSRGB);
-  bind(boolean, "Video/ThreadedRenderer", video.threadedRenderer);
-  bind(boolean, "Video/NativeFullScreen", video.nativeFullScreen);
-  bind(boolean, "Video/Flush", video.flush);
-  bind(string,  "Video/Shader", video.shader);
-  bind(natural, "Video/WindowWidth", video.windowWidth);
-  bind(natural, "Video/WindowHeight", video.windowHeight);
-  bind(string,  "Video/Output", video.output);
-  bind(natural, "Video/FixedScale", video.fixedScale);
-  bind(string,  "Video/AspectCorrectionMode", video.aspectCorrection);
-  bind(boolean, "Video/AdaptiveSizing", video.adaptiveSizing);
-  bind(boolean, "Video/AutoCentering", video.autoCentering);
   bind(real,    "Video/Luminance", video.luminance);
   bind(real,    "Video/Saturation", video.saturation);
   bind(real,    "Video/Gamma", video.gamma);

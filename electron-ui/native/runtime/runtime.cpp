@@ -1,6 +1,5 @@
 #include "runtime.hpp"
 
-namespace ruby { Input input; }
 FrontendRuntime runtime;
 
 auto updatePalette() -> void {

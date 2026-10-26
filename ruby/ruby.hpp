@@ -33,8 +33,6 @@ using nall::tuple;
 
 namespace ruby {
 
-#include <ruby/video/video.hpp>
 #include <ruby/audio/audio.hpp>
-#include <ruby/input/input.hpp>
 
 }

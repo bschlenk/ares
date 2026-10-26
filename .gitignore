@@ -5,7 +5,6 @@
 !/.github
 !/ares
 !/electron-ui
-!/hiro
 !/cmake
 !/libco
 !/mia
@@ -30,17 +29,12 @@
 .DS_Store
 
 # Exclude generated sources that still reside in-tree
-ruby/video/metal/shaders.metallib
-ruby/video/metal/shaders.ir
 ares/ares/resource/resource.cpp
 ares/ares/resource/resource.hpp
-hiro/resource/resource.cpp
-hiro/resource/resource.hpp
 mia/resource/resource.cpp
 mia/resource/resource.hpp
 
 # Exclude Qt generated MOC file
-hiro/qt/qt.moc
 
 # Exclude fetched third-party processor test binaries
 tests/arm7tdmi/tests

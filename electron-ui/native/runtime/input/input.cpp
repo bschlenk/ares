@@ -174,7 +174,7 @@ auto InputDigital::value() -> s16 {
       output = value != 0;
     }
 
-    if(device->isMouse() && groupID == HID::Mouse::GroupID::Button && inputManager.acquired()) {
+    if(device->isMouse() && groupID == HID::Mouse::GroupID::Button) {
       output = value != 0;
     }
 
@@ -385,7 +385,7 @@ auto InputAbsolute::value() -> s16 {
     if (device->isKeyboard() && runtime.keyboardCaptured) continue;
     s16 value = device->group(groupID).input(inputID).value();
 
-    if(device->isMouse() && groupID == HID::Joypad::GroupID::Axis && inputManager.acquired()) {
+    if(device->isMouse() && groupID == HID::Joypad::GroupID::Axis) {
       result += value;
     }
 
@@ -449,7 +449,7 @@ auto InputRelative::value() -> s16 {
     auto& inputID = binding.inputID;
     if (device->isKeyboard() && runtime.keyboardCaptured) continue;
 
-    if(device->isMouse() && groupID == HID::Mouse::GroupID::Axis && inputManager.acquired()) {
+    if(device->isMouse() && groupID == HID::Mouse::GroupID::Axis) {
       auto& mouse = static_cast<HID::Mouse&>(*device);
       result += mouse.motion(inputID).read(previous[index]);
     }
@@ -487,11 +487,8 @@ auto InputRumble::value() -> s16 {
   return 0;
 }
 
-auto InputRumble::rumble(u16 strong, u16 weak) -> void {
-  for(auto& binding : bindings) {
-    if(!binding.device) continue;
-    ruby::input.rumble(binding.deviceID, strong, weak);
-  }
+auto InputRumble::rumble(u16, u16) -> void {
+  // Physical device output is owned by Electron. No rumble transport exists yet.
 }
 
 //
@@ -560,25 +557,6 @@ auto InputManager::bind() -> void {
   synchronize();
 }
 
-auto InputManager::acquired() -> bool {
-  if(runtime.externalInput) return true;
-  return ruby::input.acquired();
-}
-
-auto InputManager::acquire() -> bool {
-  lock_guard<recursive_mutex> inputLock(runtime.inputMutex);
-  if(!ruby::input.acquire()) return false;
-  synchronize();
-  return true;
-}
-
-auto InputManager::release() -> bool {
-  lock_guard<recursive_mutex> inputLock(runtime.inputMutex);
-  if(!ruby::input.release()) return false;
-  synchronize();
-  return true;
-}
-
 auto InputManager::synchronize() -> void {
   lock_guard<recursive_mutex> inputLock(runtime.inputMutex);
   for(auto& port : virtualPorts) {
@@ -597,27 +575,5 @@ auto InputManager::synchronize() -> void {
         }
       }
     }
-  }
-}
-
-auto InputManager::poll(bool force) -> void {
-  //polling actual hardware is very time-consuming; skip call if poll was called too recently
-  auto thisPoll = chrono::millisecond();
-  if(thisPoll - lastPoll < pollFrequency && !force) return;
-  lastPoll = thisPoll;
-
-  lock_guard<recursive_mutex> inputLock(runtime.inputMutex);
-  auto devices = ruby::input.poll();
-  bool changed = devices.size() != this->devices.size();
-  if(!changed) {
-    for(u32 index : range(devices.size())) {
-      changed = devices[index] != this->devices[index];
-      if(changed) break;
-    }
-  }
-  if(changed) {
-    this->devices = devices;
-    bind();
-
   }
 }

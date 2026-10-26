@@ -41,7 +41,7 @@ For development, from the repository root:
 ```sh
 cmake -S . -B build-electron-make -G 'Unix Makefiles' \
   -UARES_CORES -DARES_BUILD_ELECTRON_UI=ON \
-  -DARES_BUILD_OPTIONAL_TARGETS=OFF -DARES_ENABLE_LIBRASHADER=OFF -DENABLE_CCACHE=OFF -DENABLE_IPO=OFF
+  -DARES_BUILD_OPTIONAL_TARGETS=OFF -DENABLE_CCACHE=OFF -DENABLE_IPO=OFF
 cmake --build build-electron-make --target ares-electron-host ares-electron-cpu-fixture -j 8
 npm ci --prefix electron-ui
 npm start --prefix electron-ui

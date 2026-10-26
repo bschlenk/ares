@@ -89,7 +89,7 @@ async function main() {
     dirty: !!spawnSync('git', ['status', '--porcelain'], { cwd: repository, encoding: 'utf8' }).stdout.trim(),
   }
   summary.tools = { cmake: version[0], electron: require('electron/package.json').version, ffprobe: env.ARES_FFPROBE }
-  await gate('configure', cmake, ['-S', repository, '-B', build, '-G', 'Unix Makefiles', '-UARES_CORES', '-DARES_BUILD_ELECTRON_UI=ON', '-DARES_BUILD_OPTIONAL_TARGETS=OFF', '-DARES_ENABLE_LIBRASHADER=OFF', '-DENABLE_CCACHE=OFF', '-DENABLE_IPO=OFF', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'], repository, 300000)
+  await gate('configure', cmake, ['-S', repository, '-B', build, '-G', 'Unix Makefiles', '-UARES_CORES', '-DARES_BUILD_ELECTRON_UI=ON', '-DARES_BUILD_OPTIONAL_TARGETS=OFF', '-DENABLE_CCACHE=OFF', '-DENABLE_IPO=OFF', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'], repository, 300000)
   await gate('native-build', cmake, ['--build', build, '--target', 'ares-electron-host', 'ares-electron-cpu-fixture', 'ares-electron-task-fixture', 'ares-electron-matrix-fixture', '-j', String(jobs)], repository, 1800000)
   await gate('typescript', 'npm', ['run', 'build'])
   const tests = fs.readdirSync(path.join(root, 'tests')).filter(name => name.endsWith('.test.cjs') && name !== 'plugins-game-live.test.cjs').sort().map(name => `tests/${name}`)
