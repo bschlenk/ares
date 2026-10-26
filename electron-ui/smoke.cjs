@@ -43,6 +43,19 @@ async function run(args, label) {
       assert.deepEqual([...first.pixels.subarray(offset, offset + 4)], [tick % 256, (tick + 1) % 256, tick % 256, 255]);
     }
     await sleep(300);
+    // Observe producer progress without granting another transport credit.
+    // A fixed 300 ms frame-count expectation depends on shared-runner speed.
+    const progressDeadline = Date.now() + 8000;
+    let produced = first.sequence;
+    do {
+      const capture = await client.request('video.begin', undefined, { source: 'presented' });
+      assert.equal(capture.ok, true, JSON.stringify(capture));
+      produced = capture.result.sequence;
+      assert.equal((await client.request('video.release', undefined, { snapshotId: capture.result.snapshot_id })).ok, true);
+      if (produced > first.sequence + 5) break;
+      await sleep(25);
+    } while (Date.now() < progressDeadline);
+    assert.ok(produced > first.sequence + 5, `${label}: native producer stalled without transport credit`);
     assert.equal(received, 1, 'No frames without credit');
     const resumed = await next();
     assert.ok(resumed.sequence > first.sequence + 5, 'Native producer continues while consumer stalls');
@@ -59,7 +72,9 @@ async function run(args, label) {
     const start = await next();
     let end = start, changes = 0, previous = start.pixels;
     const finish = Date.now() + (label.includes('GBA') ? 12000 : args.includes('--rom') ? 4000 : 1500);
-    while (Date.now() < finish) {
+    const progressLimit = finish + 8000;
+    while (Date.now() < finish || changes <= 10) {
+      assert.ok(Date.now() < progressLimit, `${label}: video stopped changing`);
       end = await next(); if (!end.pixels.equals(previous)) changes++; previous = end.pixels;
     }
     assert.ok(changes > 10, 'Video changes over time');
