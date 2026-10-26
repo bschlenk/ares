@@ -279,9 +279,14 @@ test('isolated N64 host and real MCP stdio share instruction operations, registe
     await peer.tool('controller_host_mode');
     // Feed the same host keyboard pipe used by Electron. Emulated events verify
     // handoff mechanics; physical keyboard/gamepad acceptance remains manual.
-    child.stdin.write('key A 1\n'); await sleep(30);
-    input = unwrap(await native.request('n64.input.state'));
-    assert.equal(input.human_takeovers, 1); assert.equal(input.ports.some(p => p.pending.overridden || p.latched.overridden), false);
+    child.stdin.write('key A 1\n');
+    const takeoverDeadline = Date.now() + 5000;
+    do {
+      input = unwrap(await native.request('n64.input.state'));
+      if(input.human_takeovers === 1) break;
+      await sleep(10);
+    } while(Date.now() < takeoverDeadline);
+    assert.equal(input.human_takeovers, 1, JSON.stringify(input)); assert.equal(input.ports.some(p => p.pending.overridden || p.latched.overridden), false);
     assert.equal(unwrap(await native.request('session.status')).paused, false);
     child.stdin.write('key A 0\n'); unwrap(await native.request('session.pause'));
     const op = unwrap(await client.request('execution.stepInstructions', undefined, { count: 1000000, timeoutMs: 10000 }));
