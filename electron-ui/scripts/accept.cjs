@@ -19,6 +19,7 @@ const env = { ...process.env }
 for (const key of Object.keys(env)) if (key.startsWith('ARES_')) delete env[key]
 env.ARES_BACKGROUND_TEST = '1'
 env.ARES_SILENT = '1'
+if (process.env.ARES_SMOKE_PERFORMANCE === '1') env.ARES_SMOKE_PERFORMANCE = '1'
 env.NODE_OPTIONS = ''
 env.NODE_PATH = ''
 delete env.ELECTRON_RUN_AS_NODE
