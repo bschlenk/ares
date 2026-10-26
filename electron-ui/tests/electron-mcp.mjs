@@ -215,8 +215,12 @@ app.whenReady().then(async () => {
   await sessions.request('session.pause');
   assert.equal((await mcp.tool('rsp_registers')).debug.active, false);
   assert.equal((await mcp.tool('overlay_log')).enabled, false, 'MCP access alone never starts provenance recording');
+  // Earlier wall-clock-bounded captures run an intentionally blank boot ROM.
+  // Reset so the profiler step starts at a known executable boot instruction.
+  enter('N64 profiler from reset');
+  await sessions.request('session.reset'); await mcp.tool('emu_status');
   assert.equal((await mcp.tool('profiler_control')).enabled, true);
-  assert.equal((await mcp.tool('step_instructions')).executed, 1);
+  assert.equal((await mcp.tool('step_instructions', { max_seconds: 1 })).executed, 1);
   assert.equal((await mcp.tool('cpu_profiler_top')).timebase_hz, 187500000);
   assert.equal((await mcp.tool('profiler_clear')).cleared, true);
   assert.equal((await mcp.tool('profiler_control', { enable: false })).enabled, false);
