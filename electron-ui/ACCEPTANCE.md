@@ -8,7 +8,7 @@ npm run accept
 ```
 
 This is the same command used by `.github/workflows/electron-macos.yml`. It
-configures/builds both native targets, compiles three strict TS targets, runs the
+configures/builds the native host and fixtures, compiles three strict TS targets, runs the
 fixture suite and native GB/NES/transport smoke, then actual Electron session,
 MCP, plugin, hot-reload, agent-tool, profile settings, local plugin settings and startup-recovery checks. It also verifies
 profile ownership/crash recovery, a running app surviving checkout rebuild, and
@@ -41,7 +41,7 @@ logs and concise package evidence remain. The command exits nonzero on a failed
 command, timeout or missing result. Failed gates stop subsequent work.
 
 The workflow uses the standard `macos-15` arm64 runner and read-only repository
-permissions, runs on pushes/PRs/manual dispatch, and uploads logs/JSON even after
+permissions, runs on main pushes/PRs/manual dispatch, and uploads logs/JSON even after
 failure. [Runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 and [Node version files](https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md)
 are documented upstream. A configured workflow is not evidence of a hosted pass;
@@ -67,25 +67,34 @@ infinite-loop code is never built/imported, renderer controls stay responsive,
 CLI disable/reset works, reload remains safe and profile/plugin storage survives.
 This differs from serializer rollback-failure fault injection above.
 
-## GitHub Actions scheduling
+## GitHub Actions scheduling and reliability
 
-The full macOS acceptance workflow is manual-only (`workflow_dispatch`). It builds
-all cores, runs native/service and Electron UI tests, and validates a packaged app.
-It no longer runs twice on every PR branch push. Run it deliberately from Actions
-when acceptance evidence is needed; `npm run accept` remains available locally.
-The workflow is also disabled in repository Actions settings to stop existing
-branches from scheduling their older YAML. After merging the manual-only trigger
-change, re-enable it in Actions to permit manual dispatches.
+The full macOS acceptance workflow runs on pull requests, pushes to `main`, and
+manual dispatch. Feature branch pushes do not independently schedule a second
+copy of the same PR run. The workflow remains enabled; `npm run accept` runs the
+same checks locally. No test failures are suppressed or skipped.
 
-Audit of PR #23 run `40249899219` and main run `40237317906`: both failed the same
-17 fixture tests before UI/package gates. Most failures were `ENOENT` because
-several test helpers hardcoded `build-electron-make` instead of respecting
-`ARES_HOST` (CI builds `build-electron-acceptance`). Those helpers now honor the
-same override as the other tests. Separate script, input-delivery and app-startup
-failures remain to be verified on the hosted runner before automatic acceptance
-is restored. No test failures are suppressed or skipped by the acceptance script.
+The initial audit of PR #23 run `40249899219` and main run `40237317906` found the
+same 17 fixture failures. Subsequent hosted reproduction `40255294053` exposed
+the remaining native script error after the executable-path fixes. Corrections:
 
-Validation of the host-path fix: rebuilt the native host on macOS arm64 and ran
-21 affected integration tests with `ARES_HOST` set to a separate wrapper
-executable; all passed, with 17 wrapper invocations recorded. This verifies the
-custom executable path locally; it does not claim the full hosted suite is green.
+- Native test launchers and lock helpers honor `ARES_HOST`; CI builds in
+  `build-electron-acceptance`, while local defaults use `build-electron-make`.
+- Input takeover, demonstration completion, observer rejection and app startup
+  tests poll the state they assert with bounded deadlines, rather than assuming
+  a scheduler will finish work during a short fixed sleep.
+- Script microtasks yield when a per-tick budget expires between jobs. The hard
+  4,096-job limit persists across yields, and deadline/cancellation and single-job
+  interrupt guards remain. A deterministic native fixture covers continuation
+  after budget expiry and promise storms spanning many yields.
+- Electron MCP acceptance lists the current public tools. Workspace acceptance
+  checks visible default chrome while allowing the inactive demonstration banner.
+- Isolated development launches copy `tools/` along with the other TypeScript
+  source directories, so their builds can resolve the tool registry.
+- Packaged settings acceptance uses the current direct helper executable, waits
+  for native-session readiness, and uses a private service directory to avoid
+  discovering unrelated apps running on the same machine.
+
+Per-gate logs and revision-tagged summaries remain the source of validation
+results. A configured workflow alone is not evidence that a particular revision
+passed on GitHub's hosted runner.
