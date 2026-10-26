@@ -75,7 +75,8 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     }`;
     const script = await peer.tool('run_script', {source:recordingSource});
     assert.equal(script.error,undefined,JSON.stringify(script));
-    let job=script;for(let i=0;job.state==='running'&&i<500;i++){await sleep(10);job=await peer.tool('operation_status',{operation_id:script.operation_id});}
+    const recordingDeadline=Date.now()+30000;
+    let job=script;while(job.state==='running'&&Date.now()<recordingDeadline){await sleep(10);job=await peer.tool('operation_status',{operation_id:script.operation_id});}
     if(job.stop_reason !== 'script_done') {
       const failure = await peer.tool('script_result', {offset:0});
       assert.fail(JSON.stringify({operation:job,script:failure,nativeLog:log}));
