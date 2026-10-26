@@ -101,6 +101,11 @@ the remaining native script error after the executable-path fixes. Corrections:
   briefly retained kernel lock only after the private authenticated record proves
   the old endpoint is gone; live/inconclusive records still fail closed. A native
   helper regression forces delayed lock release instead of relying on a race.
+- Restart checks wait for the explicitly spawned instance through a non-launching
+  client before asking the automatic MCP client to reconnect. This prevents the
+  readiness query itself from launching a competing app. A private fallback
+  profile and an assertion that it was never created guard against accidental
+  use of a live/default user profile.
 - Origin-observer tests preserve both frozen native captures in their payload,
   honoring the bounded latest-value notification transport rather than assuming
   its writer flushes between adjacent CPU instructions.

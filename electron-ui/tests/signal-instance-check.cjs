@@ -28,12 +28,21 @@ module.exports = async function checkSignals(bundle) {
   }
   async function stopped(value,signal){value.child.kill(signal);const timer=setTimeout(()=>value.child.kill('SIGKILL'),5000);try{const [code,ended]=await value.closed;if(signal!=='SIGKILL'){assert.equal(ended,null,value.log());assert.equal(code,0,value.log())}}finally{clearTimeout(timer)}}
   const client=LocalServiceClient.named(serviceDirectory,'kirby',2000);
-  const peer=new StdioPeer(electron,[bridge,'--service-dir',serviceDirectory,'--instance-name','kirby'],{env:{...baseEnv,ELECTRON_RUN_AS_NODE:'1',NODE_OPTIONS:''}});
+  const automaticProfile=path.join(directory,'automatic-profile');
+  const peer=new StdioPeer(electron,[bridge,'--service-dir',serviceDirectory,'--instance-name','kirby'],{env:{...baseEnv,ARES_PROFILE_DIR:automaticProfile,ELECTRON_RUN_AS_NODE:'1',NODE_OPTIONS:''}});
   const namedFile=path.join(serviceDirectory,'named-kirby.json');
+  // Poll the explicitly launched app before asking the automatic MCP client to
+  // reconnect. Otherwise its first query can launch a competing replacement.
+  const readyLaunch=(value,previous,label)=>until(async()=>{
+    const reply=await client.request('session.status');
+    if(!reply.ok||!reply.session||reply.session===previous)return;
+    const info=JSON.parse(fs.readFileSync(namedFile));
+    return value.log().includes(`ares service instance ${info.instance}:`)?reply:undefined;
+  },label);
   try {
     await peer.initialize();
     const a=launch('profile');
-    const first=await until(async()=>{const r=await client.request('session.status');return r.ok?r:undefined},'first launch');
+    const first=await readyLaunch(a,undefined,'first launch');
     const old=JSON.parse(fs.readFileSync(namedFile));
     const duplicate=launch('duplicate');await until(()=>duplicate.log().includes('instance_name_in_use'),'duplicate name rejected');await duplicate.closed;
     assert.equal(JSON.parse(fs.readFileSync(namedFile)).instance,old.instance);
@@ -43,14 +52,19 @@ module.exports = async function checkSignals(bundle) {
     assert.equal(fs.existsSync(namedFile),false,'SIGTERM removes the owned named claim');
     await assert.rejects(client.request('session.status'), /instance_not_running|app_disconnected|app_not_running/);
     const b=launch('profile');
-    const second=await until(async()=>{const r=await peer.tool('emu_status');return r.session&&r.session!==first.session?r:undefined},'same saved MCP configuration reconnects');
+    const secondNative=await readyLaunch(b,first.session,'second explicit launch');
+    const second=await until(async()=>{const r=await peer.tool('emu_status');return r.session===secondNative.session?r:undefined},'same saved MCP configuration reconnects');
     const fresh=JSON.parse(fs.readFileSync(namedFile));assert.notEqual(fresh.instance,old.instance);assert.notEqual(fresh.token,old.token);assert.equal(second.operation_id,null,'interrupted mutation is not replayed');
     const forgedFile=path.join(serviceDirectory,'old-token.json');fs.writeFileSync(forgedFile,JSON.stringify({...fresh,token:old.token}),{mode:0o600});
     const forged=new LocalServiceClient(forgedFile,fresh.instance,1000);try{await assert.rejects(forged.request('session.status'),/unauthorized/)}finally{forged.close();fs.rmSync(forgedFile)}
     await stopped(b,'SIGINT');assert.equal(fs.existsSync(namedFile),false,'SIGINT removes the owned named claim');
-    const c=launch('profile');await until(async()=>{const r=await peer.tool('emu_status');return r.session&&r.session!==second.session?r:undefined},'third launch');
+    const c=launch('profile');const third=await readyLaunch(c,second.session,'third explicit launch');
+    await until(async()=>{const r=await peer.tool('emu_status');return r.session===third.session},'third MCP reconnect');
     const stale=JSON.parse(fs.readFileSync(namedFile));await stopped(c,'SIGKILL');assert.equal(fs.existsSync(namedFile),true,'SIGKILL deliberately leaves stale claim');
-    const d=launch('profile');await until(async()=>{if(!fs.existsSync(namedFile))return false;const info=JSON.parse(fs.readFileSync(namedFile));if(info.instance===stale.instance)return false;const r=await peer.tool('emu_status');return r.session&&r.session!==second.session},'recover killed launch');await stopped(d,'SIGTERM');
+    const d=launch('profile');const fourth=await readyLaunch(d,third.session,'recover killed launch');
+    assert.notEqual(JSON.parse(fs.readFileSync(namedFile)).instance,stale.instance);
+    await until(async()=>{const r=await peer.tool('emu_status');return r.session===fourth.session},'recovered MCP reconnect');await stopped(d,'SIGTERM');
+    assert.equal(fs.existsSync(automaticProfile),false,'status polling never launched a competing app');
     return {signals:['SIGTERM','SIGINT','SIGKILL'],fresh_credentials:true,old_token_rejected:true,named_restart:true,mutation_replayed:false};
   } finally {
     client.close();await peer.close();
