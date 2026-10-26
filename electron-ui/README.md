@@ -351,8 +351,8 @@ The package declares `type: module` and starts `dist/main.js`. The main process
 resolves assets relative to its compiled location in both checkout and copied
 bundle. The preload’s emitted CJS is an Electron sandbox constraint; its source
 is TypeScript. Test/packaging helper scripts retain explicit `.cjs` extensions;
-Electron integration entry points are `.mjs`. Development tests use modern Node
-with synchronous `require(ESM)` support; the distributed app supplies Node 24.
+Electron integration entry points are `.mjs`. Development uses Node 24 LTS, pinned by the repository `mise.toml` and
+`electron-ui/.node-version`, with synchronous `require(ESM)` support; the distributed app supplies Node 24.
 
 ### N64 CPU debugging
 

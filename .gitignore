@@ -2,6 +2,7 @@
 /*
 
 # Except for default project files
+!/mise.toml
 !/.github
 !/ares
 !/electron-ui
