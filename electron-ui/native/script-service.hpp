@@ -8,6 +8,7 @@
 #include <vector>
 #include <map>
 #include "execution-service.hpp"
+#include "script-job-queue.hpp"
 
 // One isolated runtime per exclusive job. Only the emulation thread enters JS.
 struct ScriptService {
@@ -18,6 +19,7 @@ struct ScriptService {
   std::string hostRequest, hostKind, artifacts="[]";
   unsigned artifactCount=0;
   std::function<ControlResult(const std::string&,const std::vector<std::string>&)> demonstration;
+  ScriptJobQueue jobQueue;
   uint64_t hostId=0;
   bool hostWaiting=false;
   ExecutionService* execution = nullptr;
@@ -229,11 +231,13 @@ struct ScriptService {
       JSValue v=JS_Call(context,resolve,JS_UNDEFINED,0,nullptr);JS_FreeValue(context,resolve);resolve=JS_UNDEFINED;
       if(JS_IsException(v)){error=exception();JS_FreeValue(context,v);finish("script_failed");return;}JS_FreeValue(context,v);
     }
-    unsigned jobs=0;JSContext* jobContext;
-    while(JS_IsJobPending(runtime)) {
-      if(++jobs>4096 || Clock::now()>=budget){error="promise_job_limit";finish("script_failed");return;}
-      if(JS_ExecutePendingJob(runtime,&jobContext)<0){error=exception();finish("script_failed");return;}
-    }
+    JSContext* jobContext;
+    auto jobs=jobQueue.pump([&]{return JS_IsJobPending(runtime);},
+      [&]{return Clock::now()>=budget;},
+      [&]{return JS_ExecutePendingJob(runtime,&jobContext)>=0;});
+    if(jobs==ScriptJobQueue::Result::Yielded)return;
+    if(jobs==ScriptJobQueue::Result::JobLimit){error="promise_job_limit";finish("script_failed");return;}
+    if(jobs==ScriptJobQueue::Result::Exception){error=exception();finish("script_failed");return;}
     int state=JS_PromiseState(context,promise);
     if(state==JS_PROMISE_REJECTED){JSValue v=JS_PromiseResult(context,promise);error=valueText(v,"script_rejected");JS_FreeValue(context,v);finish("script_failed");return;}
     if(state==JS_PROMISE_FULFILLED) {
@@ -302,7 +306,7 @@ struct ScriptService {
     if(!execution->reservation||execution->reservation->owner!=owner)return {"script_preparation_revoked",{}};
     if(method=="script.observe"&&!execution->supported){execution->reservation.reset();return {"frame_boundary_unavailable",{}};}
     auto now=Clock::now();deadline=now+std::chrono::milliseconds(milliseconds);budget=now+std::chrono::milliseconds(25);
-    readCalls=readBytes=readNs=0;frameLimit=limit;framesUsed=0;result.clear();error.clear();logs="[]";artifacts="[]";artifactCount=0;hostId=0;logBytes=0;destroy();
+    jobQueue={};readCalls=readBytes=readNs=0;frameLimit=limit;framesUsed=0;result.clear();error.clear();logs="[]";artifacts="[]";artifactCount=0;hostId=0;logBytes=0;destroy();
     runtime=JS_NewRuntime();if(!runtime){execution->reservation.reset();return {"script_oom",{}};}
     JS_SetMemoryLimit(runtime,16*1024*1024);JS_SetMaxStackSize(runtime,512*1024);JS_SetInterruptHandler(runtime,interrupt,this);
     context=JS_NewContext(runtime);if(!context){destroy();execution->reservation.reset();return {"script_oom",{}};}JS_SetContextOpaque(context,this);
