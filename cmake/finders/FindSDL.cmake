@@ -81,13 +81,31 @@ find_path(
   # "$<$<PLATFORM_ID:Darwin>:NO_DEFAULT_PATH>"
 )
 
+unset(SDL_VERSION)
 if(PC_SDL_VERSION VERSION_GREATER 0)
   set(SDL_VERSION ${PC_SDL_VERSION})
 else()
-  if(NOT SDL_FIND_QUIETLY)
-    message(AUTHOR_WARNING "Failed to find SDL version.")
-  endif()
-  set(SDL_VERSION 0.0.0)
+  # Framework and prebuilt distributions need not provide pkg-config metadata.
+  foreach(_sdl_header "${SDL_INCLUDE_DIR}/SDL_version.h" "${SDL_INCLUDE_DIR}/SDL3/SDL_version.h")
+    if(EXISTS "${_sdl_header}")
+      file(READ "${_sdl_header}" _sdl_version_header)
+      foreach(_sdl_component MAJOR MINOR MICRO)
+        string(REGEX MATCH "#[ \t]*define[ \t]+SDL_${_sdl_component}_VERSION[ \t]+([0-9]+)" _sdl_match "${_sdl_version_header}")
+        set(_sdl_${_sdl_component} "${CMAKE_MATCH_1}")
+      endforeach()
+      if(NOT "${_sdl_MAJOR}" STREQUAL "" AND NOT "${_sdl_MINOR}" STREQUAL "" AND NOT "${_sdl_MICRO}" STREQUAL "")
+        set(SDL_VERSION "${_sdl_MAJOR}.${_sdl_MINOR}.${_sdl_MICRO}")
+        break()
+      endif()
+    endif()
+  endforeach()
+  unset(_sdl_header)
+  unset(_sdl_version_header)
+  unset(_sdl_component)
+  unset(_sdl_match)
+  unset(_sdl_MAJOR)
+  unset(_sdl_MINOR)
+  unset(_sdl_MICRO)
 endif()
 
 if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin|Windows")
@@ -96,12 +114,17 @@ elseif(CMAKE_HOST_SYSTEM_NAME MATCHES "Linux|FreeBSD")
   set(SDL_ERROR_REASON "Ensure SDL libraries are available in local library paths.")
 endif()
 
+set(_sdl_required_vars SDL_LIBRARY SDL_INCLUDE_DIR)
+if(SDL_FIND_VERSION)
+  list(APPEND _sdl_required_vars SDL_VERSION)
+endif()
 find_package_handle_standard_args(
   SDL
-  REQUIRED_VARS SDL_LIBRARY SDL_INCLUDE_DIR
+  REQUIRED_VARS ${_sdl_required_vars}
   VERSION_VAR SDL_VERSION
   REASON_FAILURE_MESSAGE "${SDL_ERROR_REASON}"
 )
+unset(_sdl_required_vars)
 mark_as_advanced(SDL_INCLUDE_DIR SDL_LIBRARY)
 unset(SDL_ERROR_REASON)
 
@@ -121,8 +144,10 @@ if(SDL_FOUND)
       PROPERTIES
         INTERFACE_COMPILE_OPTIONS "${PC_SDL_CFLAGS_OTHER}"
         INTERFACE_INCLUDE_DIRECTORIES "${SDL_INCLUDE_DIR}"
-        VERSION ${SDL_VERSION}
     )
+    if(DEFINED SDL_VERSION)
+      set_property(TARGET SDL::SDL PROPERTY VERSION "${SDL_VERSION}")
+    endif()
   endif()
 endif()
 

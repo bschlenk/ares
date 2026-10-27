@@ -20,7 +20,7 @@ This will define the following variables:
 ``MoltenVK_FOUND``
   True if the system has the MoltenVK library.
 ``MoltenVK_VERSION``
-  The version of the SDL library which was found.
+  The version of the MoltenVK library, when available.
 ``MoltenVK_LIBRARIES``
   Libraries needed to link to MoltenVK.
 
@@ -40,16 +40,15 @@ include(FindPackageHandleStandardArgs)
 
 find_package(PkgConfig QUIET)
 if(PKG_CONFIG_FOUND)
-  pkg_search_module(PC_MoltenVK MoltenVK)
+  pkg_search_module(PC_MoltenVK QUIET MoltenVK)
 endif()
 
+# Prebuilt macOS dependencies may contain only the dylib, without version
+# metadata. An unknown version is valid for an unversioned find_package call;
+# leave it unset so requested version constraints still fail honestly.
+unset(MoltenVK_VERSION)
 if(PC_MoltenVK_VERSION VERSION_GREATER 0)
   set(MoltenVK_VERSION ${PC_MoltenVK_VERSION})
-else()
-  if(NOT MoltenVK_FIND_QUIETLY)
-    message(AUTHOR_WARNING "Failed to find MoltenVK version.")
-  endif()
-  set(MoltenVK_VERSION 0.0.0)
 endif()
 
 find_library(
@@ -67,12 +66,17 @@ set(
   "Ensure that ares-deps is provided as part of CMAKE_PREFIX_PATH or that MoltenVK is present in local library paths."
 )
 
+set(_moltenvk_required_vars MoltenVK_LIBRARY)
+if(MoltenVK_FIND_VERSION)
+  list(APPEND _moltenvk_required_vars MoltenVK_VERSION)
+endif()
 find_package_handle_standard_args(
   MoltenVK
-  REQUIRED_VARS MoltenVK_LIBRARY
+  REQUIRED_VARS ${_moltenvk_required_vars}
   VERSION_VAR MoltenVK_VERSION
   REASON_FAILURE_MESSAGE "${MoltenVK_ERROR_REASON}"
 )
+unset(_moltenvk_required_vars)
 unset(MoltenVK_ERROR_REASON)
 mark_as_advanced(MoltenVK_LIBRARY)
 
@@ -89,9 +93,11 @@ if(MoltenVK_FOUND)
       MoltenVK::MoltenVK
       PROPERTIES
         INTERFACE_COMPILE_OPTIONS "${PC_MoltenVK_CFLAGS_OTHER}"
-        VERSION ${MoltenVK_VERSION}
         MACOS_VERSION_REQUIRED 10.15
     )
+    if(DEFINED MoltenVK_VERSION)
+      set_property(TARGET MoltenVK::MoltenVK PROPERTY VERSION "${MoltenVK_VERSION}")
+    endif()
   endif()
 endif()
 
