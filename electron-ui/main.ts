@@ -664,6 +664,7 @@ app
       ] },
       { label: 'View', submenu: [
         { id: 'reload-interface', label: 'Reload Interface', accelerator: 'CmdOrCtrl+R', click: () => window.webContents.reload() },
+        { id: 'show-developer-tools', label: 'Show Developer Tools', accelerator: process.platform === 'darwin' ? 'Alt+Command+I' : 'Ctrl+Shift+I', click: () => window.webContents.openDevTools({ mode: 'bottom' }) },
         { type: 'separator' },
         { label: 'Customize Workspace', accelerator: 'CmdOrCtrl+Shift+L', click: action('edit-workspace') },
         { label: 'Video Only', click: action('reset-workspace') },

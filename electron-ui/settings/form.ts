@@ -6,13 +6,17 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
   message.setAttribute('role', 'status');
   const sections = document.createElement('div');
   element.append(sections, message);
-  type Row = { entry: SettingEntry; input: HTMLInputElement | HTMLSelectElement; note: HTMLElement; dirty: boolean; busy: boolean };
+  type Row = { entry: SettingEntry; input: HTMLInputElement | HTMLSelectElement; note: HTMLElement; dirty: boolean; busy: boolean; timer?: ReturnType<typeof setTimeout>; finished?: Promise<void> };
   const rows = new Map<string, Row>();
   let disposed = false, revision = -1, signature = '';
   const value = (row: Row) => row.entry.descriptor.type === 'boolean' ? (row.input as HTMLInputElement).checked
     : row.entry.descriptor.type === 'number' ? Number(row.input.value) : row.input.value;
   const run = async (row: Row, action: () => Promise<SettingsSnapshot>) => {
-    if (row.busy) return;
+    clearTimeout(row.timer);
+    row.timer = undefined;
+    if (row.busy) { await row.finished; if (!disposed) await run(row, action); return; }
+    let finish!: () => void;
+    row.finished = new Promise(resolve => { finish = resolve; });
     row.busy = true;
     row.input.disabled = true;
     try {
@@ -21,7 +25,21 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
       row.dirty = false;
       update(snapshot);
     } catch (error) { if (!disposed) message.textContent = String(error); }
-    finally { row.busy = false; row.input.disabled = false; }
+    finally { row.busy = false; row.input.disabled = false; finish(); }
+  };
+  const save = (row: Row) => {
+    clearTimeout(row.timer);
+    row.timer = undefined;
+    if (!row.dirty || row.busy || !row.input.checkValidity()) return;
+    if (row.entry.descriptor.type === 'number' && row.input.value.trim() === '') return;
+    const nextValue = value(row);
+    void run(row, () => bridge.set(row.entry.descriptor.id, nextValue));
+  };
+  const edit = (row: Row) => {
+    row.dirty = true;
+    clearTimeout(row.timer);
+    if (row.entry.descriptor.type === 'boolean' || row.entry.descriptor.type === 'enum') save(row);
+    else row.timer = setTimeout(() => save(row), 400);
   };
   const update = (snapshot: SettingsSnapshot) => {
     if (disposed || snapshot.revision < revision) return;
@@ -30,6 +48,7 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
     const nextSignature = JSON.stringify(entries.map(entry => entry.descriptor));
     if (signature !== nextSignature) {
       signature = nextSignature;
+      for (const row of rows.values()) clearTimeout(row.timer);
       sections.replaceChildren(); rows.clear();
       const groups = new Map<string, HTMLElement>();
       for (const entry of entries) {
@@ -55,13 +74,13 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
           input.type = descriptor.type === 'boolean' ? 'checkbox' : descriptor.type === 'number' ? 'number' : 'text';
           if (descriptor.type === 'number') { input.min = String(descriptor.min); input.max = String(descriptor.max); input.step = descriptor.integer ? '1' : 'any'; }
         }
-        label.append(input); field.append(label);
-        const save = document.createElement('button'), note = document.createElement('p');
-        save.textContent = 'Save';
+        const controls = document.createElement('div'), note = document.createElement('p');
+        controls.className = 'setting-controls';
+        label.append(input); controls.append(label); field.append(controls);
         const row: Row = { entry, input, note, dirty: false, busy: false }; rows.set(descriptor.id, row);
-        input.oninput = () => { row.dirty = true; };
-        save.onclick = () => { void run(row, () => bridge.set(descriptor.id, value(row))); };
-        field.append(save);
+        input.oninput = () => edit(row);
+        input.onchange = () => save(row);
+        input.onblur = () => save(row);
         if (descriptor.control === 'key') {
           const record = document.createElement('button'); record.textContent = 'Record key';
           let recording = false;
@@ -70,20 +89,22 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
             if (!recording) return;
             event.preventDefault(); event.stopPropagation();
             recording = false; record.textContent = 'Record key';
-            if (event.code !== 'Escape') { input.value = event.code; row.dirty = true; }
+            if (event.code !== 'Escape') { input.value = event.code; edit(row); save(row); }
           };
-          input.onblur = () => { recording = false; record.textContent = 'Record key'; };
-          field.append(record);
+          input.onblur = () => { recording = false; record.textContent = 'Record key'; save(row); };
+          controls.append(record);
         }
 
         if (descriptor.file) {
           const browse = document.createElement('button'); browse.textContent = 'Choose file…';
           browse.onclick = () => { void run(row, () => bridge.chooseFile(descriptor.id)); };
-          field.append(browse);
+          controls.append(browse);
         }
         const reset = document.createElement('button'); reset.textContent = 'Reset';
+        reset.className = 'setting-reset';
+        reset.setAttribute('aria-label', `Reset ${descriptor.title}`);
         reset.onclick = () => { void run(row, () => bridge.reset(descriptor.id)); };
-        field.append(reset, note); group.append(field);
+        controls.append(reset); field.append(note); group.append(field);
       }
     }
     for (const entry of entries) {
@@ -99,5 +120,5 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
   };
   const unsubscribe = bridge.changed(update);
   void bridge.catalog().then(update).catch(error => { if (!disposed) message.textContent = String(error); });
-  return () => { disposed = true; unsubscribe(); element.replaceChildren(); };
+  return () => { for (const row of rows.values()) save(row); disposed = true; unsubscribe(); element.replaceChildren(); };
 }

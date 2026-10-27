@@ -29,10 +29,17 @@ app.whenReady().then(async () => {
     const window = await until(() => BrowserWindow.getAllWindows()[0]);
     const js = code => window.webContents.executeJavaScript(code);
     await until(() => js("document.body.dataset.theme === 'green'"));
+    await js("document.querySelector('#settings-dialog').showModal()");
+    assert.deepEqual(await js(`(() => {
+      const field = document.querySelector('[data-setting="presentation.scale"]');
+      const number = document.querySelector('[data-setting="audio.volume"] input');
+      return [field.querySelector('select'), field.querySelector('button'), number].map(control => getComputedStyle(control).height);
+    })()`), ['32px', '32px', '32px'], 'buttons, selects, and number inputs share one control height');
+    await js("document.querySelector('#settings-dialog').close()");
     assert.equal(await js("document.querySelector('[data-setting=\"presentation.scale\"] select').value"), 'integer');
     assert.equal(await js("document.querySelector('[data-setting=\"presentation.scanlines\"] input').checked"), true);
     assert.equal(await js("!!document.querySelector('[data-setting=\"presentation.panelLeft\"]')"), false);
-    await js("document.querySelector('[data-setting=\"presentation.theme\"] select').value = 'paper'; document.querySelector('[data-setting=\"presentation.theme\"] button').click()");
+    await js("document.querySelector('[data-setting=\"presentation.theme\"] select').value = 'paper'; document.querySelector('[data-setting=\"presentation.theme\"] select').dispatchEvent(new Event('input', {bubbles:true}))");
     await until(() => js("document.body.dataset.theme === 'paper'"));
     assert.equal(JSON.parse(fs.readFileSync(file)).values['presentation.theme'], 'paper');
     assert.equal(await js("localStorage.getItem('ares-workbench')"), null);
@@ -58,17 +65,19 @@ app.whenReady().then(async () => {
     const keyboardRow = '[data-setting="input.keyboard.south"]';
     await js(`(() => {
       const row = document.querySelector(${JSON.stringify(keyboardRow)}), input = row.querySelector('input');
-      row.querySelectorAll('button')[1].click();
-      input.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', bubbles: true, cancelable: true }));
       row.querySelector('button').click();
+      input.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', bubbles: true, cancelable: true }));
     })()`);
     await until(async () => JSON.parse(fs.readFileSync(file)).values['input.keyboard.south'] === 'KeyN');
     await until(() => clearedInput > 0);
     ipcMain.removeListener('command', observeInput);
     window.webContents.reload();
     await until(() => js(`document.querySelector(${JSON.stringify(keyboardRow)})?.querySelector('input').value === 'KeyN'`));
+    assert.equal(await js("[...document.querySelectorAll('.setting-field button')].some(button => button.textContent === 'Save')"), false);
+    assert.equal(await js("[...document.querySelectorAll('.setting-reset')].every(button => button.parentElement.className === 'setting-controls')"), true);
     const beforeLive = await sessions.request('session.status');
-    await js(`document.querySelector('[data-setting="audio.volume"] input').value = '0.2'; document.querySelector('[data-setting="audio.volume"] button').click()`);
+    await js(`document.querySelector('[data-setting="audio.volume"] input').value = '0.2'; document.querySelector('[data-setting="audio.volume"] input').dispatchEvent(new Event('input', {bubbles:true}))`);
+    assert.notEqual(JSON.parse(fs.readFileSync(file)).values['audio.volume'], 0.2, 'number edits wait for the debounce');
     await until(async () => (await sessions.request('runtime.settings')).result?.volume === 0.2);
     assert.equal((await sessions.request('session.status')).session, beforeLive.session);
     assert.equal(JSON.parse(fs.readFileSync(file)).values['audio.volume'], 0.2);

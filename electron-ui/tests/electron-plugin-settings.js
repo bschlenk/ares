@@ -49,7 +49,7 @@ app.whenReady().then(async () => {
     await js(`document.querySelector('[data-plugin-command="ares.tools.settings:open"]').click()`);
     const row = `[data-plugin-panel="ares.tools.settings:settings"] [data-setting="${id}"]`;
     await until(() => js(`!!document.querySelector(${JSON.stringify(row)})`));
-    await js(`(() => { const row = document.querySelector(${JSON.stringify(row)}); row.querySelector('select').value = 'green'; row.querySelector('button').click(); })()`);
+    await js(`(() => { const row = document.querySelector(${JSON.stringify(row)}); row.querySelector('select').value = 'green'; row.querySelector('select').dispatchEvent(new Event('input', {bubbles:true})); })()`);
     await until(() => own()[0]?.value === 'green');
     assert.equal(JSON.parse(fs.readFileSync(file)).values[id], 'green');
     const identity = await sessions.request('session.status'), token = local().lease.token;

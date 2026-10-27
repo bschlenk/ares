@@ -1,4 +1,4 @@
-:root { color-scheme:dark; --bg:#111318; --panel:#1c2027; --text:#e1e5ec; --muted:#929da9; --accent:#9ec8c0; --line:#343c47; }
+:root { color-scheme:dark; --bg:#111318; --panel:#1c2027; --text:#e1e5ec; --muted:#929da9; --accent:#9ec8c0; --line:#343c47; --control-height:32px; }
 body[data-theme=paper] { color-scheme:light; --bg:#eeece7; --panel:#faf9f6; --text:#272d35; --muted:#65717e; --accent:#267254; --line:#d7d1c6; }
 body[data-theme=green] { --bg:#07130c; --panel:#102217; --text:#c0efca; --muted:#81af8d; --accent:#91efaa; --line:#2b4a33; }
 * { box-sizing:border-box; }
@@ -9,6 +9,7 @@ body[data-window-chrome=macos] { padding-top:28px; }
 body[data-window-chrome=macos] #window-drag-region { display:block; position:fixed; inset:0 0 auto; height:28px; background:#000; app-region:drag; user-select:none; }
 body[data-window-chrome=macos] #floating-layer { top:28px; }
 button,select,input,textarea { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:5px; padding:7px 10px; }
+button,select:not([multiple]):not([size]),input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]) { height:var(--control-height); line-height:20px; padding-block:0; vertical-align:middle; }
 button { cursor:pointer; } button:hover { border-color:var(--accent); } button:disabled { opacity:.45; cursor:default; }
 select { max-width:100%; } input[type=checkbox] { accent-color:var(--accent); width:auto; }
 label { display:block; margin:12px 0; } label select,label input:not([type=checkbox]) { display:block; width:100%; margin-top:6px; }
@@ -18,8 +19,8 @@ p,pre { line-height:1.6; } pre { white-space:pre-wrap; overflow-wrap:anywhere; f
 .workspace-area { display:flex; flex-direction:column; min-width:0; min-height:0; background:var(--bg); overflow:hidden; }
 .area-toolbar { display:none; align-items:center; gap:4px; padding:4px; background:var(--panel); border-bottom:1px solid var(--line); flex:none; overflow-x:auto; }
 .editing .area-toolbar,.has-layout .area-toolbar { display:flex; }
-.area-toolbar select { flex:1; width:0; min-width:60px; padding:4px; font-size:11px; }
-.area-toolbar button { font-size:13px; line-height:1; padding:5px 7px; }
+.area-toolbar select { flex:1; width:0; min-width:60px; padding:0 4px; font-size:11px; }
+.area-toolbar button { font-size:13px; padding:0 7px; }
 .area-content { flex:1; min-width:0; min-height:0; overflow:auto; margin:0; padding:16px; outline:none; }
 .area-content:has(#viewport) { padding:0; overflow:hidden; }
 .workspace-split { display:flex; min-width:0; min-height:0; overflow:hidden; }
@@ -39,12 +40,12 @@ p,pre { line-height:1.6; } pre { white-space:pre-wrap; overflow-wrap:anywhere; f
 @media (hover:none) { #video-controls { opacity:1; pointer-events:auto; } }
 @media (prefers-reduced-motion:reduce) { #video-controls { transition:none; } }
 #empty-state { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:12px; background:#000; color:var(--muted); }
-#empty-state button { border:0; background:transparent; color:var(--muted); padding:16px 0; } #empty-state button:hover { color:var(--text); }
+#empty-state button { height:auto; border:0; background:transparent; color:var(--muted); padding:16px 0; } #empty-state button:hover { color:var(--text); }
 #empty-state span { font-size:11px; opacity:.6; }
 #floating-layer { position:fixed; inset:0; pointer-events:none; }
 .floating-panel { position:absolute; display:flex; flex-direction:column; min-width:0; min-height:0; pointer-events:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 12px 50px #0007; overflow:hidden; }
 .floating-header { flex:none; min-height:32px; display:flex; align-items:center; justify-content:space-between; padding:5px 7px 5px 12px; cursor:move; user-select:none; touch-action:none; border-bottom:1px solid var(--line); gap:8px; }
-.floating-header span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; } .floating-header button { padding:1px 7px; }
+.floating-header span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; } .floating-header button { padding:0 7px; }
 .window-resize { position:absolute; bottom:0; right:0; width:16px; height:16px; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg,transparent 60%,var(--muted) 62%,transparent 66%,var(--muted) 70%,transparent 74%); }
 .overlay { background:transparent; border-color:transparent; box-shadow:none; }
 .overlay .floating-header,.overlay .window-resize { opacity:0; }
@@ -56,7 +57,7 @@ p,pre { line-height:1.6; } pre { white-space:pre-wrap; overflow-wrap:anywhere; f
 #close-settings { border:0; font-size:22px; background:transparent; }
 .settings-layout { display:flex; height:calc(100% - 60px); min-height:0; }
 #settings-tabs { flex:0 0 150px; background:var(--panel); padding:12px 8px; border-right:1px solid var(--line); overflow:auto; }
-#settings-tabs button { display:block; width:100%; text-align:left; border:0; background:transparent; padding:10px 12px; margin-bottom:3px; color:var(--muted); }
+#settings-tabs button { display:block; height:auto; width:100%; text-align:left; border:0; background:transparent; padding:10px 12px; margin-bottom:3px; color:var(--muted); }
 #settings-tabs button[aria-selected=true] { background:var(--bg); color:var(--text); }
 .settings-pages { flex:1; min-width:0; overflow:auto; padding:20px 24px; }
 .session-controls { display:flex; align-items:end; flex-wrap:wrap; gap:8px; padding-bottom:18px; border-bottom:1px solid var(--line); margin-bottom:12px; }
@@ -64,7 +65,10 @@ p,pre { line-height:1.6; } pre { white-space:pre-wrap; overflow-wrap:anywhere; f
 .help { color:var(--muted); font-size:12px; margin:0 0 18px; }
 details > summary { cursor:pointer; font-weight:550; padding:12px 0; }
 .setting-field { border-top:1px solid var(--line); padding:4px 0 12px; }
-.setting-field button { padding:4px 8px; margin-right:5px; font-size:12px; }
+.setting-controls { display:flex; align-items:end; gap:8px; }
+.setting-controls label { flex:1; min-width:0; margin:6px 0 0; }
+.setting-field button { flex-shrink:0; padding:0 8px; font-size:12px; }
+.setting-controls .setting-reset { margin-left:auto; }
 .setting-field p { color:var(--muted); font-size:11px; margin:6px 0 0; overflow-wrap:anywhere; }
 .setting-field [data-pending=true] { color:var(--accent); }
 .plugin-card,.floating-card { padding:12px 0; border-top:1px solid var(--line); }
