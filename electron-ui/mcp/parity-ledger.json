@@ -32,19 +32,19 @@
       "testEvidence": [
         {
           "scope": "native service only; MCP adapter not implemented",
-          "check": "tests/session-live.test.cjs and tests/electron-session.mjs",
+          "check": "tests/session-live.test.cjs and tests/electron-session.js",
           "result": "passed",
           "date": "2026-10-17"
         },
         {
           "scope": "real MCP stdio over private Electron endpoint; copied distribution launcher",
-          "check": "tests/electron-mcp.mjs, tests/local-endpoint.test.cjs, tests/package-live.cjs",
+          "check": "tests/electron-mcp.js, tests/local-endpoint.test.cjs, tests/package-live.cjs",
           "result": "passed",
           "date": "2026-10-18"
         },
         {
           "scope": "task 4 execution port",
-          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: 21 service tests, sandboxed Electron UI and real Electron/MCP ownership/reload/cancel tests after task 4.5 ESM migration."
         },
         {
@@ -113,7 +113,7 @@
       "testEvidence": [
         {
           "scope": "task 9 machine foundations",
-          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.mjs; execution log records final package checks",
+          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.js; execution log records final package checks",
           "result": "Passed: 51 full-suite tests, final affected task 9 tests 2/2, real MIPS/cache/register fixtures and isolated N64/MCP ownership gates; 54-tool Electron and checkout-denied copied package.",
           "date": "2026-10-20"
         },
@@ -139,7 +139,7 @@
       "testEvidence": [
         {
           "scope": "task 9 machine foundations",
-          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.mjs; execution log records final package checks",
+          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.js; execution log records final package checks",
           "result": "Passed: 51 full-suite tests, final affected task 9 tests 2/2, real MIPS/cache/register fixtures and isolated N64/MCP ownership gates; 54-tool Electron and checkout-denied copied package.",
           "date": "2026-10-20"
         },
@@ -165,7 +165,7 @@
       "testEvidence": [
         {
           "scope": "task 9 machine foundations",
-          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.mjs; execution log records final package checks",
+          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.js; execution log records final package checks",
           "result": "Passed: 51 full-suite tests, final affected task 9 tests 2/2, real MIPS/cache/register fixtures and isolated N64/MCP ownership gates; 54-tool Electron and checkout-denied copied package.",
           "date": "2026-10-20"
         },
@@ -228,7 +228,7 @@
       "testEvidence": [
         {
           "scope": "task 4 execution port",
-          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: 21 service tests, sandboxed Electron UI and real Electron/MCP ownership/reload/cancel tests after task 4.5 ESM migration."
         },
         {
@@ -266,7 +266,7 @@
       "testEvidence": [
         {
           "scope": "task 4 execution port",
-          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: 21 service tests, sandboxed Electron UI and real Electron/MCP ownership/reload/cancel tests after task 4.5 ESM migration."
         },
         {
@@ -403,19 +403,19 @@
       "testEvidence": [
         {
           "scope": "native service only; MCP adapter not implemented",
-          "check": "tests/session-live.test.cjs and tests/electron-session.mjs",
+          "check": "tests/session-live.test.cjs and tests/electron-session.js",
           "result": "passed",
           "date": "2026-10-17"
         },
         {
           "scope": "real MCP stdio over private Electron endpoint; copied distribution launcher",
-          "check": "tests/electron-mcp.mjs, tests/local-endpoint.test.cjs, tests/package-live.cjs",
+          "check": "tests/electron-mcp.js, tests/local-endpoint.test.cjs, tests/package-live.cjs",
           "result": "passed",
           "date": "2026-10-18"
         },
         {
           "scope": "task 4 execution port",
-          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: 21 service tests, sandboxed Electron UI and real Electron/MCP ownership/reload/cancel tests after task 4.5 ESM migration."
         },
         {
@@ -447,13 +447,13 @@
       "testEvidence": [
         {
           "scope": "native service only; MCP adapter not implemented",
-          "check": "tests/session-live.test.cjs and tests/electron-session.mjs",
+          "check": "tests/session-live.test.cjs and tests/electron-session.js",
           "result": "passed",
           "date": "2026-10-17"
         },
         {
           "scope": "real MCP stdio over private Electron endpoint; copied distribution launcher",
-          "check": "tests/electron-mcp.mjs, tests/local-endpoint.test.cjs, tests/package-live.cjs",
+          "check": "tests/electron-mcp.js, tests/local-endpoint.test.cjs, tests/package-live.cjs",
           "result": "passed",
           "date": "2026-10-18"
         },
@@ -479,7 +479,7 @@
       "testEvidence": [
         {
           "scope": "task 4 execution port",
-          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: 21 service tests, sandboxed Electron UI and real Electron/MCP ownership/reload/cancel tests after task 4.5 ESM migration."
         },
         {
@@ -529,7 +529,7 @@
       "testEvidence": [
         {
           "scope": "task 4 execution port",
-          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: 21 service tests, sandboxed Electron UI and real Electron/MCP ownership/reload/cancel tests after task 4.5 ESM migration."
         },
         {
@@ -561,7 +561,7 @@
       "testEvidence": [
         {
           "scope": "task 4 execution port",
-          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/execution-fixture.cpp, tests/execution-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: 21 service tests, sandboxed Electron UI and real Electron/MCP ownership/reload/cancel tests after task 4.5 ESM migration."
         },
         {
@@ -1094,13 +1094,13 @@
       "testEvidence": [
         {
           "scope": "native region service and temporary inspector only; MCP not exposed",
-          "check": "tests/memory.test.cjs, tests/memory-live.test.cjs, tests/electron-session.mjs",
+          "check": "tests/memory.test.cjs, tests/memory-live.test.cjs, tests/electron-session.js",
           "result": "passed",
           "date": "2026-10-18"
         },
         {
           "scope": "real MCP stdio over private Electron endpoint; copied distribution launcher",
-          "check": "tests/electron-mcp.mjs, tests/local-endpoint.test.cjs, tests/package-live.cjs",
+          "check": "tests/electron-mcp.js, tests/local-endpoint.test.cjs, tests/package-live.cjs",
           "result": "passed",
           "date": "2026-10-18"
         },
@@ -1145,13 +1145,13 @@
       "testEvidence": [
         {
           "scope": "native region service and temporary inspector only; MCP not exposed",
-          "check": "tests/memory.test.cjs, tests/memory-live.test.cjs, tests/electron-session.mjs",
+          "check": "tests/memory.test.cjs, tests/memory-live.test.cjs, tests/electron-session.js",
           "result": "passed",
           "date": "2026-10-18"
         },
         {
           "scope": "real MCP stdio over private Electron endpoint; copied distribution launcher",
-          "check": "tests/electron-mcp.mjs, tests/local-endpoint.test.cjs, tests/package-live.cjs",
+          "check": "tests/electron-mcp.js, tests/local-endpoint.test.cjs, tests/package-live.cjs",
           "result": "passed",
           "date": "2026-10-18"
         },
@@ -1196,13 +1196,13 @@
       "testEvidence": [
         {
           "scope": "native region service and temporary inspector only; MCP not exposed",
-          "check": "tests/memory.test.cjs, tests/memory-live.test.cjs, tests/electron-session.mjs",
+          "check": "tests/memory.test.cjs, tests/memory-live.test.cjs, tests/electron-session.js",
           "result": "passed",
           "date": "2026-10-18"
         },
         {
           "scope": "real MCP stdio over private Electron endpoint; copied distribution launcher",
-          "check": "tests/electron-mcp.mjs, tests/local-endpoint.test.cjs, tests/package-live.cjs",
+          "check": "tests/electron-mcp.js, tests/local-endpoint.test.cjs, tests/package-live.cjs",
           "result": "passed",
           "date": "2026-10-18"
         },
@@ -1265,7 +1265,7 @@
       "testEvidence": [
         {
           "scope": "task 7 image slice",
-          "check": "tests/cpu-debug-fixture.cpp, tests/screenshots.test.cjs, tests/screenshots-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/screenshots.test.cjs, tests/screenshots-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real RDRAM pixel formats and immutable pins, delayed old refresh rejection, worker PNG decoded by sips/Electron, crop/scale pixels, real MCP image content without video credits, reset/owner revocation and file overwrite failure. Copied package passed native capture, bundled worker PNG encoding, inline MCP image and identical atomic PNG output with repository reads denied for loader/adapter."
         },
         {
@@ -1713,7 +1713,7 @@
       "testEvidence": [
         {
           "scope": "task 6 profiler/tap slice",
-          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: original MIPS call/exception/JIT accounting and bounded maps, exact VI tap target and every cleanup path, native reply decoding, real N64/MCP ownership, Electron tool calls and copied package 35-tool registry. Physical keyboard/gamepad acceptance pending."
         },
         {
@@ -1798,7 +1798,7 @@
         },
         {
           "scope": "task 7 trace export slice",
-          "check": "tests/artifacts.test.cjs, tests/n64-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/artifacts.test.cjs, tests/n64-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real native PC export and fixture call argument/f12 export, whole-file hash, JSON shape, overwrite races, failed/oversized/revoked/stale jobs, real MCP path export and Electron main publication."
         },
         {
@@ -1907,7 +1907,7 @@
         },
         {
           "scope": "task 7 trace export slice",
-          "check": "tests/artifacts.test.cjs, tests/n64-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/artifacts.test.cjs, tests/n64-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real native PC export and fixture call argument/f12 export, whole-file hash, JSON shape, overwrite races, failed/oversized/revoked/stale jobs, real MCP path export and Electron main publication."
         },
         {
@@ -2001,7 +2001,7 @@
       "testEvidence": [
         {
           "scope": "task 6 DMA slice",
-          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real CPU SW starts PI DMA, aligned and short misaligned ranges match RAM, DMA excludes CPU watches, 4097 real transfer loops verify overwrite metadata, native/JS serialization, reset and real Electron/N64 startup opt-in."
         },
         {
@@ -2039,7 +2039,7 @@
       "testEvidence": [
         {
           "scope": "task 6 profiler/tap slice",
-          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: original MIPS call/exception/JIT accounting and bounded maps, exact VI tap target and every cleanup path, native reply decoding, real N64/MCP ownership, Electron tool calls and copied package 35-tool registry. Physical keyboard/gamepad acceptance pending."
         },
         {
@@ -2071,7 +2071,7 @@
       "testEvidence": [
         {
           "scope": "task 6 profiler/tap slice",
-          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: original MIPS call/exception/JIT accounting and bounded maps, exact VI tap target and every cleanup path, native reply decoding, real N64/MCP ownership, Electron tool calls and copied package 35-tool registry. Physical keyboard/gamepad acceptance pending."
         },
         {
@@ -2096,7 +2096,7 @@
       "testEvidence": [
         {
           "scope": "task 6 profiler/tap slice",
-          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/n64-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: original MIPS call/exception/JIT accounting and bounded maps, exact VI tap target and every cleanup path, native reply decoding, real N64/MCP ownership, Electron tool calls and copied package 35-tool registry. Physical keyboard/gamepad acceptance pending."
         },
         {
@@ -2204,7 +2204,7 @@
       "mcpSchemaParity": "68/68 names/parameter signatures/defaults/nullability verified by real FastMCP and actual stdio tools/list. Intentional bounds/validation differences are recorded in tests/reference/schema-parity-report.json.",
       "testEvidence": [
         {
-          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real interpreter/delay slots/before-breakpoint/hardware BREAK, maximum queued DMA, lease/owner cleanup, real stdio and Electron. Copied-package evidence in EXECUTION-LOG.md.",
           "date": "2026-10-20"
         },
@@ -2242,7 +2242,7 @@
       "mcpSchemaParity": "68/68 names/parameter signatures/defaults/nullability verified by real FastMCP and actual stdio tools/list. Intentional bounds/validation differences are recorded in tests/reference/schema-parity-report.json.",
       "testEvidence": [
         {
-          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real interpreter/delay slots/before-breakpoint/hardware BREAK, maximum queued DMA, lease/owner cleanup, real stdio and Electron. Copied-package evidence in EXECUTION-LOG.md.",
           "date": "2026-10-20"
         },
@@ -2274,7 +2274,7 @@
       "mcpSchemaParity": "68/68 names/parameter signatures/defaults/nullability verified by real FastMCP and actual stdio tools/list. Intentional bounds/validation differences are recorded in tests/reference/schema-parity-report.json.",
       "testEvidence": [
         {
-          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real interpreter/delay slots/before-breakpoint/hardware BREAK, maximum queued DMA, lease/owner cleanup, real stdio and Electron. Copied-package evidence in EXECUTION-LOG.md.",
           "date": "2026-10-20"
         },
@@ -2299,7 +2299,7 @@
       "mcpSchemaParity": "68/68 names/parameter signatures/defaults/nullability verified by real FastMCP and actual stdio tools/list. Intentional bounds/validation differences are recorded in tests/reference/schema-parity-report.json.",
       "testEvidence": [
         {
-          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real interpreter/delay slots/before-breakpoint/hardware BREAK, maximum queued DMA, lease/owner cleanup, real stdio and Electron. Copied-package evidence in EXECUTION-LOG.md.",
           "date": "2026-10-20"
         },
@@ -2324,7 +2324,7 @@
       "mcpSchemaParity": "68/68 names/parameter signatures/defaults/nullability verified by real FastMCP and actual stdio tools/list. Intentional bounds/validation differences are recorded in tests/reference/schema-parity-report.json.",
       "testEvidence": [
         {
-          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.mjs",
+          "check": "tests/cpu-debug-fixture.cpp, tests/rsp-live.test.cjs, tests/electron-mcp.js",
           "result": "Passed: real interpreter/delay slots/before-breakpoint/hardware BREAK, maximum queued DMA, lease/owner cleanup, real stdio and Electron. Copied-package evidence in EXECUTION-LOG.md.",
           "date": "2026-10-20"
         },
@@ -2369,7 +2369,7 @@
       "testEvidence": [
         {
           "scope": "task 9 machine foundations",
-          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.mjs; execution log records final package checks",
+          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.js; execution log records final package checks",
           "result": "Passed: 51 full-suite tests, final affected task 9 tests 2/2, real MIPS/cache/register fixtures and isolated N64/MCP ownership gates; 54-tool Electron and checkout-denied copied package.",
           "date": "2026-10-20"
         },
@@ -2595,7 +2595,7 @@
       "testEvidence": [
         {
           "scope": "task 9 machine foundations",
-          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.mjs; execution log records final package checks",
+          "check": "tests/cpu-debug-fixture.cpp, tests/machine-live.test.cjs, tests/electron-mcp.js; execution log records final package checks",
           "result": "Passed: 51 full-suite tests, final affected task 9 tests 2/2, real MIPS/cache/register fixtures and isolated N64/MCP ownership gates; 54-tool Electron and checkout-denied copied package.",
           "date": "2026-10-20"
         },
@@ -2805,7 +2805,7 @@
       "testEvidence": [
         {
           "scope": "task 8 native-reserved experiments",
-          "check": "tests/batch-live.test.cjs, tests/batches.test.cjs, tests/execution-fixture.cpp, tests/electron-mcp.mjs, tests/package-live.cjs",
+          "check": "tests/batch-live.test.cjs, tests/batches.test.cjs, tests/execution-fixture.cpp, tests/electron-mcp.js, tests/package-live.cjs",
           "result": "Passed: 49-suite tests; final affected batch tests 5/5; actual baseline/load/write/two-VI/crop/read red-green sweep, ownership/expiry/cancel/partial effects; 49-tool Electron and checkout-denied copied package. Physical input acceptance remains separate.",
           "date": "2026-10-20"
         },

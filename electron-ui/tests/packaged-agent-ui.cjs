@@ -9,9 +9,9 @@ try {
   fs.cpSync(path.resolve(process.argv[2] || 'build_macos/Ares.app'), bundle, { recursive: true, verbatimSymlinks: true, mode: fs.constants.COPYFILE_FICLONE });
   const root = path.join(bundle, 'Contents/Resources/app');
   const manifest = path.join(root, 'package.json');
-  fs.writeFileSync(manifest, JSON.stringify({ ...JSON.parse(fs.readFileSync(manifest)), main: 'agent-check.mjs' }));
+  fs.writeFileSync(manifest, JSON.stringify({ ...JSON.parse(fs.readFileSync(manifest)), main: 'agent-check.js' }));
   fs.copyFileSync(path.join(__dirname, 'stdio-peer.cjs'), path.join(root, 'stdio-peer.cjs'));
-  fs.writeFileSync(path.join(root, 'agent-check.mjs'), `
+  fs.writeFileSync(path.join(root, 'agent-check.js'), `
 import { app, BrowserWindow, clipboard } from 'electron';
 import { StdioPeer } from './stdio-peer.cjs';
 import assert from 'node:assert/strict';

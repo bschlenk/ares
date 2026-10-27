@@ -339,7 +339,7 @@ Packaged acceptance additionally exposed a pre-existing reentrant-quit race:
 second quit / window-close / signal requests could pass the `quitting` guard
 before asynchronous cleanup removed the named-instance claim. The guard now blocks
 all quit requests until cleanup is finished; individual cleanup errors are logged
-without skipping later service cleanup. The new isolated `electron-shutdown.mjs`
+without skipping later service cleanup. The new isolated `electron-shutdown.js`
 fixture deliberately delays final cleanup and repeats quit/SIGTERM, verifies the
 app waits, then verifies metadata removal. It is included in the acceptance runner.
 Real SIGTERM/SIGINT/SIGKILL, named restarts, fresh credentials and nonreplay checks

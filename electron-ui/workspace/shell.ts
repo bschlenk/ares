@@ -119,7 +119,7 @@ function action(name: 'settings' | 'open' | 'pause' | 'reset' | 'edit-workspace'
 window.ares.onAction(action);
 window.addEventListener('keydown', event => {
   if (!(event.metaKey || event.ctrlKey)) return;
-  const name = event.code === 'Comma' ? 'settings' : event.code === 'KeyL' && event.shiftKey ? 'edit-workspace' : undefined;
-  if (name) { event.preventDefault(); event.stopImmediatePropagation(); action(name); }
+  const name = event.code === 'Comma' ? 'settings' : event.code === 'KeyL' && event.shiftKey ? 'edit-workspace' : event.code === 'KeyP' && !event.shiftKey && !event.altKey ? 'pause' : undefined;
+  if (name) { event.preventDefault(); event.stopImmediatePropagation(); if (!event.repeat) action(name); }
 }, true);
 export function blocksGameInput(): boolean { return dialog.open || workspace.isEditing(); }

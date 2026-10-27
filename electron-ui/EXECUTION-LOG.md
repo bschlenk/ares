@@ -303,7 +303,7 @@ enabled. Its runtime import is only `electron`; bridge imports are type-only.
 The root package declares `type: module` and starts `dist/main.js`. Relative Node
 imports include `.js`; main resolves assets from `import.meta.url`. Clean builds
 remove stale output. Packaging copies compiled application output and sets the
-same ESM metadata. Electron test entry points are `.mjs`; standalone build/test
+same ESM metadata. Electron test entry points use `.js` under `type: module`; standalone build/test
 helpers retain explicit `.cjs` extensions. No dependencies or native source were
 changed, and no native core rebuild was performed for this detour.
 

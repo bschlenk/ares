@@ -104,19 +104,19 @@ async function main() {
   if (!Number.isInteger(summary.fixtureTests) || summary.fixtureTests < 1) throw new Error('Missing fixture test count')
   await gate('native-smoke', process.execPath, ['smoke.cjs'])
   for (const [name, file, args] of [
-    ['electron-session', 'electron-session.mjs', []],
-    ['electron-shutdown', 'electron-shutdown.mjs', []],
-    ['electron-mcp', 'electron-mcp.mjs', []],
-    ['electron-plugins', 'electron-plugins.mjs', []],
-    ['electron-reload', 'electron-reload.mjs', []],
-    ['electron-plugin-tools', 'electron-plugin-tools.mjs', []],
-    ['electron-plugin-settings', 'electron-plugin-settings.mjs', []],
-    ['electron-workspace', 'electron-workspace.mjs', []],
-    ['electron-settings', 'electron-settings.mjs', []],
-    ['electron-agent', 'electron-agent-integration.mjs', []],
-    ['electron-agent-forced-on', 'electron-agent-integration.mjs', ['--services']],
-    ['electron-agent-forced-off', 'electron-agent-integration.mjs', ['--no-services']],
-    ['electron-recovery', 'electron-recovery.mjs', ['--disable-plugins']],
+    ['electron-session', 'electron-session.js', []],
+    ['electron-shutdown', 'electron-shutdown.js', []],
+    ['electron-mcp', 'electron-mcp.js', []],
+    ['electron-plugins', 'electron-plugins.js', []],
+    ['electron-reload', 'electron-reload.js', []],
+    ['electron-plugin-tools', 'electron-plugin-tools.js', []],
+    ['electron-plugin-settings', 'electron-plugin-settings.js', []],
+    ['electron-workspace', 'electron-workspace.js', []],
+    ['electron-settings', 'electron-settings.js', []],
+    ['electron-agent', 'electron-agent-integration.js', []],
+    ['electron-agent-forced-on', 'electron-agent-integration.js', ['--services']],
+    ['electron-agent-forced-off', 'electron-agent-integration.js', ['--no-services']],
+    ['electron-recovery', 'electron-recovery.js', ['--disable-plugins']],
   ]) await gate(name, electron, [`tests/${file}`, ...args])
   await gate('profile-ownership', process.execPath, ['tests/profile-live.cjs'])
   await gate('launch-isolation', process.execPath, ['tests/launch-live.cjs'])

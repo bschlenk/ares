@@ -8,28 +8,28 @@
       "name": "audio_capture",
       "tests": [
         "audio-live.test.cjs",
-        "electron-mcp.mjs"
+        "electron-mcp.js"
       ]
     },
     {
       "name": "audio_save",
       "tests": [
         "audio-live.test.cjs",
-        "electron-mcp.mjs"
+        "electron-mcp.js"
       ]
     },
     {
       "name": "audio_status",
       "tests": [
         "audio-live.test.cjs",
-        "electron-mcp.mjs"
+        "electron-mcp.js"
       ]
     },
     {
       "name": "batch",
       "tests": [
         "batch-live.test.cjs",
-        "electron-mcp.mjs"
+        "electron-mcp.js"
       ]
     },
     {
@@ -66,14 +66,14 @@
       "name": "cancel_operation",
       "tests": [
         "batch-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "execution-live.test.cjs"
       ]
     },
     {
       "name": "capture_control",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "viewer-live.test.cjs"
       ]
     },
@@ -100,21 +100,21 @@
     {
       "name": "controller_state",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
     {
       "name": "controller_tap",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
     {
       "name": "cpu_profiler_top",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
@@ -122,7 +122,7 @@
       "name": "cpu_registers",
       "tests": [
         "call-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs",
         "machine-live.test.cjs",
         "n64-live.test.cjs"
@@ -132,7 +132,7 @@
       "name": "cpu_set_registers",
       "tests": [
         "call-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs",
         "machine-live.test.cjs",
         "rdp-capture-live.test.cjs",
@@ -143,14 +143,14 @@
     {
       "name": "disassemble",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "machine-live.test.cjs"
       ]
     },
     {
       "name": "dump_range",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs"
       ]
     },
@@ -163,7 +163,7 @@
     {
       "name": "emu_status",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs",
         "machine-live.test.cjs"
       ]
@@ -177,7 +177,7 @@
     {
       "name": "memory_regions",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
@@ -185,7 +185,7 @@
       "name": "operation_status",
       "tests": [
         "call-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "execution-live.test.cjs",
         "machine-live.test.cjs",
         "rsp-live.test.cjs",
@@ -195,7 +195,7 @@
     {
       "name": "overlay_log",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
@@ -203,7 +203,7 @@
       "name": "pause",
       "tests": [
         "audio-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs",
         "machine-live.test.cjs",
         "rsp-live.test.cjs",
@@ -213,28 +213,28 @@
     {
       "name": "peripheral_registers",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "machine-live.test.cjs"
       ]
     },
     {
       "name": "profiler_clear",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
     {
       "name": "profiler_control",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
     {
       "name": "rdp_capture",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "rdp-capture-live.test.cjs",
         "viewer-live.test.cjs"
       ]
@@ -242,14 +242,14 @@
     {
       "name": "rdp_state",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "machine-live.test.cjs"
       ]
     },
     {
       "name": "read_memory",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "viewer-live.test.cjs"
       ]
     },
@@ -265,7 +265,7 @@
     {
       "name": "render_probe",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs"
       ]
     },
@@ -273,7 +273,7 @@
       "name": "resume",
       "tests": [
         "audio-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs",
         "machine-live.test.cjs",
         "n64-live.test.cjs"
@@ -282,28 +282,28 @@
     {
       "name": "rsp_break",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "rsp-live.test.cjs"
       ]
     },
     {
       "name": "rsp_capture",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "viewer-live.test.cjs"
       ]
     },
     {
       "name": "rsp_debug",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "rsp-live.test.cjs"
       ]
     },
     {
       "name": "rsp_registers",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "machine-live.test.cjs",
         "rsp-live.test.cjs"
       ]
@@ -311,28 +311,28 @@
     {
       "name": "rsp_run",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "rsp-live.test.cjs"
       ]
     },
     {
       "name": "rsp_step",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "rsp-live.test.cjs"
       ]
     },
     {
       "name": "rsp_stop",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "rsp-live.test.cjs"
       ]
     },
     {
       "name": "run_frames",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "execution-live.test.cjs",
         "machine-live.test.cjs",
         "rdp-capture-live.test.cjs",
@@ -355,28 +355,28 @@
     {
       "name": "screenshot",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "screenshots-live.test.cjs"
       ]
     },
     {
       "name": "stack",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs"
       ]
     },
     {
       "name": "state_info",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
     {
       "name": "state_list",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
@@ -385,7 +385,7 @@
       "tests": [
         "batch-live.test.cjs",
         "call-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs",
         "state-loading-live.test.cjs"
       ]
@@ -394,7 +394,7 @@
       "name": "state_peek",
       "tests": [
         "batch-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
@@ -403,7 +403,7 @@
       "tests": [
         "batch-live.test.cjs",
         "call-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "inspection-live.test.cjs",
         "n64-live.test.cjs",
         "state-loading-live.test.cjs"
@@ -419,7 +419,7 @@
       "name": "step_instructions",
       "tests": [
         "batch-live.test.cjs",
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "machine-live.test.cjs",
         "n64-live.test.cjs",
         "rdp-capture-live.test.cjs"
@@ -440,28 +440,28 @@
     {
       "name": "trace_pc",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "n64-live.test.cjs"
       ]
     },
     {
       "name": "video_start",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "screenshots-live.test.cjs"
       ]
     },
     {
       "name": "video_status",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "screenshots-live.test.cjs"
       ]
     },
     {
       "name": "video_stop",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "screenshots-live.test.cjs"
       ]
     },
@@ -486,7 +486,7 @@
     {
       "name": "write_memory",
       "tests": [
-        "electron-mcp.mjs",
+        "electron-mcp.js",
         "machine-live.test.cjs",
         "rdp-capture-live.test.cjs",
         "rsp-live.test.cjs",

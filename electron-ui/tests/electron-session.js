@@ -48,6 +48,30 @@ app.whenReady().then(async () => {
   assert.ok(performance.now() - started < 350, 'Native control waited for the renderer');
   await blocked;
   await until(() => window.webContents.executeJavaScript("document.getElementById('pause').textContent === 'Resume'"));
+  enter('pause shortcut and video controls');
+  const js = code => window.webContents.executeJavaScript(code);
+  await until(() => js("!document.getElementById('paused-indicator').hidden && document.getElementById('video-pause').textContent === 'Resume'"));
+  await js("document.getElementById('screen').focus()");
+  const modifiers = [process.platform === 'darwin' ? 'meta' : 'control'];
+  const shortcut = () => {
+    window.webContents.sendInputEvent({type:'keyDown',keyCode:'P',modifiers});
+    window.webContents.sendInputEvent({type:'keyUp',keyCode:'P',modifiers});
+  };
+  shortcut();
+  await until(async () => !(await sessions.request('session.status')).result.paused);
+  await until(() => js("document.getElementById('paused-indicator').hidden && document.getElementById('video-pause').textContent === 'Pause'"));
+  // A duplicate delivery would toggle back after the first asynchronous action.
+  await sleep(150);
+  assert.equal((await sessions.request('session.status')).result.paused, false);
+  shortcut();
+  await until(async () => (await sessions.request('session.status')).result.paused);
+  await until(() => js("!document.getElementById('video-pause').disabled"));
+  await js("document.getElementById('video-pause').focus()");
+  assert.equal(await js("getComputedStyle(document.getElementById('video-controls')).pointerEvents"), 'auto');
+  await js("document.getElementById('video-pause').click()");
+  await until(async () => !(await sessions.request('session.status')).result.paused);
+  assert.equal(await js("document.activeElement.id"), 'screen');
+  await sessions.request('session.pause');
   await until(() => window.webContents.executeJavaScript("document.getElementById('memory-region').options.length === 3"));
   enter('inspector');
   const fixture = (await memory.regions())[0];

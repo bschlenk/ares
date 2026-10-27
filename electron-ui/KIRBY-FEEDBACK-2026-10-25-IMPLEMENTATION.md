@@ -73,7 +73,7 @@ This work makes no stronger arbitrary-game task-to-pixel attribution claim.
 - `script-cli-live`: 20 sequential successful runs, 20 failures, fresh-process
   retrieval, missing/broken source diagnostics, 200-frame AVI, lease expiry,
   SIGINT cleanup, abandoned native recording expiry and no publication/overwrite for failed/cancelled video exports.
-- `electron tests/electron-demonstration.mjs`: isolated Electron human prompt and
+- `electron tests/electron-demonstration.js`: isolated Electron human prompt and
   Start/Stop/Cancel controls passed; screenshot inspected at
   `/tmp/ares-demonstration-preview.png`.
 - `legacy-adapter-live.cjs`: the actual historical adapter source at `fce7b00ad`

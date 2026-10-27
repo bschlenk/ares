@@ -6,6 +6,7 @@ import type { SessionIdentity, SessionMethod, SessionReply } from './services/co
 interface Elements {
   screen: HTMLCanvasElement; viewport: HTMLElement; system: HTMLSelectElement;
   pause: HTMLButtonElement; reset: HTMLButtonElement; open: HTMLButtonElement;
+  'video-pause': HTMLButtonElement; 'video-reset': HTMLButtonElement; 'paused-indicator': HTMLElement;
 }
 const $ = <K extends keyof Elements>(id: K): Elements[K] => {
   const element = document.getElementById(id);
@@ -179,6 +180,8 @@ function acceptSessionState(reply: SessionReply) {
   sessionIdentity = { session: reply.session, epoch: reply.epoch };
   paused = reply.result.paused && reply.result.operation_id == null;
   $('pause').textContent = paused ? 'Resume' : 'Pause';
+  $('video-pause').textContent = paused ? 'Resume' : 'Pause';
+  $('paused-indicator').hidden = !paused;
   if (previous && (previous.session !== reply.session || previous.epoch !== reply.epoch)) window.dispatchEvent(new Event('ares-session-reset'));
 }
 window.ares.onSessionState(acceptSessionState);
@@ -201,12 +204,19 @@ async function syncSession() {
   sessionIdentity = undefined;
   try { await sessionRequest('session.status'); } catch (error) { notify(error); }
 }
-$('pause').onclick = async () => {
-  $('pause').disabled = true;
-  try { await sessionRequest(paused ? 'session.resume' : 'session.pause'); }
+async function togglePause() {
+  if ($('pause').disabled) return;
+  $('pause').disabled = $('video-pause').disabled = true;
+  try {
+    await sessionRequest('session.status');
+    await sessionRequest(paused ? 'session.resume' : 'session.pause');
+  }
   catch (error) { notify(error); await syncSession(); }
-  finally { $('pause').disabled = false; }
-};
+  finally { $('pause').disabled = $('video-pause').disabled = false; }
+}
+$('pause').onclick = togglePause;
+$('video-pause').onclick = () => { canvas.focus(); void togglePause(); };
+$('video-reset').onclick = () => { canvas.focus(); $('reset').click(); };
 $('reset').onclick = async () => {
   try { await sessionRequest('session.reset'); }
   catch (error) { notify(error); await syncSession(); }

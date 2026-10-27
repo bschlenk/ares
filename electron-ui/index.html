@@ -15,6 +15,11 @@
     <section id="viewport">
       <canvas id="screen" width="640" height="480" tabindex="0" aria-label="Emulator display"></canvas>
       <div id="empty-state"><button id="open">Open ROM</button><span>⌘O</span></div>
+      <div id="paused-indicator" role="status" hidden>Ⅱ Paused</div>
+      <div id="video-controls" role="group" aria-label="Emulation controls">
+        <button id="video-pause" aria-keyshortcuts="Meta+P Control+P">Pause</button>
+        <button id="video-reset">Reset game</button>
+      </div>
     </section>
   </div>
   <dialog id="settings-dialog" aria-labelledby="settings-title">

@@ -7,7 +7,7 @@ const { once } = require('node:events')
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ares-profile-lock-'))
 const children = []
 function launch(name) {
-  const child = spawn(require('electron'), [path.join(__dirname, 'electron-profile.mjs')], {
+  const child = spawn(require('electron'), [path.join(__dirname, 'electron-profile.js')], {
     env: { ...process.env, ARES_PROFILE_DIR: path.join(temporary, name), ARES_SAVE_DIR: '', ARES_ROM: '', ARES_BACKGROUND_TEST: '1', ARES_DEFAULT_PLUGINS: '0', ARES_SILENT: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
