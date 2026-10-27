@@ -7,6 +7,7 @@ interface Elements {
   screen: HTMLCanvasElement; viewport: HTMLElement; system: HTMLSelectElement;
   pause: HTMLButtonElement; reset: HTMLButtonElement; open: HTMLButtonElement;
   'video-pause': HTMLButtonElement; 'video-reset': HTMLButtonElement; 'paused-indicator': HTMLElement;
+  'video-controls': HTMLElement;
 }
 const $ = <K extends keyof Elements>(id: K): Elements[K] => {
   const element = document.getElementById(id);
@@ -180,8 +181,14 @@ function acceptSessionState(reply: SessionReply) {
   sessionIdentity = { session: reply.session, epoch: reply.epoch };
   paused = reply.result.paused && reply.result.operation_id == null;
   $('pause').textContent = paused ? 'Resume' : 'Pause';
-  $('video-pause').textContent = paused ? 'Resume' : 'Pause';
-  $('paused-indicator').hidden = !paused;
+  const pauseButton = $('video-pause');
+  pauseButton.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+  pauseButton.title = paused ? 'Resume' : 'Pause';
+  pauseButton.querySelector<SVGElement>('.pause-icon')!.toggleAttribute('hidden', paused);
+  pauseButton.querySelector<SVGElement>('.play-icon')!.toggleAttribute('hidden', !paused);
+  const loaded = !reply.result.synthetic;
+  $('video-controls').hidden = !loaded;
+  $('paused-indicator').hidden = !loaded || !paused;
   if (previous && (previous.session !== reply.session || previous.epoch !== reply.epoch)) window.dispatchEvent(new Event('ares-session-reset'));
 }
 window.ares.onSessionState(acceptSessionState);

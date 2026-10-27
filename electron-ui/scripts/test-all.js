@@ -1,7 +1,8 @@
-'use strict'
 // Complete local lane: private media is explicit, and a skip is a failure.
-const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process')
-const root=path.resolve(__dirname,'..'),args=process.argv.slice(2)
+import fs from 'node:fs';
+import path from 'node:path';
+import {spawn} from 'node:child_process';
+const root=path.resolve(import.meta.dirname,'..'),args=process.argv.slice(2)
 if(args.length&&!(args.length===2&&args[0]==='--rom'))throw new Error('Usage: npm run test:all -- --rom /path/to/Kirby.z64 (or set ARES_PLUGIN_TEST_ROM)')
 const source=args[1]||process.env.ARES_PLUGIN_TEST_ROM
 if(!source)throw new Error('Full test lane requires the verified Kirby ROM: pass --rom or set ARES_PLUGIN_TEST_ROM; no test will be silently skipped')
@@ -19,8 +20,8 @@ async function run(command,args,summary=false){
 }
 ;(async()=>{
  await run('cmake',['--build',build,'--target','ares-electron-host','ares-electron-cpu-fixture','ares-electron-task-fixture','ares-electron-matrix-fixture','-j','4'])
- await run(process.platform==='win32'?'npm.cmd':'npm',['run','build'])
- const files=fs.readdirSync(path.join(root,'tests')).filter(file=>file.endsWith('.test.cjs')).sort().map(file=>'tests/'+file)
+ await run(process.execPath,['scripts/build.js'])
+ const files=fs.readdirSync(path.join(root,'tests')).filter(file=>/\.test\.(?:cjs|js)$/.test(file)).sort().map(file=>'tests/'+file)
  await run(process.execPath,['--test','--test-concurrency=1','--test-reporter=tap','protocol.test.cjs',...files],true)
  console.log('ALL_TESTS_PASS: all tests selected, zero skipped')
 })().catch(error=>{console.error(error.message);process.exitCode=1})

@@ -77,10 +77,17 @@ ARES_SYSTEM='PlayStation' ARES_ROM='/absolute/path/to/disc.cue' npm start --pref
 
 ## Profiles and independent development launches
 
-Run `npm start` from `electron-ui/` (or `npm start --prefix electron-ui` from the
-repository root). Each launch builds into a fresh ignored `artifacts/runs/launch-*`
+Run `npm start` from either the repository root or `electron-ui/`. Use
+`npm run dev` at the repository root for automatic renderer rebuilds and reloads.
+The launcher prefers `build_macos/workbench/bin/ares-electron-host`, respects
+`ARES_NATIVE_BUILD_DIR` and `ARES_HOST`, and falls back to `build-electron-make`.
+Each launch builds into a fresh ignored `artifacts/runs/launch-*`
 snapshot and copies the native host and media databases there. Bundled plugin
 sources are linked to the checkout so plugin edits reload automatically.
+Watch mode publishes successful renderer builds into its own snapshot; failed
+builds leave the previous UI running. HTML/CSS changes also reload automatically.
+Main-process/preload edits need a development restart, and shared service/settings
+edits need a restart to affect main-process behavior. C++ edits need a native rebuild.
 The running instance keeps its snapshot until shutdown. Subsequent JS/test/package
 builds and native host relinks cannot replace its executable or loaded UI files.
 Normal shutdown removes the snapshot; a killed launcher may leave a disposable
@@ -344,13 +351,13 @@ CMake or relink the native emulator. Tests and packaging build these outputs;
 | --- | --- |
 | `main.ts`, `protocol.ts`, `services/`, `mcp/server.ts` | Native Node ESM in `dist/` |
 | `renderer.ts`, `plugins/runtime.ts`, `plugins/scope.ts` | Browser ESM in `dist/browser/` |
-| `preload.cts` | Single `dist/preload.cjs` for Electron’s sandboxed preload |
+| `preload.ts` | Single `dist/preload.js` for Electron’s sandboxed preload |
 | `bridge.ts`, `renderer-globals.d.ts` | Shared IPC, frame data and window types |
 
 The package declares `type: module` and starts `dist/main.js`. The main process
 resolves assets relative to its compiled location in both checkout and copied
-bundle. The preload’s emitted CJS is an Electron sandbox constraint; its source
-is TypeScript. Test/packaging helper scripts retain explicit `.cjs` extensions;
+bundle. The preload is authored as a TypeScript module and bundled to plain JavaScript
+with a restricted Electron `require` call for the sandbox. Build, development and packaging helpers are `.js` ES modules;
 Electron integration entry points use `.js`, inheriting the package’s `type: module`. Development uses Node 24 LTS, pinned by the repository `mise.toml` and
 `electron-ui/.node-version`, with synchronous `require(ESM)` support; the distributed app supplies Node 24.
 

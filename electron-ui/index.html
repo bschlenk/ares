@@ -16,9 +16,12 @@
       <canvas id="screen" width="640" height="480" tabindex="0" aria-label="Emulator display"></canvas>
       <div id="empty-state"><button id="open">Open ROM</button><span>⌘O</span></div>
       <div id="paused-indicator" role="status" hidden>Ⅱ Paused</div>
-      <div id="video-controls" role="group" aria-label="Emulation controls">
-        <button id="video-pause" aria-keyshortcuts="Meta+P Control+P">Pause</button>
-        <button id="video-reset">Reset game</button>
+      <div id="video-controls" role="group" aria-label="Emulation controls" hidden>
+        <button id="video-pause" aria-label="Pause" title="Pause" aria-keyshortcuts="Meta+P Control+P">
+          <svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z"/></svg>
+          <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="m8 4 12 8-12 8z"/></svg>
+        </button>
+        <button id="video-reset" aria-label="Reset game" title="Reset game"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
       </div>
     </section>
   </div>

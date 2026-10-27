@@ -1,11 +1,12 @@
-'use strict'
+import {fileURLToPath} from 'node:url';
+import electronManifest from 'electron/package.json' with {type: 'json'};
 // Development distribution with a bundled runtime; no signing/notarization claim.
-const fs = require('node:fs')
-const path = require('node:path')
-const { execFileSync } = require('node:child_process')
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 if (process.platform !== 'darwin' || process.arch !== 'arm64')
   throw new Error('Packaging is currently verified only on macOS arm64')
-const root = path.resolve(__dirname, '..')
+const root = path.resolve(import.meta.dirname, '..')
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const destination = path.resolve(
   process.argv[2] || path.join(root, 'artifacts/distribution/Ares.app'),
@@ -19,7 +20,7 @@ const copy = (from, to) =>
     mode: fs.constants.COPYFILE_FICLONE,
   })
 copy(
-  path.join(path.dirname(require.resolve('electron')), 'dist/Electron.app'),
+  path.join(path.dirname(fileURLToPath(import.meta.resolve('electron'))), 'dist/Electron.app'),
   destination,
 )
 fs.renameSync(path.join(destination, 'Contents/MacOS/Electron'), path.join(destination, 'Contents/MacOS/Ares'))
@@ -48,7 +49,7 @@ for (const field of ['CFBundleShortVersionString', 'CFBundleVersion'])
     path.join(destination, 'Contents/Info.plist')])
 for (const file of ['LICENSE', 'LICENSES.chromium.html'])
   copy(
-    path.join(path.dirname(require.resolve('electron')), 'dist', file),
+    path.join(path.dirname(fileURLToPath(import.meta.resolve('electron'))), 'dist', file),
     path.join(resources, file),
   )
 copy(path.resolve(root, '../LICENSE'), path.join(resources, 'ARES-LICENSE'))
@@ -69,23 +70,22 @@ fs.writeFileSync(
     main: 'dist/main.js',
   }),
 )
-// Ask npm for the installed production tree, then copy it without developer tools.
-const production = execFileSync(
-  'npm',
-  ['ls', '--omit=dev', '--all', '--parseable'],
-  { cwd: root, encoding: 'utf8' },
-)
-  .trim()
-  .split('\n')
-  .slice(1)
-for (const dependency of production)
-  copy(dependency, path.join(app, path.relative(root, dependency)))
+// The committed npm lockfile records the complete production dependency tree.
+// Platform-specific optional packages may legitimately be absent on this host.
+const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'))
+for (const [relative, dependency] of Object.entries(lock.packages)) {
+  if (!relative || dependency.dev) continue
+  const source = path.join(root, relative)
+  if (dependency.optional && !fs.existsSync(source)) continue
+  copy(source, path.join(app, relative))
+}
 const native = path.join(resources, 'native')
 fs.mkdirSync(path.join(native, 'bin'), { recursive: true })
 const host = path.join(native, 'bin/ares-electron-host')
+const workbenchHost = path.resolve(root, '..', process.env.ARES_NATIVE_BUILD_DIR || 'build_macos/workbench', 'bin/ares-electron-host')
 copy(
   process.env.ARES_HOST ||
-    path.resolve(root, '../build-electron-make/bin/ares-electron-host'),
+    (fs.existsSync(workbenchHost) ? workbenchHost : path.resolve(root, '../build-electron-make/bin/ares-electron-host')),
   host,
 )
 copy(path.resolve(root, '../mia/Database'), path.join(native, 'Database'))
@@ -120,7 +120,7 @@ for (const file of ['SDL', 'MoltenVK'])
     path.resolve(libraryRoot, '../licenses', file),
     path.join(resources, 'licenses', file),
   )
-copy(path.resolve(__dirname, '../../thirdparty/quickjs/LICENSE'), path.join(resources, 'licenses/QuickJS'))
+copy(path.resolve(import.meta.dirname, '../../thirdparty/quickjs/LICENSE'), path.join(resources, 'licenses/QuickJS'))
 const runtime = path.join(destination, 'Contents/MacOS/Ares')
 const nodeVersion = execFileSync(runtime, ['-p', 'process.versions.node'], {
   encoding: 'utf8',
@@ -160,7 +160,7 @@ fs.writeFileSync(
   path.join(resources, 'runtime.json'),
   JSON.stringify(
     {
-      electron: require('electron/package.json').version,
+      electron: electronManifest.version,
       node: nodeVersion,
       mode: 'ELECTRON_RUN_AS_NODE',
       platform: process.platform,

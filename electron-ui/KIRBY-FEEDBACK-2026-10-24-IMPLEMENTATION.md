@@ -224,7 +224,7 @@ with the observer plumbing in place.
   drift remains limited to the previously recorded batch difference.
 - User-supplied controller artwork is preserved in `assets/app-icon.png`, with a
   complete generated macOS `assets/Ares.icns`. Packaging installs this resource
-  and sets CFBundleIconFile. The generator is `scripts/build-icon.cjs`; resource
+  and sets CFBundleIconFile. The generator is `scripts/build-icon.js`; resource
   header/resolution checks pass. No artwork redesign was made.
 
 Remaining whole-plan requirements still include complete C/D crop provenance and

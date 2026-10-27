@@ -7,8 +7,8 @@ renderer reloads. `main.ts` binds the router to a narrow preload IPC call. Inspe
 another emulator or implementing a second execution loop.
 
 Build with `npm run build`; generated ESM and declarations go into ignored
-`dist/`. The sandboxed preload is TypeScript source (`preload.cts`) compiled to
-`dist/preload.cjs`. `bridge.ts` types the IPC surface, and
+`dist/`. The sandboxed preload is TypeScript source (`preload.ts`) compiled to
+`dist/preload.js`. `bridge.ts` types the IPC surface, and
 `renderer-globals.d.ts` types the renderer’s `window.ares` API. `npm start`, `npm test` and `npm run smoke` build them first.
 The adapter entry point is `mcp/server.ts`; task 3 adds the opt-in Electron-main
 local endpoint in `local-endpoint.ts`. See [MCP usage and distribution](../mcp/README.md). Native implementations belong in `native/` and

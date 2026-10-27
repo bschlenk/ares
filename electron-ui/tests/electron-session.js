@@ -12,6 +12,7 @@ app.setPath('userData', path.join(temporary, 'profile'));
 process.env.ARES_SAVE_DIR = path.join(temporary, 'profile', 'saves');
 delete process.env.ARES_ROM;
 delete process.env.ARES_AUTOTEST;
+process.env.ARES_DEV_RELOAD = '1';
 const { sessions } = await import('../dist/main.js');
 import { MemoryClient, hexToBytes } from '../dist/services/memory.js';
 const memory = new MemoryClient(sessions);
@@ -50,7 +51,7 @@ app.whenReady().then(async () => {
   await until(() => window.webContents.executeJavaScript("document.getElementById('pause').textContent === 'Resume'"));
   enter('pause shortcut and video controls');
   const js = code => window.webContents.executeJavaScript(code);
-  await until(() => js("!document.getElementById('paused-indicator').hidden && document.getElementById('video-pause').textContent === 'Resume'"));
+  await until(() => js("document.getElementById('paused-indicator').hidden && document.getElementById('video-controls').hidden && document.getElementById('video-pause').getAttribute('aria-label') === 'Resume' && !document.querySelector('#video-pause .play-icon').hasAttribute('hidden')"));
   await js("document.getElementById('screen').focus()");
   const modifiers = [process.platform === 'darwin' ? 'meta' : 'control'];
   const shortcut = () => {
@@ -59,15 +60,14 @@ app.whenReady().then(async () => {
   };
   shortcut();
   await until(async () => !(await sessions.request('session.status')).result.paused);
-  await until(() => js("document.getElementById('paused-indicator').hidden && document.getElementById('video-pause').textContent === 'Pause'"));
+  await until(() => js("document.getElementById('paused-indicator').hidden && document.getElementById('video-pause').getAttribute('aria-label') === 'Pause' && !document.querySelector('#video-pause .pause-icon').hasAttribute('hidden')"));
   // A duplicate delivery would toggle back after the first asynchronous action.
   await sleep(150);
   assert.equal((await sessions.request('session.status')).result.paused, false);
   shortcut();
   await until(async () => (await sessions.request('session.status')).result.paused);
   await until(() => js("!document.getElementById('video-pause').disabled"));
-  await js("document.getElementById('video-pause').focus()");
-  assert.equal(await js("getComputedStyle(document.getElementById('video-controls')).pointerEvents"), 'auto');
+  assert.equal(await js("getComputedStyle(document.getElementById('video-controls')).display"), 'none', 'no toolbar before a ROM is loaded');
   await js("document.getElementById('video-pause').click()");
   await until(async () => !(await sessions.request('session.status')).result.paused);
   assert.equal(await js("document.activeElement.id"), 'screen');
@@ -127,6 +127,12 @@ app.whenReady().then(async () => {
   assert.equal(replacement.epoch, 1);
   assert.equal((await sessions.request('session.pause', { session: first.session, epoch: first.epoch })).error, 'stale_session');
   assert.equal((await sessions.request('session.status')).result.paused, false);
+  enter('development reload signal');
+  const devLoaded = once(window.webContents, 'did-finish-load');
+  process.emit('message', { type: 'ares-dev-reload' });
+  await devLoaded;
+  await until(() => window.webContents.executeJavaScript('stats().frames > 0'));
+  assert.equal((await sessions.request('session.status')).session, replacement.session);
   console.log('ELECTRON_SESSION_PASS: stalled renderer controls, reload identity, authoritative pause/resume, inspector read/write/restore');
   app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

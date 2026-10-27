@@ -40,6 +40,16 @@ packaging and signing succeed. `ARES_BUILD_JOBS` controls parallelism (default 8
 native build directory is `build_macos/workbench`. This is an ad-hoc-signed local
 app; release notarization remains separate.
 
+For UI development, run `npm run dev` (or `pnpm run dev`) from the repository root. It uses the
+existing native build, watches frontend sources, and reloads the interface after
+successful builds while keeping the emulator session running. Run `npm run build:mac`
+once first if the native host is missing. Main-process/preload changes require
+restarting the development command; C++ changes require rebuilding the native host.
+`npm start` launches without watching, `npm run build` compiles the frontend,
+and `npm test` runs frontend/service tests. `npm run package:mac -- /path/to/Ares.app`
+packages an existing native build into a fresh destination; `npm run build:mac`
+does the complete build and safely replaces `build_macos/Ares.app`.
+
 Enable access in **Settings → Agent Integration → Enable MCP and CLI access**,
 then copy the MCP configuration. Recording N64 DMA provenance is a separate,
 default-off live setting. CLI helpers can be installed from the packaged app.

@@ -1,8 +1,7 @@
-'use strict'
 // Ship the complete browser SDK declaration graph with scaffolded plugins.
-const fs = require('node:fs')
-const path = require('node:path')
-const root = path.resolve(__dirname, '..')
+import fs from 'node:fs';
+import path from 'node:path';
+const root = path.resolve(import.meta.dirname, '..')
 const source = path.join(root, 'dist/browser')
 const destination = path.join(root, 'templates/plugin-tsx/src/sdk')
 fs.rmSync(destination, { recursive: true, force: true })

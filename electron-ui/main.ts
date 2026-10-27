@@ -323,6 +323,12 @@ const probe = (args: string[]): Promise<string> =>
     })
   })
 let window: BrowserWindow
+if (!app.isPackaged && process.env.ARES_DEV_RELOAD === '1') {
+  process.on('message', message => {
+    if ((message as { type?: string } | null)?.type === 'ares-dev-reload' && window && !window.isDestroyed())
+      window.webContents.reloadIgnoringCache()
+  })
+}
 export const workspace = new WorkspaceStore(path.join(app.getPath('userData'), 'workspace.json'))
 export const preferences = new SettingsStore(
   path.join(app.getPath('userData'), 'preferences.json'), [
@@ -632,7 +638,7 @@ app
       backgroundColor: '#000000',
       ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),
       webPreferences: {
-        preload: path.join(appRoot, 'dist/preload.cjs'),
+        preload: path.join(appRoot, 'dist/preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,

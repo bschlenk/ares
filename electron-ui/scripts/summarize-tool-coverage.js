@@ -1,6 +1,5 @@
-'use strict';
-const fs=require('node:fs');const path=require('node:path');
-const reference=require('../tests/reference/fastmcp-input-schemas.json');
+import fs from 'node:fs';import path from 'node:path';
+import reference from '../tests/reference/fastmcp-input-schemas.json' with {type: 'json'};
 const events=fs.readFileSync(process.argv[2],'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
 const tools=reference.tools.map(({name})=>({name,tests:[...new Set(events.filter(e=>e.name===name&&e.success).map(e=>e.test))].sort()}));
 const missing=tools.filter(t=>!t.tests.length).map(t=>t.name);

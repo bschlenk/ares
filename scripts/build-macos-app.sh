@@ -31,7 +31,8 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
-ARES_HOST="$BUILD/bin/ares-electron-host" npm run package:mac --prefix "$ROOT/electron-ui" -- "$STAGING/Ares.app"
+node "$ROOT/electron-ui/scripts/build.js"
+ARES_HOST="$BUILD/bin/ares-electron-host" node "$ROOT/electron-ui/scripts/package-macos.js" "$STAGING/Ares.app"
 # Both moves stay on the same filesystem. Restore the old app if publication fails.
 if [ -e "$DESTINATION" ]; then mv -- "$DESTINATION" "$STAGING/previous.app"; fi
 if ! mv -- "$STAGING/Ares.app" "$DESTINATION"; then

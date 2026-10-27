@@ -1,0 +1,13 @@
+{
+  "name": "ares-workbench-repo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node electron-ui/scripts/start.js",
+    "dev": "node electron-ui/scripts/start.js --watch",
+    "build": "node electron-ui/scripts/build.js",
+    "build:mac": "./scripts/build-macos-app.sh",
+    "package:mac": "node electron-ui/scripts/build.js && node electron-ui/scripts/package-macos.js",
+    "test": "node electron-ui/scripts/test.js"
+  }
+}

@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const {normalize,compare,report} = require('../scripts/schema-parity.cjs');
+const {normalize,compare,report} = require('../scripts/schema-parity.js');
 test('actual stdio registry matches the recorded FastMCP comparison, including pending differences', async () => {
   const expected = JSON.parse(fs.readFileSync(path.join(__dirname,'reference/schema-parity-report.json'),'utf8'));
   assert.deepEqual(await report(),expected,'Schema drift: inspect and regenerate the report; a recorded difference is not parity approval.');

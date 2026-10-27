@@ -7,7 +7,7 @@ const { StdioPeer } = require('./stdio-peer.cjs')
 const root = path.resolve(__dirname, '..')
 const temporary = fs.mkdtempSync('/tmp/ares-launch-')
 const report = path.join(temporary, 'renderer.json')
-const child = spawn(process.execPath, [path.join(root, 'scripts/start.cjs')], {
+const child = spawn(process.execPath, [path.join(root, 'scripts/start.js')], {
   cwd: root,
   env: { ...process.env, ARES_PROFILE_DIR: path.join(temporary, 'profile'), ARES_SAVE_DIR: '', ARES_ROM: '', ARES_BACKGROUND_TEST: '1', ARES_DEFAULT_PLUGINS: '0', ARES_SILENT: '1', ARES_ENABLE_SERVICES: '1', ARES_SERVICE_DIR: path.join(temporary, 'ipc'), ARES_AUTOTEST: '1', ARES_TEST_SECONDS: '12', ARES_REPORT: report },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -31,7 +31,8 @@ async function run() {
   const entry = path.join(snapshot, 'dist/main.js')
   const before = fs.statSync(entry)
   const host = path.join(snapshot, 'native/bin/ares-electron-host')
-  const sourceHost = process.env.ARES_HOST || path.join(root, '../build-electron-make/bin/ares-electron-host')
+  const workbenchHost = path.resolve(root, '..', process.env.ARES_NATIVE_BUILD_DIR || 'build_macos/workbench', 'bin/ares-electron-host')
+  const sourceHost = process.env.ARES_HOST || (fs.existsSync(workbenchHost) ? workbenchHost : path.join(root, '../build-electron-make/bin/ares-electron-host'))
   assert.notEqual(fs.statSync(host).ino, fs.statSync(sourceHost).ino)
   const file = path.join(temporary, 'ipc', connection)
   const { instance } = JSON.parse(fs.readFileSync(file))
@@ -44,7 +45,7 @@ async function run() {
     await new Promise(resolve => setTimeout(resolve, 20))
   }
   assert.ok(initial.session, JSON.stringify(initial))
-  execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'pipe' })
+  execFileSync(process.execPath, ['scripts/build.js'], { cwd: root, stdio: 'pipe' })
   assert.equal(fs.statSync(entry).ino, before.ino)
   assert.equal(fs.statSync(entry).mtimeMs, before.mtimeMs)
   const after = await peer.tool('emu_status')

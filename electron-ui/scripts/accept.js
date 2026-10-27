@@ -1,10 +1,11 @@
-'use strict'
+import electron from 'electron';
+import electronManifest from 'electron/package.json' with {type: 'json'};
 // The same fixture-only lane runs locally and in CI. No private media is read.
-const fs = require('node:fs')
-const path = require('node:path')
-const os = require('node:os')
-const { spawn, spawnSync } = require('node:child_process')
-const root = path.resolve(__dirname, '..'), repository = path.dirname(root)
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { spawn, spawnSync } from 'node:child_process';
+const root = path.resolve(import.meta.dirname, '..'), repository = path.dirname(root)
 const output = path.join(root, 'artifacts', 'acceptance')
 fs.mkdirSync(output, { recursive: true })
 const runDirectory = fs.mkdtempSync(path.join(output, 'run-'))
@@ -76,7 +77,7 @@ async function main() {
   env.ARES_FFPROBE = process.env.ARES_FFPROBE ? path.resolve(process.env.ARES_FFPROBE) : executable('ffprobe')
   fs.accessSync(env.ARES_FFPROBE, fs.constants.X_OK)
   fs.accessSync(path.join(path.dirname(env.ARES_FFPROBE), 'ffmpeg'), fs.constants.X_OK)
-  const electron = require('electron')
+  
   fs.accessSync(electron, fs.constants.X_OK)
   const build = path.resolve(repository, process.env.ARES_ACCEPT_BUILD_DIR || 'build-electron-acceptance')
   const jobs = Number(process.env.ARES_ACCEPT_JOBS || Math.min(8, os.availableParallelism()))
@@ -90,11 +91,11 @@ async function main() {
     commit: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).stdout.trim(),
     dirty: !!spawnSync('git', ['status', '--porcelain'], { cwd: repository, encoding: 'utf8' }).stdout.trim(),
   }
-  summary.tools = { cmake: version[0], electron: require('electron/package.json').version, ffprobe: env.ARES_FFPROBE }
+  summary.tools = { cmake: version[0], electron: electronManifest.version, ffprobe: env.ARES_FFPROBE }
   await gate('configure', cmake, ['-S', repository, '-B', build, '-G', 'Unix Makefiles', '-UARES_CORES', '-DARES_BUILD_ELECTRON_UI=ON', '-DARES_BUILD_OPTIONAL_TARGETS=OFF', '-DENABLE_CCACHE=OFF', '-DENABLE_IPO=OFF', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'], repository, 300000)
   await gate('native-build', cmake, ['--build', build, '--target', 'ares-electron-host', 'ares-electron-cpu-fixture', 'ares-electron-task-fixture', 'ares-electron-matrix-fixture', '-j', String(jobs)], repository, 1800000)
-  await gate('typescript', 'npm', ['run', 'build'])
-  const tests = fs.readdirSync(path.join(root, 'tests')).filter(name => name.endsWith('.test.cjs') && name !== 'plugins-game-live.test.cjs').sort().map(name => `tests/${name}`)
+  await gate('typescript', process.execPath, ['scripts/build.js'])
+  const tests = fs.readdirSync(path.join(root, 'tests')).filter(name => /\.test\.(?:cjs|js)$/.test(name) && name !== 'plugins-game-live.test.cjs').sort().map(name => `tests/${name}`)
   // The full sequential suite can exceed three minutes on shared runners.
   // Individual tests retain their own tighter timeouts.
   const unitLog = await gate('fixture-regressions', process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=tap', 'protocol.test.cjs', ...tests], root, 600000)
@@ -122,7 +123,7 @@ async function main() {
   await gate('launch-isolation', process.execPath, ['tests/launch-live.cjs'])
   const bundle = path.join(runDirectory, 'Ares.app')
   try {
-    await gate('package', process.execPath, ['scripts/package-macos.cjs', bundle])
+    await gate('package', process.execPath, ['scripts/package-macos.js', bundle])
     const packageStarted = Date.now()
     await gate('copied-package', process.execPath, ['tests/package-live.cjs', bundle])
     if (fs.statSync(path.join(root, 'artifacts/package-mcp.json')).mtimeMs < packageStarted) throw new Error('Copied-package evidence was not refreshed')

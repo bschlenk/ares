@@ -10,7 +10,7 @@ To regenerate, use an isolated Python environment with `mcp==1.30.0` installed:
 ```sh
 /path/to/venv/bin/python scripts/export-reference-schema.py /path/to/ares-64/tools/mcp/ares_mcp.py > tests/reference/fastmcp-input-schemas.json
 npm run build
-node scripts/schema-parity.cjs > tests/reference/schema-parity-report.json
+node scripts/schema-parity.js > tests/reference/schema-parity-report.json
 node --test tests/schema-parity.test.cjs
 ```
 

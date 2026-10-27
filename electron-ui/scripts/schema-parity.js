@@ -1,7 +1,6 @@
-'use strict';
-const fs = require('node:fs');
-const path = require('node:path');
-const { StdioPeer } = require('../tests/stdio-peer.cjs');
+import fs from 'node:fs';
+import path from 'node:path';
+import { StdioPeer } from '../tests/stdio-peer.cjs';
 // Ignore documentation and object-key order only. Keep validation, defaults,
 // nullability, union branches and unknown-field policy visible in the report.
 function normalize(value, key = '') {
@@ -39,13 +38,13 @@ function compare(reference, current) {
 async function inventory() {
   // tools/list does not read metadata or connect to a native emulator. A fresh
   // impossible connection path prevents accidentally using an active session.
-  const peer = new StdioPeer(process.execPath,[path.resolve(__dirname,'../dist/mcp/server.js'),'--connection',path.resolve('/tmp/ares-schema-only-no-session.json'),'--instance','schema-only'],{env:{...process.env,NODE_OPTIONS:''}});
+  const peer = new StdioPeer(process.execPath,[path.resolve(import.meta.dirname,'../dist/mcp/server.js'),'--connection',path.resolve('/tmp/ares-schema-only-no-session.json'),'--instance','schema-only'],{env:{...process.env,NODE_OPTIONS:''}});
   try { await peer.initialize(); const response = await peer.request('tools/list',{}); if(response.error) throw new Error(JSON.stringify(response.error)); return response.result.tools; }
   finally { await peer.close(); }
 }
 async function report() {
-  const reference = JSON.parse(fs.readFileSync(path.resolve(__dirname,'../tests/reference/fastmcp-input-schemas.json'),'utf8'));
+  const reference = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname,'../tests/reference/fastmcp-input-schemas.json'),'utf8'));
   return {reference:{commit:reference.commit,sha256:reference.sha256,mcp_version:reference.mcp_version},...compare(reference.tools,await inventory())};
 }
-module.exports = {normalize,signature,compare,inventory,report};
-if(require.main === module) report().then(result => process.stdout.write(JSON.stringify(result,null,2)+'\n'),e => {console.error(e); process.exitCode=1;});
+export {normalize,signature,compare,inventory,report};
+if(import.meta.main) report().then(result => process.stdout.write(JSON.stringify(result,null,2)+'\n'),e => {console.error(e); process.exitCode=1;});
