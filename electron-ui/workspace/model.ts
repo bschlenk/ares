@@ -54,3 +54,10 @@ export function shortcutFromEvent(event: { metaKey: boolean; ctrlKey: boolean; a
   const shortcut = `${event.metaKey || event.ctrlKey ? 'Mod' : 'Alt'}${event.shiftKey ? '+Shift' : ''}+${event.code}`;
   return validShortcut(shortcut) ? shortcut : '';
 }
+
+/** Video can reach the title-bar edge only when it occupies the entire top row. */
+export function immersiveTitleBar(layout: WorkspaceLayout, editing: boolean): boolean {
+  if (editing || layout.floating.some(panel => panel.open && panel.mode === 'popup')) return false;
+  const videoAtTop = (area: Area): boolean => 'panel' in area ? area.panel === 'video' : area.axis === 'y' && videoAtTop(area.children[0]);
+  return videoAtTop(layout.root);
+}

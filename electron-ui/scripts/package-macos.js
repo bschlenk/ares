@@ -9,7 +9,7 @@ if (process.platform !== 'darwin' || process.arch !== 'arm64')
 const root = path.resolve(import.meta.dirname, '..')
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const destination = path.resolve(
-  process.argv[2] || path.join(root, 'artifacts/distribution/Ares.app'),
+  process.argv[2] || path.join(root, 'artifacts/distribution/ares.app'),
 )
 if (fs.existsSync(destination))
   throw new Error(`Destination already exists: ${destination}`)
@@ -39,7 +39,7 @@ for (const field of [
     '-string',
     field === 'CFBundleIdentifier'
       ? 'org.ares.workbench'
-      : 'Ares Workbench',
+      : 'ares',
     path.join(destination, 'Contents/Info.plist'),
   ])
 copy(path.join(root,'assets/Ares.icns'),path.join(resources,'Ares.icns'))

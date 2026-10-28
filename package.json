@@ -1,5 +1,5 @@
 {
-  "name": "ares-workbench-repo",
+  "name": "ares-repo",
   "private": true,
   "type": "module",
   "scripts": {

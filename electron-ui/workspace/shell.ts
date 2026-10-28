@@ -1,3 +1,5 @@
+import {dismissOnBackdrop} from '../ui/dialog-dismiss.js';
+import { styleModalClose } from '../ui/modal-close.js';
 import { mountSettingsForm } from '../settings/form.js';
 import { shortcutFromEvent } from './model.js';
 import { Workspace } from './runtime.js';
@@ -20,6 +22,8 @@ export function showSettings(tab = 'general'): void {
   }
 }
 export function closeSettings(): void { dialog.close(); element<HTMLCanvasElement>('screen').focus({ preventScroll: true }); }
+dismissOnBackdrop(dialog, closeSettings);
+styleModalClose(element<HTMLButtonElement>('close-settings'));
 element('close-settings').onclick = closeSettings;
 dialog.addEventListener('cancel', event => { event.preventDefault(); closeSettings(); });
 for (const button of document.querySelectorAll<HTMLElement>('[data-tab]')) button.onclick = () => showSettings(button.dataset.tab);
@@ -61,7 +65,7 @@ for (const [id, action] of [['copy-mcp-config', 'copy'], ['install-cli-helpers',
     catch (error) { element('agent-status').textContent = String(error); }
   };
 }
-mountSettingsForm(element('settings-general'), window.ares.preferences, entry => ['Presentation', 'Audio', 'Video'].includes(entry.descriptor.section));
+mountSettingsForm(element('settings-general'), window.ares.preferences, entry => ['Presentation', 'Emulation', 'Audio', 'Video', 'ROM Library'].includes(entry.descriptor.section));
 mountSettingsForm(element('settings-input-advanced'), window.ares.preferences, entry => entry.descriptor.id.startsWith('input.'));
 mountSettingsForm(element('settings-firmware'), window.ares.preferences, entry => entry.descriptor.id.startsWith('firmware.') || entry.descriptor.id === 'paths.importBml');
 mountSettingsForm(element('settings-core'), window.ares.preferences, entry => !!entry.descriptor.nativeKey && !['Presentation', 'Audio', 'Video', 'Firmware', 'Paths'].includes(entry.descriptor.section));
@@ -119,7 +123,7 @@ function action(name: 'settings' | 'open' | 'pause' | 'reset' | 'edit-workspace'
 window.ares.onAction(action);
 window.addEventListener('keydown', event => {
   if (!(event.metaKey || event.ctrlKey)) return;
-  const name = event.code === 'Comma' ? 'settings' : event.code === 'KeyL' && event.shiftKey ? 'edit-workspace' : event.code === 'KeyP' && !event.shiftKey && !event.altKey ? 'pause' : undefined;
-  if (name) { event.preventDefault(); event.stopImmediatePropagation(); if (!event.repeat) action(name); }
+  const name = event.code === 'Comma' ? 'settings' : event.code === 'KeyL' && event.shiftKey ? 'edit-workspace' : event.code === 'KeyO' && !event.shiftKey && !event.altKey ? 'open' : event.code === 'KeyP' && !event.shiftKey && !event.altKey ? 'pause' : undefined;
+  if (name) { event.preventDefault(); event.stopImmediatePropagation(); window.dispatchEvent(new Event('ares-input-release')); if (!event.repeat) action(name); }
 }, true);
-export function blocksGameInput(): boolean { return dialog.open || workspace.isEditing(); }
+export function blocksGameInput(): boolean { return !!document.querySelector('dialog[open]') || workspace.isEditing(); }

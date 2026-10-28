@@ -1,7 +1,7 @@
 import { PLUGIN_REQUEST_LIMIT, PluginAdmissionError } from './admission.js'
 import type { PluginSettingsService } from '../settings/plugins.js'
 import type { PluginSettingsRequest } from '../settings/contracts.js'
-import { watch, type FSWatcher } from 'node:fs'
+import { watch, realpathSync, type FSWatcher } from 'node:fs'
 import { buildArtifact, type PluginArtifact } from './artifacts.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -133,7 +133,7 @@ export class PluginRegistry {
       if (r.enabled && r.manifest && !this.watchers.has(r)) {
         try {
           const watcher = watch(
-            r.source,
+            realpathSync(r.source),
             { recursive: true },
             (_event, file) => {
               const parts = String(file ?? '').split(/[\\/]/)

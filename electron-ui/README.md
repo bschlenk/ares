@@ -1,4 +1,4 @@
-# Ares Workbench Electron frontend
+# ares Electron frontend
 
 This frontend runs ares as native C++ in a separate process and displays its raw
 video output in a WebGL2 canvas. It does not compile emulation code to WebAssembly.
@@ -29,7 +29,7 @@ For a self-contained local app on macOS Apple Silicon, run from the repository r
 
 ```sh
 ./scripts/build-macos-app.sh
-open build_macos/Ares.app
+open build_macos/ares.app
 ```
 
 This builds both the native host and UI, installs missing npm dependencies and
@@ -84,10 +84,21 @@ The launcher prefers `build_macos/workbench/bin/ares-electron-host`, respects
 Each launch builds into a fresh ignored `artifacts/runs/launch-*`
 snapshot and copies the native host and media databases there. Bundled plugin
 sources are linked to the checkout so plugin edits reload automatically.
+Snapshot copying and UI watching share automatic source-tree discovery, excluding
+dependencies, generated output, tests, native sources and separately watched bundled
+plugins. New source folders need no launcher configuration; watch mode discovers
+folders created while it is running.
 Watch mode publishes successful renderer builds into its own snapshot; failed
 builds leave the previous UI running. HTML/CSS changes also reload automatically.
-Main-process/preload edits need a development restart, and shared service/settings
-edits need a restart to affect main-process behavior. C++ edits need a native rebuild.
+The TypeScript compiler supplies the main/preload dependency graph. Edits anywhere
+in that graph—including shared services and artwork code—stage a full build and
+automatically restart Electron only on success. The current ROM is reopened, with
+normal save persistence; emulator execution state is restarted. UI-only changes
+retain the running native session. Plugin edits hot-reload their active generation,
+including symlinked sources, and reopen any previously open plugin modal.
+C++ edits still need a native rebuild; the latest native binary is copied on the
+next application restart. Changes to the dev supervisor itself require relaunching
+the dev command once to load the new supervisor.
 The running instance keeps its snapshot until shutdown. Subsequent JS/test/package
 builds and native host relinks cannot replace its executable or loaded UI files.
 Normal shutdown removes the snapshot; a killed launcher may leave a disposable
@@ -104,6 +115,7 @@ Development launches use the `development` profile by default; copied apps use
 | `saves/` | MIA system-specific game saves |
 | `systems/` | Writable native system data (beside the selected save root) |
 | `plugins/` | Enabled plugins, plugin storage and rebuildable plugin artifacts |
+| `artwork/` | Cached box-art PNGs and per-system ROM identity metadata |
 | `browser/` | Browser preferences/local storage and rebuildable Chromium cache |
 | `logs/` | Application logs |
 
@@ -140,7 +152,20 @@ MCP session. Native build directories remain selectable through `ARES_HOST` and
 
 ## Controls and customization
 
-Click the canvas to give it keyboard focus. Standard browser gamepads feed ares's
+Click the canvas to give it keyboard focus; the canvas itself never shows a focus
+outline. Fit scales to fill one viewport dimension while preserving aspect ratio;
+Integer chooses the largest whole-number scale that fits. Hardware overscan borders
+are cropped by default using the core's viewport; **Show hardware overscan borders**
+restores them on the next ROM load. Game-authored borders remain part of the image.
+Playback controls and the cursor hide after two seconds of mouse inactivity over
+the viewport, and reappear on movement. Keyboard-focused playback controls remain
+visible. Reset while paused presents the first reset frame and remains paused.
+Only configured keyboard controls
+suppress browser defaults. Standalone modifier bindings remain usable, while
+Command/Ctrl/Alt chords pass through as shortcuts and release held keyboard game
+input. Shift can still be held with other game controls. Ordinary unbound keys
+continue to reach emulated computer keyboards without suppressing browser defaults.
+Standard browser gamepads feed ares's
 virtual controller; the existing per-system adapter determines the actual buttons.
 Keyboard controls use arrows for D-pad, Z/X/C/V for face buttons, Q/E for shoulders,
 Shift/Enter for Select/Start, Space for a trigger, WASD for the left analog stick,
@@ -151,7 +176,7 @@ The screen shows the relevant control guide. Keyboard events and relative mouse
 motion/buttons also reach the existing keyboard/mouse mappings. Losing focus
 releases input. This spike currently exposes player one's virtual controller.
 
-Themes, integer/best-fit scaling, scanlines, and panel placement are persisted in
+Themes, integer/best-fit scaling, and panel placement are persisted in
 local storage. The panel can be resized. Rendering is independent of controls and
 UI layout. The UI-stall button deliberately blocks JavaScript for 250 ms to test
 backpressure while native audio/emulation continue.
@@ -208,7 +233,9 @@ Each frame has a 48-byte little-endian header followed by tightly packed RGBA8:
 | 40 | float64 | Intended display aspect ratio |
 
 Input/presentation commands remain newline-delimited on stdin: `ack`,
-`input sequence mask x y rx ry`, `key name 0|1`, `mouse dx dy mask`, `clear`, `quit`.
+`input sequence mask x y rx ry`, `key name 0|1`, `mouse dx dy mask`,
+`fastforward 0|1`, `clear`, `quit`. Fast-forward is momentary and bypasses normal
+frame/audio pacing; `clear` also releases it.
 Status/pause/resume/reset use the versioned [session protocol](services/README.md),
 with replies on a separate fd 3. EOF requests clean shutdown. Electron closes stdin
 on shutdown and kills an unresponsive host after a timeout. Renderer reload keeps

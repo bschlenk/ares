@@ -23,7 +23,9 @@ export function layoutOverlays(width=logicalWidth,height=logicalHeight,sourceW=s
   const next:OverlaySize={geometry:null,canvasToCss:null,canvasToPixels:null,width:rect.width,height:rect.height,pixelWidth:Math.max(1,Math.round(rect.width*dpr)),pixelHeight:Math.max(1,Math.round(rect.height*dpr)),dpr,logicalWidth,logicalHeight,sourceWidth,sourceHeight};
   next.geometry=videoGeometry;next.canvasToCss=videoGeometry?canvasTransform(videoGeometry,sourceWidth,sourceHeight,next.width,next.height):null;next.canvasToPixels=videoGeometry?canvasTransform(videoGeometry,sourceWidth,sourceHeight,next.pixelWidth,next.pixelHeight):null;
   const changed=JSON.stringify(size)!==JSON.stringify(next);size=Object.freeze(next);
+  const safeTop = parseFloat(getComputedStyle(document.body).getPropertyValue('--titlebar-safe-top')) || 0;
   for(const layer of layers.values()){
+    layer.element.style.clipPath = `inset(${Math.max(0, safeTop - rect.top)}px 0 0)`;
     layer.element.style.left=(rect.left-outer.left)+'px';layer.element.style.top=(rect.top-outer.top)+'px';layer.element.style.width=rect.width+'px';layer.element.style.height=rect.height+'px';
     if(changed)for(const callback of layer.resize)try{callback(size);}catch(error){layer.error(error);}
     display(layer);

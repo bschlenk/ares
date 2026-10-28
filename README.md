@@ -25,12 +25,12 @@ Only the latest nightly build is kept.
 Building this fork
 ------------------
 
-This fork uses [Ares Workbench's Electron frontend](electron-ui/README.md).
+This fork uses [ares's Electron frontend](electron-ui/README.md).
 On macOS Apple Silicon, build a runnable app from the repository root:
 
 ```sh
 ./scripts/build-macos-app.sh
-open build_macos/Ares.app
+open build_macos/ares.app
 ```
 
 The command builds the native host and UI, installs npm dependencies if missing,
@@ -46,9 +46,9 @@ successful builds while keeping the emulator session running. Run `npm run build
 once first if the native host is missing. Main-process/preload changes require
 restarting the development command; C++ changes require rebuilding the native host.
 `npm start` launches without watching, `npm run build` compiles the frontend,
-and `npm test` runs frontend/service tests. `npm run package:mac -- /path/to/Ares.app`
+and `npm test` runs frontend/service tests. `npm run package:mac -- /path/to/ares.app`
 packages an existing native build into a fresh destination; `npm run build:mac`
-does the complete build and safely replaces `build_macos/Ares.app`.
+does the complete build and safely replaces `build_macos/ares.app`.
 
 Enable access in **Settings → Agent Integration → Enable MCP and CLI access**,
 then copy the MCP configuration. Recording N64 DMA provenance is a separate,

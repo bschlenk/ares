@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' ares-plugin:; style-src 'self' ares-plugin:; img-src 'self' ares-plugin:; connect-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' ares-plugin:; style-src 'self' ares-plugin:; img-src 'self' ares-plugin: data:; connect-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ares Workbench</title>
+  <title>ares</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="window-drag-region" aria-hidden="true"></div>
+  <div id="window-drag-region" role="banner" aria-label="Game title"><span id="window-title-content"><img id="window-system-icon" alt=""><span id="window-game-title">ares</span></span></div>
   <main id="workspace" aria-label="Workspace"></main>
   <div id="floating-layer"></div>
   <div id="panel-parking" hidden>
@@ -21,7 +21,8 @@
           <svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z"/></svg>
           <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="m8 4 12 8-12 8z"/></svg>
         </button>
-        <button id="video-reset" aria-label="Reset game" title="Reset game"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
+        <button id="video-fast-forward" aria-label="Hold to fast-forward" title="Hold to fast-forward" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="m5 5 9 7-9 7V5Zm9 0 9 7-9 7V5Z"/></svg></button>
+        <button id="video-reset" aria-label="Reset game" title="Reset game"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10a6.5 6.5 0 1 0 .5 5M18 5v5h-5"/></svg></button>
       </div>
     </section>
   </div>
@@ -40,7 +41,7 @@
           <div id="settings-agent"></div>
           <p>MCP and CLI access connects external tools to this app. MCP automatically connects to your running app and launches it when closed. No session or connection settings are needed. DMA provenance records N64 ROM-to-RAM transfers only while enabled; disabling it clears the history.</p>
           <h2>MCP configuration</h2>
-          <pre id="mcp-config-preview" tabindex="0" aria-label="MCP configuration">Loading configuration…</pre>
+          <pre id="mcp-config-preview" class="selectable" tabindex="0" aria-label="MCP configuration">Loading configuration…</pre>
           <p class="help">Enable access before connecting. The shell expands ~ to your home directory. Install CLI helpers before copying to keep the command stable when moving the app.</p>
           <button id="copy-mcp-config">Copy MCP configuration</button>
           <button id="install-cli-helpers">Install CLI helpers</button>

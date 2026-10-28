@@ -27,6 +27,23 @@ export function appliedInputSettings(snapshot: SettingsSnapshot): InputSettings 
 }
 export interface GamepadInput { mapping: string; connected?: boolean; buttons: readonly { pressed: boolean }[]; axes: readonly number[] }
 export interface VirtualInput { mask: number; x: number; y: number; rx: number; ry: number }
+export function boundKeyboardCodes(settings: InputSettings, system: string): Set<string> {
+  const n64 = system.startsWith('Nintendo 64');
+  return new Set(Object.entries(settings).filter(([id]) => {
+    if (!id.startsWith('input.keyboard.')) return false;
+    if (id === 'input.keyboard.n64A' || id === 'input.keyboard.n64B') return n64;
+    return !n64 || (id !== 'input.keyboard.south' && id !== 'input.keyboard.east');
+  }).flatMap(([, value]) => String(value).split(',').filter(Boolean)));
+}
+export const isModifierKey = (code: string): boolean => /^(?:Meta|Control|Alt|Shift)(?:Left|Right)$/.test(code);
+export interface KeyboardEventPolicy { code: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; defaultPrevented?: boolean; isComposing?: boolean }
+/** Modifier presses can be controls; Command/Ctrl/Alt chords belong to the app/OS. */
+export function keyboardPolicy(bindings: ReadonlySet<string>, event: KeyboardEventPolicy): { game: boolean; consume: boolean; bound: boolean; shortcut: boolean } {
+  const bound = bindings.has(event.code);
+  const shortcut = !isModifierKey(event.code) && !!(event.metaKey || event.ctrlKey || event.altKey);
+  const game = !!event.code && !event.defaultPrevented && !event.isComposing && !shortcut;
+  return { game, bound, shortcut, consume: game && bound && !isModifierKey(event.code) };
+}
 /** Pure mapping logic is shared by the live renderer and fixture checks. */
 export function mapInput(settings: InputSettings, pressed: ReadonlySet<string>, system: string,
     gamepads: readonly (GamepadInput | null)[], focused: boolean, canvasFocused: boolean): VirtualInput {

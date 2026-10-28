@@ -1,3 +1,4 @@
+import {FocusPause} from './focus-pause.js';
 import { InputClips } from './input-clips.js';
 import { startScript, ScriptJobs } from './scripts.js';
 import type { ScriptRunParams } from './script-contracts.js';
@@ -28,6 +29,14 @@ function mainCapabilities(reply: SessionReply<any>): void {
 
 /** Electron main owns this router, independently of renderer/plugin lifetimes. */
 export class SessionRouter {
+  private title?: string;
+  private focusPause = new FocusPause(reply => this.publishState(reply));
+  configureFocusPause(enabled: boolean, focused: boolean): Promise<void> { return this.focusPause.configure(enabled, focused); }
+  private decorateState(reply: SessionReply): SessionReply {
+    const decorated = this.focusPause.decorate(reply);
+    return decorated.ok && decorated.result ? {...decorated,result:{...decorated.result,title:this.title}} : decorated;
+  }
+  private publishState(reply: SessionReply): void { this.onSessionState?.(this.decorateState(reply)); }
   onObserverSample?:(sample:import('./observer-contracts.js').ObserverSample)=>void;
   private observerStartTail:Promise<unknown>=Promise.resolve();
   private observerStarts=new Map<string,{count:number;cancelled:boolean}>();
@@ -60,8 +69,8 @@ export class SessionRouter {
   get identity() { return this.client?.identity; }
   private stateTimer?: ReturnType<typeof setInterval>;
   constructor(private onSessionState?: (reply: SessionReply) => void, private diagnose: (source:string,error:unknown)=>void = ()=>{}) {}
-  attach(client: NativeSessionClient): void {
-    this.detach(); this.client = client;
+  attach(client: NativeSessionClient, title?: string): void {
+    this.detach(); this.title = title; this.client = client; this.focusPause.attach(client);
     client.onObserverSample=sample=>{if(this.client===client)this.onObserverSample?.(sample);};
     if (!this.onSessionState) return;
     // CPU break/watch hits can stop ordinary play without a request or a video
@@ -73,7 +82,7 @@ export class SessionRouter {
       try {
         const reply = await client.request('session.status');
         mainCapabilities(reply);
-        if (this.client === client && reply.ok) this.onSessionState?.(reply);
+        if (this.client === client && reply.ok) this.publishState(reply);
       } catch { /* NativeSessionClient owns disconnect/timeout handling. */ }
       finally { pending = false; }
     }, 250);
@@ -83,9 +92,19 @@ export class SessionRouter {
     for(const entry of this.observerStarts.values())entry.cancelled=true;
     this.inputClips.close();this.scripts.close(); this.memoryArtifacts.close(); this.memoryDumps.close(); this.rdpArtifacts.close(); this.batches.close(); this.artifacts.close(); this.screenshots.close(); this.audio.close(); this.recording.close(); this.states.close(); this.stateArtifacts.close(); this.stateLoading.close();
     clearInterval(this.stateTimer); this.stateTimer = undefined;
-    this.client?.close(); this.client = undefined;
+    this.title = undefined; this.focusPause.attach(); this.client?.close(); this.client = undefined;
   }
   async request<M extends ServiceMethod>(method: M, identity?: SessionIdentity, params?: ServiceParams<M>, owner = 'ui'): Promise<SessionReply<ServiceResult<M>>> {
+    if (method === 'session.pause' || method === 'session.resume') {
+      const reply = await this.focusPause.explicit(owner, () => this.dispatchRequest(method, identity, params, owner), reply => reply.ok);
+      if (reply.ok) this.publishState(reply as SessionReply);
+      return this.decorateState(reply as SessionReply) as SessionReply<ServiceResult<M>>;
+    }
+    if (['execution.runFrames', 'execution.runUntilFrame', 'execution.stepInstructions', 'scripts.run', 'experiment.batch', 'n64.input.tap', 'state.load', 'n64.state.loadCommit', 'n64.demo.start', 'n64.demo.replay', 'n64.cpu.call', 'n64.rsp.run', 'n64.rsp.step', 'n64.trace.start', 'n64.rdp.captureStart', 'n64.memory.writeMany', 'script.start', 'video.record.scriptStart'].includes(method)) await this.focusPause.takeControl();
+    const reply = await this.dispatchRequest(method, identity, params, owner);
+    return method.startsWith('session.') ? this.decorateState(reply as SessionReply) as SessionReply<ServiceResult<M>> : reply;
+  }
+  private async dispatchRequest<M extends ServiceMethod>(method: M, identity?: SessionIdentity, params?: ServiceParams<M>, owner = 'ui'): Promise<SessionReply<ServiceResult<M>>> {
     if (!METHODS.includes(method)) throw new ServiceError('invalid_request');
     if (method === 'execution.release') { const start=this.observerStarts.get(owner);if(start)start.cancelled=true; this.scripts.release(owner); this.memoryArtifacts.release(owner); this.memoryDumps.release(owner); this.rdpArtifacts.release(owner); this.batches.release(owner); this.artifacts.release(owner); this.screenshots.release(owner); this.audio.release(owner); this.recording.release(owner); this.states.release(owner); this.stateArtifacts.release(owner); this.stateLoading.release(owner); }
     if (!this.client) throw new ServiceError('native_host_disconnected');
@@ -132,12 +151,12 @@ export class SessionRouter {
     const cancelled = reply.result as { owner?: string; stop_reason?: string };
     if (child && reply.ok && (method === 'session.pause' || cancelled.owner === child && cancelled.stop_reason === 'cancelled')) this.batches.interrupt(owner, method === 'session.pause' ? 'paused' : 'cancelled');
     if (method.startsWith('session.')) mainCapabilities(reply);
-    if (this.client === client && reply.ok && method.startsWith('session.')) this.onSessionState?.(reply as SessionReply);
+    if (this.client === client && reply.ok && method.startsWith('session.') && method !== 'session.pause' && method !== 'session.resume') this.publishState(reply as SessionReply);
     if (this.client === client && reply.ok && method.startsWith('execution.') &&
         (method !== 'execution.status' || (reply.result as { state?: string })?.state === 'done')) {
       const state = await client.request('session.status');
       mainCapabilities(state);
-      if (this.client === client && state.ok) this.onSessionState?.(state);
+      if (this.client === client && state.ok) this.publishState(state);
     }
     return reply;
   }

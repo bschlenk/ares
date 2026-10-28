@@ -2,8 +2,8 @@
 export type SettingValue = string | boolean | number;
 export type SettingDescriptor = {
   id: string; title: string; section: string; apply: 'live' | 'next-rom' | 'restart';
-  control?: 'key';
-  file?: { extensions: string[] };
+  control?: 'key' | 'slider';
+  file?: { extensions: string[]; directory?: boolean };
   /** Host-owned native binding; plugins cannot choose arbitrary BML keys. */
   nativeKey?: string;
 } & (

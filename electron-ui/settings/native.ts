@@ -58,6 +58,7 @@ export function coreDescriptors(info: NativeSettingsInfo): SettingDescriptor[] {
   const boolean = (id: string, title: string, section: string, nativeKey: string, value: boolean): SettingDescriptor =>
     ({ id, title, section, nativeKey, type: 'boolean', default: value, apply: 'next-rom' });
   return [
+    boolean('video.overscan', 'Show hardware overscan borders', 'Video', 'Video/Overscan', false),
     boolean('core.fastBoot', 'Fast boot (supported systems)', 'Core', 'Boot/Fast', true),
     { id: 'core.preferredRegions', title: 'Preferred regions (comma separated)', section: 'Core', nativeKey: 'Boot/Prefer', type: 'string', default: 'NTSC-U', maxLength: 80, apply: 'next-rom' },
     boolean('core.forceInterpreter', 'Force interpreter (supported cores)', 'Core', 'Developer/ForceInterpreter', false),

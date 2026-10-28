@@ -24,6 +24,7 @@ export type NativeCommand =
   | { type: 'input'; sequence: number; mask: number; x?: number; y?: number; rx?: number; ry?: number }
   | { type: 'key'; name: string; value: boolean }
   | { type: 'mouse'; x: number; y: number; mask: number }
+  | { type: 'fast-forward'; active: boolean }
   | { type: 'clear' }
   | { type: 'report'; report: RendererStats };
 export interface AresBridge {

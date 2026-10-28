@@ -33,8 +33,9 @@ export function jsonState(value: unknown): unknown {
 }
 export interface Dock {
   commands: HTMLElement
-  registerPanel(id: string, title: string, mount: (context: import('../workspace/runtime.js').PanelMount) => void | Disposer, placement?: 'input-settings'): Disposer
-  openPanel(id: string, automatic?: boolean): void
+  registerPanel(id: string, title: string, mount: (context: import('../workspace/runtime.js').PanelMount) => void | Disposer, placement?: 'input-settings' | 'modal'): Disposer
+  closePanel?(id: string): void
+  openPanel(id: string, automatic?: boolean, size?: { width: number; height: number }): void
   changed(): void
   error(error: unknown): void
 }
@@ -45,7 +46,7 @@ export class PluginScope {
   private disposers = new Set<Disposer>()
   private arms = new Set<() => void>()
   private commandFragment = document.createDocumentFragment()
-  private panels = new Map<string, { instances: Set<{ visible: boolean }>; open(automatic?: boolean): void }>()
+  private panels = new Map<string, { instances: Set<{ visible: boolean }>; open(automatic?: boolean, size?: { width: number; height: number }): void }>()
   private pendingOpens = new Set<string>()
   private commands = new Map<string, () => void | Promise<void>>()
   private links: HTMLLinkElement[] = []
@@ -145,6 +146,15 @@ export class PluginScope {
           alive()
           return effect(() => mountSettingsForm(element, this.context.settings))
         },
+      },
+      library: {
+        cached: async () => { writable(); const result = unwrapPluginBridge(await window.ares.plugins.library(this.token, { operation: 'cached' })); alive(); return result as import('../library/contracts.js').LibrarySnapshot | null; },
+        scan: async () => { writable(); const result = unwrapPluginBridge(await window.ares.plugins.library(this.token, { operation: 'scan' })); alive(); return result as import('../library/contracts.js').LibrarySnapshot; },
+        artwork: async (id, kind = 'box') => { writable(); const result = unwrapPluginBridge(await window.ares.plugins.library(this.token, { operation: 'artwork', id, kind })); alive(); return result as string | null; },
+        launch: async id => { writable(); unwrapPluginBridge(await window.ares.plugins.library(this.token, { operation: 'launch', id })); },
+        chooseDirectory: async () => { writable(); unwrapPluginBridge(await window.ares.plugins.library(this.token, { operation: 'chooseDirectory' })); alive(); },
+        openFile: async () => { writable(); unwrapPluginBridge(await window.ares.plugins.library(this.token, { operation: 'openFile' })); },
+        contextMenu: async id => { writable(); unwrapPluginBridge(await window.ares.plugins.library(this.token, { operation: 'contextMenu', id })); },
       },
       clipboard:{writeText:async text=>{writable();return unwrapPluginBridge(await window.ares.plugins.clipboard(this.token,text));}},
       exports:{
@@ -384,7 +394,7 @@ export class PluginScope {
               if (failed?.status === 'rejected') throw failed.reason
             }
           }, contribution.placement))
-          this.panels.set(id, { instances, open: automatic => this.dock.openPanel(id, automatic) })
+          this.panels.set(id, { instances, open: (automatic, size) => this.dock.openPanel(id, automatic, size) })
           return add(() => { this.panels.delete(id); return install() })
         },
         registerCommand: (id, run) => {
@@ -411,11 +421,12 @@ export class PluginScope {
             this.commands.delete(id)
           })
         },
-        openPanel: id => {
+        closePanel: id => { writable(); if (!this.panels.has(id)) throw new Error('Unknown panel: ' + id); this.dock.closePanel?.(id) },
+        openPanel: (id, size) => {
           alive()
           if (!this.panels.has(id)) throw new Error('Unknown panel: ' + id)
           if (!this.published) this.pendingOpens.add(id)
-          else this.panels.get(id)!.open()
+          else this.panels.get(id)!.open(false, size)
         },
       },
     }

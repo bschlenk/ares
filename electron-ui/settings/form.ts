@@ -6,7 +6,7 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
   message.setAttribute('role', 'status');
   const sections = document.createElement('div');
   element.append(sections, message);
-  type Row = { entry: SettingEntry; input: HTMLInputElement | HTMLSelectElement; note: HTMLElement; dirty: boolean; busy: boolean; timer?: ReturnType<typeof setTimeout>; finished?: Promise<void> };
+  type Row = { entry: SettingEntry; input: HTMLInputElement | HTMLSelectElement; note: HTMLElement; slider?: HTMLInputElement; dirty: boolean; busy: boolean; timer?: ReturnType<typeof setTimeout>; finished?: Promise<void> };
   const rows = new Map<string, Row>();
   let disposed = false, revision = -1, signature = '';
   const value = (row: Row) => row.entry.descriptor.type === 'boolean' ? (row.input as HTMLInputElement).checked
@@ -18,14 +18,14 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
     let finish!: () => void;
     row.finished = new Promise(resolve => { finish = resolve; });
     row.busy = true;
-    row.input.disabled = true;
+    row.input.disabled = true; if (row.slider) row.slider.disabled = true;
     try {
       const snapshot = await action();
       if (disposed) return;
       row.dirty = false;
       update(snapshot);
     } catch (error) { if (!disposed) message.textContent = String(error); }
-    finally { row.busy = false; row.input.disabled = false; finish(); }
+    finally { row.busy = false; row.input.disabled = false; if (row.slider) row.slider.disabled = false; finish(); }
   };
   const save = (row: Row) => {
     clearTimeout(row.timer);
@@ -76,9 +76,21 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
         }
         const controls = document.createElement('div'), note = document.createElement('p');
         controls.className = 'setting-controls';
-        label.append(input); controls.append(label); field.append(controls);
-        const row: Row = { entry, input, note, dirty: false, busy: false }; rows.set(descriptor.id, row);
-        input.oninput = () => edit(row);
+        let slider: HTMLInputElement | undefined;
+        if (descriptor.control === 'slider' && descriptor.type === 'number') {
+          slider = document.createElement('input'); slider.type = 'range';
+          slider.min = String(descriptor.min); slider.max = String(descriptor.max); slider.step = 'any';
+          slider.setAttribute('aria-label', descriptor.title);
+          input.setAttribute('aria-label', `${descriptor.title} value`); input.classList.add('setting-range-value');
+          label.append(slider); controls.append(label, input);
+        } else { label.append(input); controls.append(label); }
+        field.append(controls);
+        const row: Row = { entry, input, note, slider, dirty: false, busy: false }; rows.set(descriptor.id, row);
+        input.oninput = () => { if (slider && input.checkValidity() && input.value !== '') slider.value = input.value; edit(row); };
+        if (slider) {
+          slider.oninput = () => { input.value = slider!.value; edit(row); };
+          slider.onchange = slider.onblur = () => save(row);
+        }
         input.onchange = () => save(row);
         input.onblur = () => save(row);
         if (descriptor.control === 'key') {
@@ -96,7 +108,7 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
         }
 
         if (descriptor.file) {
-          const browse = document.createElement('button'); browse.textContent = 'Choose file…';
+          const browse = document.createElement('button'); browse.textContent = descriptor.file.directory ? 'Choose folder…' : 'Choose file…';
           browse.onclick = () => { void run(row, () => bridge.chooseFile(descriptor.id)); };
           controls.append(browse);
         }
@@ -111,7 +123,7 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
       const row = rows.get(entry.descriptor.id)!; row.entry = entry;
       if (!row.dirty) {
         if (entry.descriptor.type === 'boolean') (row.input as HTMLInputElement).checked = entry.value === true;
-        else row.input.value = String(entry.value);
+        else { row.input.value = String(entry.value); if (row.slider) row.slider.value = String(entry.value); }
       }
       row.note.textContent = `${entry.source} · ${entry.pending ? `Saved; applies ${entry.descriptor.apply === 'next-rom' ? 'on next ROM load' : entry.descriptor.apply === 'restart' ? 'after restart' : 'when applied'}` : entry.descriptor.apply === 'next-rom' ? 'Next ROM load' : entry.descriptor.apply === 'restart' ? 'Restart required' : 'Live'}`;
       row.note.dataset.pending = String(entry.pending);

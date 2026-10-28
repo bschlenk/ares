@@ -1,0 +1,13 @@
+{
+  "id": "ares.library",
+  "name": "ROM Library",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "entry": "plugin.js",
+  "styles": "style.css",
+  "capabilities": ["library.read", "library.launch", "settings.read", "settings.write", "clipboard.write"],
+  "contributes": {
+    "panels": [{ "id": "browser", "title": "ROM Library", "placement": "modal" }],
+    "commands": [{ "id": "open", "title": "Browse ROM library" }]
+  }
+}

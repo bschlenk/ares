@@ -33,3 +33,17 @@ test('workspace provisioning survives reconstruction, while malformed files rema
   const broken = new WorkspaceStore(filename); assert.match(broken.load().error, /Cannot read workspace/);
   assert.throws(() => broken.save(defaultLayout())); assert.equal(fs.readFileSync(filename, 'utf8'), '{broken');
 });
+
+test('immersive header follows full-width top video, editing, and visible popups', async () => {
+  const {defaultLayout,immersiveTitleBar}=await import('../dist/workspace/model.js');
+  const layout=defaultLayout(), video=layout.root, other={id:'other',panel:'empty'};
+  assert.equal(immersiveTitleBar(layout,false),true);
+  assert.equal(immersiveTitleBar(layout,true),false);
+  layout.root={id:'split',axis:'y',ratio:.6,children:[video,other]};
+  assert.equal(immersiveTitleBar(layout,false),true);
+  layout.root={...layout.root,children:[other,video]};assert.equal(immersiveTitleBar(layout,false),false);
+  layout.root={...layout.root,axis:'x',children:[video,other]};assert.equal(immersiveTitleBar(layout,false),false);
+  layout.root=video;layout.floating.push({id:'popup',mode:'popup',open:true});
+  assert.equal(immersiveTitleBar(layout,false),false);
+  layout.floating[0].open=false;assert.equal(immersiveTitleBar(layout,false),true);
+});

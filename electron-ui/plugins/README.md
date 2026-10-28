@@ -2,7 +2,7 @@
 
 Open **Plugins** in the sidebar. Add a directory containing `manifest.json`, then
 explicitly enable it. Fresh profiles enable the bundled memory explorer, N64
-stop/register view, settings panel and verified Kirby powers tool. Existing enable/disable choices
+stop/register view, settings panel, ROM library and verified Kirby powers tool. Existing enable/disable choices
 are preserved; use Plugins or the CLI to enable a new bundled tool in an older
 profile. `ARES_DEFAULT_PLUGINS=0` suppresses these first-profile defaults for tests. Enabled roots
 and IDs persist under Electron's userData/plugins; `ARES_PLUGIN_DIRS` (platform
@@ -567,3 +567,18 @@ session, epoch, VI and origin-write identity before using `overlay.present`.
 Raw post-matrix bytes and optional vertex-load state avoid reconstructing a
 matrix stack from live RAM. See `examples/kirby-skeleton` for the full consumer
 and its explicitly derived joint/camera visualization.
+
+## ROM opening plugins
+
+The bundled [ROM Library](../bundled-plugins/library/README.md) replaces the Open ROM
+command through `library.browser`. Plugins can use the scoped `context.library` API
+with `library.read` / `library.launch`; the host retains filesystem access and native
+launch control. `ui.openPanel` accepts optional initial popup dimensions, and
+`ui.closePanel` hides floating instances.
+
+Panels with `"placement": "modal"` use a native HTML modal dialog instead of a
+workspace region or floating window. Opening releases game input and blocks
+background interaction; closing restores focus. An `autofocus` control receives
+initial focus. The host supplies a title, close button and Escape handling. Modal
+contents survive closing and receive visibility callbacks; disabling/reloading the
+plugin disposes them. Modal panels are omitted from workspace placement pickers.

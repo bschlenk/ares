@@ -1,3 +1,4 @@
+import { RomLibrary } from './library/service.js'
 import {MainWatchdog} from './services/watchdog.js';
 import {ServiceError} from './services/contracts.js'
 import {PluginExports} from './services/plugin-exports.js'
@@ -24,6 +25,7 @@ import {
   Menu,
   protocol,
   clipboard,
+  shell,
   type MessagePortMain,
 } from 'electron'
 import { spawn, execFile, type ChildProcessByStdio } from 'node:child_process'
@@ -57,7 +59,7 @@ const saveDirectory = (() => {
         : profileRoot(app.getPath('appData'), process.env.ARES_PROFILE))
     fs.mkdirSync(selectedProfile, { recursive: true })
     const profileDirectory = fs.realpathSync(selectedProfile)
-    app.setName('Ares Workbench')
+    app.setName('ares')
     app.setPath('userData', profileDirectory)
     app.setPath('sessionData', path.join(profileDirectory, 'browser'))
     // Electron owns the OS-backed lock and releases it even after a crash. Never
@@ -325,6 +327,7 @@ const probe = (args: string[]): Promise<string> =>
 let window: BrowserWindow
 if (!app.isPackaged && process.env.ARES_DEV_RELOAD === '1') {
   process.on('message', message => {
+    if ((message as {type?:string} | null)?.type === 'ares-dev-quit') { app.quit(); return }
     if ((message as { type?: string } | null)?.type === 'ares-dev-reload' && window && !window.isDestroyed())
       window.webContents.reloadIgnoringCache()
   })
@@ -333,6 +336,11 @@ export const workspace = new WorkspaceStore(path.join(app.getPath('userData'), '
 export const preferences = new SettingsStore(
   path.join(app.getPath('userData'), 'preferences.json'), [
     ...presentationSettings,
+    { id: 'emulation.pauseOnFocusLoss', title: 'Pause when the window loses focus', section: 'Emulation', type: 'boolean', default: false, apply: 'live' },
+    { id: 'library.directory', title: 'ROM directory', section: 'ROM Library', type: 'string', default: '', apply: 'live', file: { extensions: [], directory: true } },
+    { id: 'library.browser', title: 'Open ROM browser command (native or plugin-id:command)', section: 'ROM Library', type: 'string', default: 'ares.library:open', apply: 'live' },
+    { id: 'library.downloadArtwork', title: 'Download matching box art from Libretro', section: 'ROM Library', type: 'boolean', default: true, apply: 'live' },
+    { id: 'emulation.fastForwardKey', title: 'Hold to fast-forward', section: 'Emulation', type: 'string', default: 'Space', control: 'key', apply: 'live' },
     ...agentSettings,
     ...nativeRuntimeSettings,
     ...inputDescriptors,
@@ -343,6 +351,8 @@ export const preferences = new SettingsStore(
     if (window && !window.isDestroyed()) window.webContents.send('preferences-changed', snapshot)
   },
   async (id, value) => {
+    if (id === 'library.directory') { void romLibrary.scan().catch(error => appLogs.write('library', 'error', error)); return }
+    if (id === 'emulation.pauseOnFocusLoss') { await sessions.configureFocusPause(value === true, window?.isFocused() ?? false); return }
     if (id === 'agent.enabled') { await configureServices(value === true); return }
     if (id === 'debug.provenance') {
       if (sessions.identity) {
@@ -412,12 +422,83 @@ async function choosePreferenceFile(id: string, guard: () => void = () => {}) {
   const descriptor = preferences.catalog().entries.find(entry => entry.descriptor.id === id)?.descriptor
   if (!descriptor?.file) throw new Error('not_a_file_setting')
   const result = await dialog.showOpenDialog(window, {
-    title: descriptor.title, properties: ['openFile'],
+    title: descriptor.title, properties: [descriptor.file.directory ? 'openDirectory' : 'openFile'],
     filters: descriptor.file.extensions.length ? [{ name: descriptor.title, extensions: descriptor.file.extensions }] : [],
   })
   return result.canceled ? preferences.catalog() : setPreference(id, result.filePaths[0], false, guard)
 }
 plugins.connectSettings(new PluginSettingsService(preferences, setPreference, choosePreferenceFile))
+function preferenceValue(id: string) { return preferences.catalog().entries.find(entry => entry.descriptor.id === id)!.value }
+const romLibrary = new RomLibrary(() => String(preferenceValue('library.directory')),
+  path.join(app.getPath('userData'), 'artwork'), () => preferenceValue('library.downloadArtwork') === true)
+void romLibrary.scan().catch(error => appLogs.write('library', 'error', error))
+async function openRomFile(system = '', guard: () => void = () => {}) {
+  guard()
+  const result = await dialog.showOpenDialog(window, {
+    title: 'Open ROM (additional selections supply companion media)',
+    defaultPath: String(preferenceValue('library.directory')) || undefined,
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'All ROMs and media', extensions: ['*'] }],
+  })
+  guard()
+  if (!result.canceled) await enqueue(() => { guard(); return start({ rom: result.filePaths[0], media: result.filePaths.slice(1), system }) })
+}
+let libraryRequests = 0
+ipcMain.handle('plugin.library', (event, token: unknown, request: import('./library/contracts.js').LibraryRequest) => pluginBridgeResult(async () => {
+  if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || typeof token !== 'string') throw new Error('invalid_sender')
+  const guard = (capability: 'library.read' | 'library.launch') => {
+    const plugin = plugins.authorize(token)
+    if (!plugin.manifest?.capabilities.includes(capability)) throw new Error('plugin_capability_denied')
+  }
+  if (!request || typeof request !== 'object') throw new Error('invalid_library_request')
+  const mutating = ['launch', 'openFile', 'chooseDirectory'].includes(request.operation)
+  const capability = mutating ? 'library.launch' : 'library.read'
+  guard(capability)
+  if (libraryRequests >= 8) throw new Error('request_overload')
+  ++libraryRequests
+  try {
+    switch (request.operation) {
+      case 'cached': { const result = romLibrary.cached(); guard(capability); return result }
+      case 'scan': { const result = await romLibrary.scan(); guard(capability); return result }
+      case 'artwork': {
+        if (typeof request.id !== 'string') throw new Error('invalid_library_request')
+        const result = await romLibrary.artwork(request.id, request.kind); guard(capability); return result
+      }
+      case 'launch': {
+        if (typeof request.id !== 'string') throw new Error('invalid_library_request')
+        const options = await romLibrary.launchInfo(request.id)
+        guard(capability)
+        await enqueue(() => { guard(capability); return start(options) })
+        return
+      }
+      case 'contextMenu': {
+        if (typeof request.id !== 'string') throw new Error('invalid_library_request')
+        const {rom} = await romLibrary.launchInfo(request.id)
+        guard('library.read')
+        const act = (run: () => void) => () => {
+          try { guard('library.read'); run() } catch (error) { status(String(error)) }
+        }
+        const menu = Menu.buildFromTemplate([
+          {label: process.platform === 'darwin' ? 'Reveal in Finder' : 'Reveal in folder', click: act(() => shell.showItemInFolder(rom))},
+          {label: 'Copy absolute path', click: act(() => {
+            if (!plugins.authorize(token).manifest?.capabilities.includes('clipboard.write')) throw new Error('plugin_capability_denied')
+            clipboard.writeText(rom)
+          })},
+        ])
+        await new Promise<void>(resolve => menu.popup({window, callback: resolve}))
+        return
+      }
+      case 'openFile': return openRomFile('', () => guard(capability))
+      case 'chooseDirectory': {
+        // Folder selection remains host-owned and requires settings.write as well.
+        if (!plugins.authorize(token).manifest?.capabilities.includes('settings.write')) throw new Error('plugin_capability_denied')
+        await choosePreferenceFile('library.directory', () => guard(capability)); return
+      }
+      default: throw new Error('invalid_library_request')
+    }
+  } finally { --libraryRequests }
+}))
+
 let active: NativeSession | null = null,
   port: MessagePortMain | null = null
 let quitting = false,
@@ -540,10 +621,14 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
       }
     },
   )
-  sessions.attach(client)
+  const gameTitle = options.rom ? path.basename(options.rom, path.extname(options.rom)).replace(/\s*[([][^)\]]*[)\]]/g, '').trim() : undefined
+  sessions.attach(client, gameTitle)
+  if (window && !window.isDestroyed()) window.setTitle(gameTitle ? `${gameTitle} — ares` : 'ares')
+  void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window?.isFocused() ?? false).catch(error => appLogs.write('focus-pause', 'error', error))
   void client.request('session.status').then(reply => {
     removeConfiguration()
     if (reply.ok && active === session) {
+      if (process.env.ARES_DEV_RELOAD === '1' && process.send) process.send({type:'ares-dev-session', options:{rom:options.rom, system:options.rom ? system : undefined, media:options.media, hd:options.hd, silent:options.silent}})
       preferences.markApplied(startupSettings, 'next-rom')
       preferences.markApplied(startupSettings, 'live', [...nativeRuntimeSettings.map(descriptor => descriptor.id), 'debug.provenance'])
     }
@@ -581,7 +666,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   port?.postMessage({ reset: true, system })
   command('ack')
   if (options.agent) {
-    const reply = await client.request('session.pause');
+    const reply = await sessions.request('session.pause', client.identity, undefined, 'agent-launch');
     if (!reply.ok) throw new Error(reply.error)
   }
 }
@@ -610,6 +695,7 @@ app
             'ares.examples.memory',
             'ares.tools.debugger',
             'ares.tools.settings',
+            'ares.library',
             'ares.tools.controls',
             'ares.examples.kirby',
           ],
@@ -645,6 +731,17 @@ app
         backgroundThrottling: false,
       },
     })
+    window.on('page-title-updated', event => event.preventDefault());
+    const focusChanged = () => { void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window.isFocused()).catch(error => appLogs.write('focus-pause', 'error', error)); };
+    window.on('focus', focusChanged); window.on('blur', () => { command('fastforward 0'); focusChanged(); });
+    window.webContents.on('did-start-loading', () => command('fastforward 0'));
+    window.webContents.on('render-process-gone', () => command('fastforward 0'));
+    window.on('enter-full-screen', () => window.webContents.send('window-fullscreen', true));
+    window.on('leave-full-screen', () => window.webContents.send('window-fullscreen', false));
+    ipcMain.handle('window.fullscreen', event => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('invalid_sender');
+      return window.isFullScreen();
+    });
     const action = (name: Parameters<Parameters<import('./bridge.js').AresBridge['onAction']>[0]>[0]) => () => window.webContents.send('app-action', name)
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       ...(process.platform === 'darwin' ? [{ label: app.getName(), submenu: [
@@ -724,7 +821,9 @@ app
       } else
         enqueue(() =>
           start(
-            process.env.ARES_ROM
+            process.env.ARES_DEV_RELOAD === '1' && process.env.ARES_DEV_SESSION
+              ? JSON.parse(process.env.ARES_DEV_SESSION) as StartOptions
+              : process.env.ARES_ROM
               ? { rom: process.env.ARES_ROM, system: process.env.ARES_SYSTEM }
               : { hd: process.env.ARES_HD === '1' },
           ),
@@ -877,20 +976,15 @@ app
       }
     })
     ipcMain.handle('open', async (event, options) => {
-      if (event.sender !== window.webContents) return
-      const result = await dialog.showOpenDialog(window, {
-        title: 'Open ROM (additional selections supply companion media)',
-        properties: ['openFile', 'multiSelections'],
-        filters: [{ name: 'All ROMs and media', extensions: ['*'] }],
-      })
-      if (!result.canceled)
-        await enqueue(() =>
-          start({
-            rom: result.filePaths[0],
-            media: result.filePaths.slice(1),
-            system: typeof options?.system === 'string' ? options.system : '',
-          }),
-        )
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('invalid_sender')
+      const selected = String(preferenceValue('library.browser'))
+      const split = selected.lastIndexOf(':')
+      const browser = plugins.catalog().plugins.find(p => p.manifest?.id === selected.slice(0, split) && p.state === 'active' && p.phase === 'active')
+      if (split > 0 && browser?.lease && browser.manifest?.contributes.commands?.some(c => c.id === selected.slice(split + 1))) {
+        await pluginAction(browser.lease.token, 'command', selected.slice(split + 1))
+        return
+      }
+      await openRomFile(typeof options?.system === 'string' ? options.system : '')
     })
     ipcMain.on('command', (event, data: NativeCommand) => {
       if (event.sender !== window.webContents || !data) return
@@ -917,6 +1011,7 @@ app
       ) {
         command(`key ${data.name} ${data.value ? 1 : 0}`)
       }
+      if (data.type === 'fast-forward' && typeof data.active === 'boolean') command(`fastforward ${data.active && window.isFocused() ? 1 : 0}`)
       if (data.type === 'clear') command('clear')
       if (data.type === 'mouse') {
         const limit = (value: number | undefined) =>

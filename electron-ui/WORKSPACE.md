@@ -1,6 +1,6 @@
 # Workspace
 
-A fresh profile opens with only the video. Cmd+O opens a ROM. Cmd+, opens
+A fresh profile opens with only the video. Cmd+O opens the configured ROM browser (the bundled ROM Library on fresh profiles). Cmd+, opens
 Settings, including shared application and plugin settings and plugin management.
 Cmd+Shift+L toggles workspace editing; Escape exits it. Game input is released
 while editing or using Settings.

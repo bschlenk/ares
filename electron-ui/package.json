@@ -1,8 +1,8 @@
 {
-  "name": "ares-workbench",
+  "name": "ares",
   "version": "0.1.0",
   "private": true,
-  "description": "Ares Workbench native emulator frontend",
+  "description": "ares native emulator frontend",
   "main": "dist/main.js",
   "scripts": {
     "start": "node scripts/start.js",
@@ -29,6 +29,10 @@
     "test:launch": "node tests/launch-live.cjs",
     "test:plugin-settings": "node scripts/build.js && electron tests/electron-plugin-settings.js",
     "test:workspace": "node scripts/build.js && electron tests/electron-workspace.js",
+    "test:library": "node scripts/build.js && electron tests/electron-library.js",
+    "test:keyboard": "node scripts/build.js && electron tests/electron-keyboard.js",
+    "test:playback": "node scripts/build.js && electron tests/electron-playback.js",
+    "test:dev": "node scripts/build.js && node tests/dev-runtime-live.js",
     "test:settings": "node scripts/build.js && electron tests/electron-settings.js",
     "test:recovery": "node scripts/build.js && electron tests/electron-recovery.js --disable-plugins",
     "accept": "node scripts/accept.js",
@@ -39,7 +43,8 @@
     "test:all": "node scripts/test-all.js",
     "test:matrix": "node scripts/build.js && node tests/kirby-matrix-live.cjs",
     "test:skeleton": "node scripts/build.js && electron tests/electron-kirby-skeleton.js",
-    "test:feedback-cost": "node scripts/build.js && node tests/kirby-feedback-cost.cjs"
+    "test:feedback-cost": "node scripts/build.js && node tests/kirby-feedback-cost.cjs",
+    "test:playback-controls": "node scripts/build.js && node --test tests/focus-pause.test.js && electron tests/electron-playback-controls.js"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

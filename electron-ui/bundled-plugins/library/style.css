@@ -1,0 +1,29 @@
+.rom-library { display: flex; flex-direction: column; height: 100%; min-height: 350px; padding: 16px; gap: 12px; box-sizing: border-box; }
+.rom-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rom-header-actions { display:flex; align-items:center; gap:4px; }
+.rom-library > [data-folder] { align-self:flex-start; }
+.rom-status { margin: 0; opacity: .7; font-size: 12px; overflow-wrap: anywhere; }
+.rom-toolbar input[type="search"] { flex: 1; min-width: 100px; }
+.rom-view-control { display:flex; flex:none; gap:2px; padding:2px; height:32px; border:1px solid var(--line); border-radius:7px; background:var(--bg); }
+.rom-view-control label { position:relative; display:grid; place-items:center; width:32px; height:26px; margin:0; border-radius:4px; color:var(--muted); }
+.rom-view-control input[type="radio"] { position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0; opacity:0; cursor:default; }
+.rom-view-control svg { width:20px; height:20px; pointer-events:none; }
+.rom-view-control label:hover { background:color-mix(in srgb, var(--text) 6%, transparent); }
+.rom-view-control label:has(input:checked) { background:var(--panel); color:var(--text); box-shadow:0 1px 3px #0004; }
+.rom-view-control label:has(input:focus-visible) { outline:1px solid var(--accent); outline-offset:1px; }
+.rom-covers { display: flex; gap: 20px; overflow: auto; padding: 24px 16px; min-height: 230px; flex: 1; scroll-snap-type: x proximity; align-items: center; perspective: 1000px; }
+.rom-library .rom-card { height: auto; min-height: 250px; display: flex; flex-direction: column; flex: 0 0 160px; gap: 6px; width: 160px; white-space: normal; background: transparent; border: 1px solid transparent; padding: 8px; border-radius: 10px; text-align: center; scroll-snap-align: center; transition: transform .18s, background-color .18s; }
+.rom-covers[data-view="flow"] .rom-card { transform: scale(.92) rotateY(-12deg); }
+.rom-covers[data-view="flow"] .rom-card.selected { transform: scale(1.06); }
+.rom-card.selected { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.rom-library button, .rom-library select { cursor: default; }
+.rom-card:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.rom-card.selected:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.rom-covers[data-view="flow"] .rom-card:hover:not(.selected) { transform: scale(.97) rotateY(-6deg); }
+.rom-art { flex: none; width: 140px; height: 190px; display: grid; place-items: center; }
+.rom-art img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 6px #0005); }
+.rom-art [hidden] { display: none; }
+.rom-placeholder { box-sizing: border-box; width: 100px; height: 75px; border: 1px dashed currentColor; border-radius: 4px; opacity: .5; }
+.rom-card small { opacity: .6; }
+.rom-covers[data-view="grid"] { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-items: start; scroll-snap-type: none; }
+@media (prefers-reduced-motion: reduce) { .rom-card { transition: none; } .rom-covers { scroll-behavior: auto; } }

@@ -28,7 +28,7 @@ export const METHODS = [...NATIVE_METHODS,...INPUT_ARTIFACT_METHODS, ...ARTIFACT
 export type ServiceMethod = typeof METHODS[number];
 export type SessionMethod = Extract<ServiceMethod, `session.${string}`>;
 export interface SessionIdentity { session: string; epoch: number }
-export interface SessionStatus { game?: {sha256:string;size:number;kind:'program.rom'} | null; paused: boolean; system: string; synthetic: boolean; capabilities: ServiceMethod[]; frame?: number; frame_kind?: string; at_frame_boundary?: boolean; executor?: string; operation_id?: number | null; batch_id?: number | null }
+export interface SessionStatus { game?: {sha256:string;size:number;kind:'program.rom'} | null; paused: boolean; title?: string; manual_paused?: boolean; focus_paused?: boolean; system: string; synthetic: boolean; capabilities: ServiceMethod[]; frame?: number; frame_kind?: string; at_frame_boundary?: boolean; executor?: string; operation_id?: number | null; batch_id?: number | null }
 export interface ExecutionOperation {
   rsp?: RspProgress;
   call?: CallProgress;
@@ -49,7 +49,7 @@ export interface ServiceMap extends DemonstrationServiceMap, ScriptServiceMap, M
   'session.status': { params: undefined; result: SessionStatus };
   'session.pause': { params: undefined; result: SessionStatus };
   'session.resume': { params: { keepOverrides: boolean } | undefined; result: SessionStatus };
-  'session.reset': { params: undefined; result: SessionStatus };
+  'session.reset': { params: {preview: boolean} | undefined; result: SessionStatus };
   'execution.runFrames': { params: { count: number; timeoutMs: number }; result: ExecutionOperation };
   'execution.runUntilFrame': { params: { frame: number; timeoutMs: number }; result: ExecutionOperation };
   'execution.status': { params: { operationId: number }; result: ExecutionOperation };
@@ -154,6 +154,10 @@ export function encodeRequest<M extends ServiceMethod>(id: string, identity: Ses
     const p = params as { keepOverrides: boolean };
     if (!keys(p, ['keepOverrides']) || typeof p.keepOverrides !== 'boolean') throw new ServiceError('invalid_request');
     suffix = ` ${p.keepOverrides ? 1 : 0}`;
+  } else if (method === 'session.reset' && params !== undefined) {
+    const p = params as {preview: boolean};
+    if (!keys(p, ['preview']) || typeof p.preview !== 'boolean') throw new ServiceError('invalid_request');
+    suffix = ` ${p.preview ? 1 : 0}`;
   } else if (PROFILER_METHODS.includes(method as ProfilerMethod)) {
     const encoded = encodeProfiler(method as ProfilerMethod, params);
     if (encoded === undefined) throw new ServiceError('invalid_request');

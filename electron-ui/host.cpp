@@ -77,6 +77,7 @@ struct Host : ares::Platform {
   std::atomic<uint64_t> controls{0}; // sequence << 32 | button mask
   std::atomic<uint32_t> appliedInput{0};
   bool sound = true;
+  std::atomic<bool> fastForward{false};
   FILE* frameOutput = stdout;
   std::mutex mutex;
   std::condition_variable wake;
@@ -158,7 +159,7 @@ struct Host : ares::Platform {
       for(auto& sample : mixed) sample = std::clamp(sample, -1.0, 1.0) * settings.audio.volume;
       audioCapture.push(mixed[0], mixed[1]);
       if(settings.audio.mute) mixed[0] = mixed[1] = 0.0;
-      if(sound && !service.execution.active) output.output(mixed);
+      if(sound && !fastForward.load() && !service.execution.active && !service.paused) output.output(mixed);
     }
   }
   auto input(ares::Node::Input::Input node) -> void override {
@@ -254,7 +255,7 @@ struct Host : ares::Platform {
       }
       std::istringstream command(line);
       std::string name; command >> name;
-      if(name != "ack" && name != "input" && name != "key" && name != "mouse" && name != "clear" && name != "quit") {
+      if(name != "ack" && name != "input" && name != "key" && name != "mouse" && name != "clear" && name != "fastforward" && name != "quit") {
         if(!service.output || !service.enqueue(line)) break;
         line.clear(); continue;
       }
@@ -303,7 +304,9 @@ struct Host : ares::Platform {
           }
         }
       }
+      if(name == "fastforward") { unsigned value = 0; command >> value; fastForward = value == 1; }
       if(name == "clear") {
+        fastForward = false;
         std::lock_guard lock(runtime.inputMutex);
         if(keyboard) for(auto& key : keyboard->buttons()) key.setValue(0);
         if(mouse) for(auto& button : mouse->buttons()) button.setValue(0);
@@ -849,6 +852,8 @@ int main(int argc, char** argv) {
     samplingOrigin=false;observerSpent+=Clock::now()-started;
   };
   if(n64)ares::Nintendo64::executionCoordinate.originObserver=[&]{pumpObservers(true);};
+  uint64_t previewEpoch = 0;
+  auto previewDeadline = Clock::now();
   while(!host.quit) {
     if(n64) {
       execution.frame = ares::Nintendo64::executionCoordinate.frame;
@@ -891,7 +896,11 @@ int main(int argc, char** argv) {
     if(!wasControlled && execution.active && host.sound) host.output.clear();
     scriptService.pump();
     pumpObservers(false);
-    if(host.service.paused && (!execution.active || scriptService.running)) {
+    if(host.service.previewReset) {
+      if(previewEpoch != host.service.epoch) { previewEpoch = host.service.epoch; previewDeadline = Clock::now() + std::chrono::seconds(2); }
+      if(!host.service.paused || execution.active || Clock::now() >= previewDeadline) host.service.previewReset = false;
+    }
+    if(host.service.paused && (!execution.active || scriptService.running) && !host.service.previewReset) {
       if(host.sound && !synthetic) host.output.clear();
       host.service.waitForRequest(std::chrono::milliseconds(10));
       deadline = Clock::now(); continue;
@@ -916,6 +925,12 @@ int main(int argc, char** argv) {
       execution.frame = ares::Nintendo64::executionCoordinate.frame;
       execution.atBoundary = ares::Nintendo64::executionCoordinate.atBoundary;
     }
+    // Screen presentation can be asynchronous. Stop at the emulated frame,
+    // rather than running ahead until its video callback catches up.
+    if(host.service.previewReset && (!n64 || execution.frame != frameBefore)) {
+      host.service.previewReset = false;
+      if(host.sound) host.output.clear();
+    }
     if(execution.atBoundary && execution.frame != frameBefore && host.recording.exact) {
       if(synthetic){auto& image=host.captures.presented;if(image.packet)host.recording.capture(image.data(),image.width,image.height,host.service.epoch,execution.frame,execution.frameKind,true);}
       else if(n64){std::shared_ptr<const FrameService::Image> image;auto result=FrameService::framebuffer(image,host.service.epoch,execution.frame);if(result.error.empty())host.recording.capture(image->data(),image->width,image->height,host.service.epoch,execution.frame,execution.frameKind,true);else {std::lock_guard lock(host.recording.mutex);host.recording.finish("capture_unavailable");}}
@@ -934,7 +949,7 @@ int main(int argc, char** argv) {
     // pause or mutate this boundary. This also leaves a matching final sample
     // when the user pauses; the loop-head pump remains for origin/idle handling.
     if(execution.atBoundary && execution.frame != frameBefore) pumpObservers(false);
-    if(controlled) { deadline = Clock::now(); continue; }
+    if(controlled || host.fastForward.load()) { deadline = Clock::now(); continue; }
     if((synthetic || !host.sound) && (!n64 || execution.frame != frameBefore || ares::Nintendo64::executionCoordinate.livenessYield)) {
       deadline += std::chrono::nanoseconds(synthetic ? 16666667 : int64_t(1e9 / host.refreshRate.load()));
       std::this_thread::sleep_until(deadline);

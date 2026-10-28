@@ -1,4 +1,4 @@
-import { defaultLayout, leaves, removeArea, shortcutFromEvent, transformArea, validateLayout, type Area, type FloatingPanel, type WorkspaceLayout } from './model.js';
+import { immersiveTitleBar, defaultLayout, leaves, removeArea, shortcutFromEvent, transformArea, validateLayout, type Area, type FloatingPanel, type WorkspaceLayout } from './model.js';
 export type Cleanup = () => void | Promise<void>;
 export interface PanelMount { instanceId: string; element: HTMLElement; onVisibility(callback: (visible: boolean) => void): Cleanup }
 interface Definition { title: string; mount(context: PanelMount): void | Cleanup; owner: symbol }
@@ -62,14 +62,26 @@ export class Workspace {
       this.render(); await Promise.all(cleanup);
     };
   }
-  openPanel(key: string, automatic = false): void {
+  openPanel(key: string, automatic = false, size?: { width: number; height: number }): void {
     if (automatic) return; // The saved workspace, not activation, owns visibility.
     const area = leaves(this.layout.root).find(area => area.panel === key);
     const floating = this.layout.floating.find(item => item.panel === key);
     if (area) { this.focusedArea = area.id; this.root.querySelector<HTMLElement>(`[data-area="${area.id}"] .area-content`)?.focus(); return; }
     if (floating) { if (!floating.open) this.toggle(floating.id); else this.focusFloating(floating.id); return; }
     // Activation may restore configured panels, but cannot create surprise windows.
-    if (!automatic) this.addFloating(key, 'popup');
+    if (!automatic) this.addFloating(key, 'popup', size);
+  }
+  closePanel(key: string): void {
+    for (const item of this.layout.floating.filter(item => item.panel === key && item.open)) this.toggle(item.id);
+  }
+  removePanelPlacements(key: string): void {
+    if (!this.loaded) { void this.ready.then(() => this.removePanelPlacements(key)); return; }
+    const next = this.snapshot();
+    const areas = leaves(next.root).filter(area => area.panel === key);
+    if (!areas.length && !next.floating.some(item => item.panel === key)) return;
+    for (const area of areas) next.root = transformArea(next.root, area.id, node => ({id: node.id, panel: 'empty'}));
+    next.floating = next.floating.filter(item => item.panel !== key);
+    this.commit(next);
   }
   setEditing(value: boolean): void { this.editing = value; window.dispatchEvent(new Event('ares-input-release')); this.render(); }
   toggleEditing(): void { this.setEditing(!this.editing); }
@@ -90,11 +102,11 @@ export class Workspace {
       : { ...area, children: area.children.map(child => this.replaceVideo(child, target)) as [Area, Area] };
   }
   closeArea(id: string): void { const next = this.snapshot(); next.root = removeArea(next.root, id); this.commit(next); }
-  addFloating(panel: string, mode: FloatingPanel['mode']): void {
+  addFloating(panel: string, mode: FloatingPanel['mode'], size?: { width: number; height: number }): void {
     const next = this.snapshot();
     if(panel==='video'){next.root=this.replaceVideo(next.root,'');next.floating=next.floating.filter(item=>item.panel!=='video');}
     const shortcut = Array.from({ length: 8 }, (_, i) => `Mod+Shift+Digit${i + 1}`).find(key => !next.floating.some(item => item.shortcut === key)) ?? '';
-    const item: FloatingPanel = { id: crypto.randomUUID(), panel, mode, open: true, x: 60 + next.floating.length * 24, y: 60 + next.floating.length * 24, width: 380, height: 400, shortcut, interactive: true };
+    const item: FloatingPanel = { id: crypto.randomUUID(), panel, mode, open: true, x: 60 + next.floating.length * 24, y: 60 + next.floating.length * 24, width: size && Number.isFinite(size.width) ? Math.max(180, Math.min(8192, size.width)) : 380, height: size && Number.isFinite(size.height) ? Math.max(100, Math.min(8192, size.height)) : 400, shortcut, interactive: true };
     next.floating.push(item); this.commit(next); this.focusFloating(item.id);
   }
   updateFloating(id: string, patch: Partial<Omit<FloatingPanel, 'id'>>): void {
@@ -161,7 +173,7 @@ export class Workspace {
   private renderArea(area: Area, used: Set<string>): HTMLElement {
     const element = document.createElement('section'); element.dataset.area = area.id;
     if ('panel' in area) {
-      element.className = 'workspace-area'; element.onpointerdown = () => { this.focusedArea = area.id; };
+      element.className = 'workspace-area'; element.dataset.panel = area.panel; element.onpointerdown = () => { this.focusedArea = area.id; };
       const toolbar = document.createElement('header'); toolbar.className = 'area-toolbar';
       const select = document.createElement('select'); select.setAttribute('aria-label', 'Panel'); this.options(select, area.panel); select.onchange = () => this.selectPanel(area.id, select.value);
       toolbar.append(select, button('↔', 'Split side by side', () => this.split(area.id, 'x')), button('↕', 'Split above and below', () => this.split(area.id, 'y')));
@@ -186,6 +198,7 @@ export class Workspace {
   }
   private render(): void {
     const focused = document.activeElement;
+    document.body.dataset.titlebar = immersiveTitleBar(this.layout, this.editing) ? 'overlay' : 'visible';
     ++this.generation;
     this.root.classList.toggle('editing', this.editing); this.root.classList.toggle('has-layout', leaves(this.layout.root).length > 1 || leaves(this.layout.root)[0]?.panel !== 'video');
     this.floatingRoot.classList.toggle('editing', this.editing);

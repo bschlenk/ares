@@ -20,6 +20,8 @@ export const CAPABILITIES = [
   'settings.register',
   'clipboard.write',
   'files.export',
+  'library.read',
+  'library.launch',
 ] as const
 export type Capability = (typeof CAPABILITIES)[number]
 export interface PluginManifest {
@@ -39,7 +41,7 @@ export interface PluginManifest {
   capabilities: Capability[]
   contributes: {
     settings?: { id: string; title: string }[]
-    panels?: { id: string; title: string; placement?: 'input-settings' }[]
+    panels?: { id: string; title: string; placement?: 'input-settings' | 'modal' }[]
     commands?: { id: string; title: string }[]
   }
 }
@@ -90,6 +92,7 @@ export interface PluginAction {
   name: string
 }
 export interface PluginBridge {
+  library(token: string, request: import('../library/contracts.js').LibraryRequest): Promise<unknown | PluginBridgeFailure>;
   clipboard(token:string,text:string):Promise<{copied:true;bytes:number}|PluginBridgeFailure>;
   exportText(token:string,params:import('../services/export-contracts.js').TextExport):Promise<import('../services/export-contracts.js').ExportStatus|PluginBridgeFailure>;
   recordFrames(token:string,params:import('../services/export-contracts.js').FrameExport):Promise<import('../services/export-contracts.js').ExportStatus|PluginBridgeFailure>;

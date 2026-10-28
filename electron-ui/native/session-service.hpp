@@ -20,6 +20,7 @@ struct SessionService {
   uint64_t sampleId = 0;
   MemoryTools memoryTools;
   bool paused = false;
+  bool previewReset = false;
   ExecutionService execution;
   std::function<ControlResult(const std::string&, const std::vector<std::string>&, const std::string&)> n64Request;
   std::function<ControlResult(const std::string&, const std::vector<std::string>&, const std::string&)> videoRequest;
@@ -91,7 +92,7 @@ struct SessionService {
       if(prefix != "control" || version != "1" || method.empty() || !validId || !token(owner)) error = "invalid_request";
       else if(identity != session) error = "stale_session";
       else if(revision != std::to_string(epoch)) error = "stale_epoch";
-      else if(method.starts_with("session.") && !arguments.empty() && !(method == "session.resume" && arguments.size() == 1 && (arguments[0] == "0" || arguments[0] == "1"))) error = "invalid_request";
+      else if(method.starts_with("session.") && !arguments.empty() && !((method == "session.resume" || method == "session.reset") && arguments.size() == 1 && (arguments[0] == "0" || arguments[0] == "1"))) error = "invalid_request";
       else if(method != "session.status" && method != "session.pause" && method != "session.resume" && method != "session.reset" && !method.starts_with("memory.") && !method.starts_with("execution.") && !method.starts_with("n64.") && !method.starts_with("video.") && !method.starts_with("audio.") && !method.starts_with("script.") && method != "runtime.settings" && method != "runtime.configure" && method != "runtime.provenance") error = "unavailable";
       if(error.empty() && method == "session.resume" && arguments == std::vector<std::string>{"1"} && !onResume) error = "unavailable";
       if(error.empty() && !execution.permitted(method, owner)) error = "busy";
@@ -135,9 +136,9 @@ struct SessionService {
           memoryResult.json += ",\"epoch\":" + std::to_string(epoch) + ",\"sample_id\":" + std::to_string(++sampleId) + ",\"frame\":" + std::to_string(execution.frame) + ",\"frame_kind\":" + controlQuote(execution.frameKind) + ",\"at_frame_boundary\":" + (execution.atBoundary ? "true" : "false") + "}";
       }
       if(error.empty()) {
-        if(method == "session.pause") { execution.reservation.reset(); execution.complete("paused", paused); if(onPause) onPause(); paused = true; }
-        if(method == "session.resume") { execution.reservation.reset(); if(onResume) onResume(!arguments.empty() && arguments[0] == "1", owner); paused = false; }
-        if(method == "session.reset") { execution.reservation.reset(); execution.complete("reset", paused); reset(); ++epoch; memoryTools.sync(epoch); execution.frame = 0; execution.atBoundary = true; }
+        if(method == "session.pause") { previewReset = false; execution.reservation.reset(); execution.complete("paused", paused); if(onPause) onPause(); paused = true; }
+        if(method == "session.resume") { previewReset = false; execution.reservation.reset(); if(onResume) onResume(!arguments.empty() && arguments[0] == "1", owner); paused = false; }
+        if(method == "session.reset") { execution.reservation.reset(); execution.complete("reset", paused); reset(); ++epoch; memoryTools.sync(epoch); execution.frame = 0; execution.atBoundary = true; previewReset = paused && arguments == std::vector<std::string>{"1"}; }
       }
       // System names originate in the compiled registry. Escape JSON defensively.
       std::string escaped;

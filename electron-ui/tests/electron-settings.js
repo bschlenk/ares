@@ -28,6 +28,7 @@ app.whenReady().then(async () => {
   try {
     const window = await until(() => BrowserWindow.getAllWindows()[0]);
     const js = code => window.webContents.executeJavaScript(code);
+    app.focus({steal:true}); window.show(); window.focus();
     await until(() => js("document.body.dataset.theme === 'green'"));
     await js("document.querySelector('#settings-dialog').showModal()");
     assert.deepEqual(await js(`(() => {
@@ -35,9 +36,11 @@ app.whenReady().then(async () => {
       const number = document.querySelector('[data-setting="audio.volume"] input');
       return [field.querySelector('select'), field.querySelector('button'), number].map(control => getComputedStyle(control).height);
     })()`), ['32px', '32px', '32px'], 'buttons, selects, and number inputs share one control height');
-    await js("document.querySelector('#settings-dialog').close()");
+    for(const type of ['mouseDown','mouseUp']) window.webContents.sendInputEvent({type,button:'left',clickCount:1,x:5,y:100});
+    await until(()=>js("!document.querySelector('#settings-dialog').open"));
+
     assert.equal(await js("document.querySelector('[data-setting=\"presentation.scale\"] select').value"), 'integer');
-    assert.equal(await js("document.querySelector('[data-setting=\"presentation.scanlines\"] input').checked"), true);
+    assert.equal(await js("!!document.querySelector('[data-setting=\"presentation.scanlines\"]')"), false);
     assert.equal(await js("!!document.querySelector('[data-setting=\"presentation.panelLeft\"]')"), false);
     await js("document.querySelector('[data-setting=\"presentation.theme\"] select').value = 'paper'; document.querySelector('[data-setting=\"presentation.theme\"] select').dispatchEvent(new Event('input', {bubbles:true}))");
     await until(() => js("document.body.dataset.theme === 'paper'"));
@@ -45,10 +48,19 @@ app.whenReady().then(async () => {
     assert.equal(await js("localStorage.getItem('ares-workbench')"), null);
     window.webContents.reload();
     await until(() => js("document.body.dataset.theme === 'paper' && !!window.ares"));
-    await js("window.ares.preferences.set('presentation.scanlines', false)");
-    await until(() => js("!document.querySelector('[data-setting=\"presentation.scanlines\"] input').checked"));
-    assert.equal(JSON.parse(fs.readFileSync(file)).values['presentation.scanlines'], false);
+    assert.equal(await js("window.ares.preferences.set('presentation.scanlines', false).then(() => false, () => true)"), true, 'removed demo option is unavailable');
     assert.equal(await js("window.ares.preferences.set('presentation.theme', 'bad').then(() => false, () => true)"), true);
+    for (const id of ['video.luminance','video.saturation','video.gamma']) {
+      assert.deepEqual(await js(`(()=>{const field=document.querySelector('[data-setting="${id}"]');return [...field.querySelectorAll('input')].map(input=>input.type)})()`), ['range','number']);
+    }
+    await js(`(()=>{const field=document.querySelector('[data-setting="video.luminance"]'),range=field.querySelector('input[type=range]');range.value='1.25';range.dispatchEvent(new Event('input',{bubbles:true}));range.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await until(()=>JSON.parse(fs.readFileSync(file)).values['video.luminance']===1.25);
+    await until(()=>js(`!document.querySelector('[data-setting="video.luminance"] input[type=number]').disabled`));
+    assert.equal(await js(`document.querySelector('[data-setting="video.luminance"] input[type=number]').value`),'1.25');
+    await js(`(()=>{const input=document.querySelector('[data-setting="video.luminance"] input[type=number]');input.value='0.85';input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await until(()=>JSON.parse(fs.readFileSync(file)).values['video.luminance']===0.85);
+    assert.equal(await js(`document.querySelector('[data-setting="video.luminance"] input[type=range]').value`),'0.85');
+
     const imported = path.join(temporary, 'imported.bml');
     const original = 'Boot\n  Fast: false\n';
     fs.writeFileSync(imported, original);

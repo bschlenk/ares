@@ -7,7 +7,7 @@ case "$BUILD" in
   /*) ;;
   *) BUILD="$ROOT/$BUILD" ;;
 esac
-DESTINATION="$ROOT/build_macos/Ares.app"
+DESTINATION="$ROOT/build_macos/ares.app"
 JOBS=${ARES_BUILD_JOBS:-8}
 if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
   echo 'App packaging currently supports macOS Apple Silicon.' >&2
@@ -32,10 +32,10 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 node "$ROOT/electron-ui/scripts/build.js"
-ARES_HOST="$BUILD/bin/ares-electron-host" node "$ROOT/electron-ui/scripts/package-macos.js" "$STAGING/Ares.app"
+ARES_HOST="$BUILD/bin/ares-electron-host" node "$ROOT/electron-ui/scripts/package-macos.js" "$STAGING/ares.app"
 # Both moves stay on the same filesystem. Restore the old app if publication fails.
 if [ -e "$DESTINATION" ]; then mv -- "$DESTINATION" "$STAGING/previous.app"; fi
-if ! mv -- "$STAGING/Ares.app" "$DESTINATION"; then
+if ! mv -- "$STAGING/ares.app" "$DESTINATION"; then
   if [ -e "$STAGING/previous.app" ]; then mv -- "$STAGING/previous.app" "$DESTINATION"; fi
   exit 1
 fi

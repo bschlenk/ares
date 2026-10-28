@@ -1,7 +1,24 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AresBridge } from './bridge.js'
-window.addEventListener('DOMContentLoaded', () => {
+let fullscreen = false, fullscreenRevision = 0
+const applyWindowChrome = () => {
+  if (!document.body) return
   if (process.platform === 'darwin') document.body.dataset.windowChrome = 'macos'
+  document.body.dataset.fullscreen = String(fullscreen)
+}
+ipcRenderer.on('window-fullscreen', (_event, value: boolean) => {
+  ++fullscreenRevision
+  fullscreen = value
+  applyWindowChrome()
+})
+window.addEventListener('DOMContentLoaded', () => {
+  applyWindowChrome()
+  const revision = fullscreenRevision
+  void ipcRenderer.invoke('window.fullscreen').then((value: boolean) => {
+    if (revision !== fullscreenRevision) return
+    fullscreen = value
+    applyWindowChrome()
+  })
 })
 let exportGesture=false;
 for(const kind of ['click','keydown'])window.addEventListener(kind,event=>{if(event.isTrusted){exportGesture=true;setTimeout(()=>{exportGesture=false;},0);}},true);
@@ -29,6 +46,7 @@ const api: AresBridge = {
     },
   },
   plugins: {
+    library: (token, request) => ipcRenderer.invoke('plugin.library', token, request),
     clipboard:(token,text)=>ipcRenderer.invoke('plugin.clipboard',token,text,takeExportGesture()),
     exportText:(token,params)=>ipcRenderer.invoke('plugin.exportText',token,params,takeExportGesture()),
     recordFrames:(token,params)=>ipcRenderer.invoke('plugin.recordFrames',token,params,takeExportGesture()),

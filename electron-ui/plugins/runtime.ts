@@ -1,5 +1,6 @@
 import { workspace, showSettings, notify } from '../workspace/shell.js'
 import { registerInputSettingsPanel } from '../settings/input-panels.js'
+import { registerModalPanel, openModalPanel, closeModalPanel, openPluginModals } from './modals.js'
 import { panelKey } from '../workspace/model.js'
 import type { PluginCatalog, PluginInfo, PluginCandidate } from './contracts.js'
 import type { PluginModule } from './sdk.js'
@@ -88,7 +89,8 @@ function host(id: string): Dock {
   return {
     commands: manager.querySelector('[data-commands]')!,
     registerPanel: (local, title, mount, placement) => {
-      const register = placement === 'input-settings' ? registerInputSettingsPanel : workspace.registerPanel.bind(workspace)
+      if (placement === 'modal') workspace.removePanelPlacements(panelKey(id, local))
+      const register = placement === 'input-settings' ? registerInputSettingsPanel : placement === 'modal' ? registerModalPanel : workspace.registerPanel.bind(workspace)
       return register(panelKey(id, local), title, context => {
         try { return mount(context) } catch (error) {
           const scope = scopes.get(id)
@@ -100,7 +102,8 @@ function host(id: string): Dock {
         }
       })
     },
-    openPanel: (local, automatic) => workspace.openPanel(panelKey(id, local), automatic),
+    closePanel: local => { const key = panelKey(id, local); if (!closeModalPanel(key)) workspace.closePanel(key) },
+    openPanel: (local, automatic, size) => { const key = panelKey(id, local); if (!openModalPanel(key, automatic, size)) workspace.openPanel(key, automatic, size) },
     changed: health,
     error: error => {
       const scope = scopes.get(id)
@@ -188,6 +191,7 @@ async function replace(p: PluginInfo, candidate: PluginCandidate) {
     version: number | undefined,
     begun = false,
     newInfo: PluginInfo | undefined
+  const reopen = openPluginModals(id)
   try {
     const module = await load(staged)
     if (old?.module.saveState) {
@@ -215,6 +219,7 @@ async function replace(p: PluginInfo, candidate: PluginCandidate) {
         ? state
         : undefined,
     )
+    for (const key of reopen) openModalPanel(key)
   } catch (error) {
     if (!begun) {
       await bridge.reject(candidate.lease.token, String(error)).catch(() => {})
@@ -235,6 +240,7 @@ async function replace(p: PluginInfo, candidate: PluginCandidate) {
           ? state
           : undefined,
         )
+      for (const key of reopen) openModalPanel(key)
     } catch (rollbackError) {
       const message = `Replacement failed: ${String(error)}; rollback failed: ${String(rollbackError)}`
       errors.set(id, message)
@@ -259,7 +265,7 @@ function start(id: string, work: () => Promise<void>) {
 function update(next: PluginCatalog) {
   if ((next.revision ?? 0) < (catalog.revision ?? 0)) return
   catalog = next
-  workspace.setKnown(next.plugins.flatMap(plugin => plugin.manifest?.contributes.panels?.map(panel => ({ key: panelKey(plugin.manifest!.id, panel.id), title: `${plugin.manifest!.name} / ${panel.title}` })) ?? []))
+  workspace.setKnown(next.plugins.flatMap(plugin => plugin.manifest?.contributes.panels?.filter(panel => panel.placement !== 'modal').map(panel => ({ key: panelKey(plugin.manifest!.id, panel.id), title: `${plugin.manifest!.name} / ${panel.title}` })) ?? []))
   for (const [id, scope] of scopes) {
     const p = next.plugins.find((p) => p.manifest?.id === id)
     if (

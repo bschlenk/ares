@@ -1,4 +1,5 @@
 import {watchUI} from './watch-ui.js';
+import {copyDevSources} from './dev-sources.js';
 import electron from 'electron';
 // Each launch owns its compiled JS and native executable.
 // Bundled plugin sources stay live so their existing watchers support authoring.
@@ -13,12 +14,10 @@ const snapshot = fs.mkdtempSync(path.join(launches, 'launch-'))
 const copy = (from, to) => fs.cpSync(from, to, { recursive: true, mode: fs.constants.COPYFILE_FICLONE })
 let child
 let stopWatching
+let restarting = false, stopping = false, currentSession
 const watch = process.argv.includes('--watch')
 try {
-  for (const entry of fs.readdirSync(root)) {
-    if (/\.(?:ts|cts|json|html|css)$/.test(entry) || ['plugins', 'services', 'settings', 'workspace', 'scripts', 'mcp', 'templates', 'tools'].includes(entry))
-      copy(path.join(root, entry), path.join(snapshot, entry))
-  }
+  copyDevSources(root, snapshot)
   fs.symlinkSync(path.join(root, 'bundled-plugins'), path.join(snapshot, 'bundled-plugins'), 'dir')
   fs.symlinkSync(path.join(root, 'node_modules'), path.join(snapshot, 'node_modules'), 'dir')
   execFileSync(process.execPath, ['scripts/build.js'], { cwd: snapshot, stdio: 'inherit', env: process.env })
@@ -40,17 +39,36 @@ try {
   if (env.ARES_PLUGIN_DIRS)
     env.ARES_PLUGIN_DIRS = env.ARES_PLUGIN_DIRS.split(path.delimiter).map(directory => path.resolve(directory)).join(path.delimiter)
   console.error(`Development runtime: ${snapshot}`)
-  child = spawn(electron, [snapshot, ...process.argv.slice(2).filter(arg => arg !== '--watch')], { cwd: root, env, stdio: ['inherit', 'inherit', 'inherit', 'ipc'] })
-  if (watch) stopWatching = watchUI(root, snapshot, () => {
-    if (child.connected) child.send({ type: 'ares-dev-reload' })
-  })
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal))
-  child.on('error', error => { console.error(error); process.exitCode = 1 })
-  child.on('close', (code, signal) => {
+  const finish = (code, signal) => {
     stopWatching?.()
     fs.rmSync(snapshot, { recursive: true, force: true })
     process.exitCode = code ?? (signal ? 1 : 0)
+  }
+  const launch = () => {
+    child = spawn(electron, [snapshot, ...process.argv.slice(2).filter(arg => arg !== '--watch')], { cwd: root, env: {...env, ...(currentSession ? {ARES_DEV_SESSION: JSON.stringify(currentSession)} : {})}, stdio: ['inherit', 'inherit', 'inherit', 'ipc'] })
+    child.on('message', message => { if (message?.type === 'ares-dev-session') currentSession = message.options })
+    child.on('error', error => { console.error(error); process.exitCode = 1 })
+    child.on('close', (code, signal) => { if (!restarting) finish(code, signal) })
+  }
+  const quitChild = () => new Promise(resolve => {
+    const old = child
+    if (!old || old.exitCode !== null || old.signalCode !== null) { resolve(); return }
+    const terminate = setTimeout(() => old.kill('SIGTERM'), 5000)
+    const kill = setTimeout(() => old.kill('SIGKILL'), 7000)
+    old.once('close', () => { clearTimeout(terminate); clearTimeout(kill); resolve() })
+    if (old.connected) old.send({type:'ares-dev-quit'}, error => { if (error) old.kill('SIGTERM') })
+    else old.kill('SIGTERM')
   })
+  launch()
+  if (watch) stopWatching = watchUI(root, snapshot, () => {
+    if (child.connected) child.send({ type: 'ares-dev-reload' })
+  }, {restart: async publish => {
+    if (stopping) return
+    restarting = true
+    try { await quitChild(); if (!stopping) { publish(); copy(sourceHost, host); launch() } }
+    finally { restarting = false; if (stopping) finish(0) }
+  }})
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { stopping = true; stopWatching?.(); void quitChild() })
 } catch (error) {
   stopWatching?.()
   child?.kill()

@@ -38,6 +38,8 @@ test('plugin manifests validate built paths, contributions and exact content pro
       games: [{ profile: 'verified-revision', sha256: 'a'.repeat(64) }],
     },
   })
+  assert.equal(validateManifest({...manifest, contributes:{panels:[{id:'browser',title:'Browser',placement:'modal'}]}}).contributes.panels[0].placement, 'modal')
+  assert.throws(() => validateManifest({...manifest, contributes:{panels:[{id:'browser',title:'Browser',placement:'window'}]}}))
   assert.equal(
     activation(m, 'Nintendo 64', { sha256: 'a'.repeat(64) }).profile,
     'verified-revision',

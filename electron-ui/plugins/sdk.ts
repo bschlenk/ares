@@ -39,6 +39,8 @@ export interface PluginContext {
     registerSection(id: string, descriptors: PluginSettingDescriptor[]): Promise<Disposer>
     mount(element: HTMLElement): Disposer
   }
+  /** Host-owned ROM library; no arbitrary filesystem paths or remote URLs. */
+  library: import('../library/contracts.js').LibraryAPI
   clipboard:{writeText(text:string):Promise<{copied:true;bytes:number}>};
   exports:{saveText(params:import('../services/export-contracts.js').TextExport):Promise<import('../services/export-contracts.js').ExportStatus>;recordFrames(params:import('../services/export-contracts.js').FrameExport):Promise<import('../services/export-contracts.js').RecordingExport|import('../services/export-contracts.js').ExportStatus>};
   scripts: {
@@ -60,7 +62,8 @@ export interface PluginContext {
       mount: (context: PanelContext) => void | Disposer,
     ): Disposer
     registerCommand(id: string, run: () => void | Promise<void>): Disposer
-    openPanel(id: string): void
+    closePanel(id: string): void
+    openPanel(id: string, size?: { width: number; height: number }): void
   }
   scope: {
     /** Push frozen native VI samples; callbacks never reread boundary RAM. At most one callback is in flight. */

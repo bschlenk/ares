@@ -8,8 +8,7 @@ before launching Ares Workbench:
   "version": 1,
   "values": {
     "presentation.theme": "green",
-    "presentation.scale": "integer",
-    "presentation.scanlines": false
+    "presentation.scale": "integer"
   }
 }
 ```
@@ -125,3 +124,48 @@ from a moved app preserves the configured command. Before helper installation,
 it falls back to the current bundle path. Install helpers before copying the
 configuration for a stable setup. Choose a stable instance name as well to keep
 the connection selection valid across app restarts.
+
+## Playback controls
+
+Settings → General → Emulation includes **Pause when the window loses focus**
+(`emulation.pauseOnFocusLoss`, off by default). Focus loss pauses ordinary play;
+focus return resumes only a pause introduced by this policy. Explicit Pause stays
+paused across focus changes. MCP pause/resume and bounded execution take control
+of playback and suspend focus pausing until the user explicitly pauses/resumes
+from the UI or loads another ROM. Session status reports the actual `paused` state,
+with `manual_paused` and `focus_paused` describing the separate UI/policy state.
+
+**Hold to fast-forward** (`emulation.fastForwardKey`, default `Space`) supports
+Record key and can be cleared to disable the keyboard binding. Hold that key while
+the video has focus, or hold the fast-forward toolbar button, to run without normal
+speed limiting. This takes priority over a controller binding using the same key.
+Audio is muted during fast-forward. Releasing the key/button, changing bindings,
+opening a modal, losing focus, or reloading the renderer restores normal speed.
+Fast-forward does not unpause the game or change bounded MCP execution.
+
+## Video effects
+
+Luminance, saturation, and gamma use linked sliders and numeric inputs; their
+values still apply through the native core's live video configuration. The old
+`presentation.scanlines` demo switch and its hard-coded WebGL darkening pass have
+been removed. Existing profiles may retain that obsolete key, but it has no effect.
+Real shader-preset support is not implemented in the Electron frontend yet.
+Upstream ares uses libretro Slang presets through librashader; those multi-pass
+presets need a compatible renderer/backend integration rather than a synthetic
+scanline checkbox.
+
+## Window title and workspace chrome
+
+The macOS native traffic lights remain in use. A custom title bar shows the game
+name and system artwork while editing a workspace, in side-by-side layouts, when
+video is below another panel, or with an open floating popup. Video-only layouts
+and full-width top-video vertical layouts keep video behind the transparent drag
+region. Fullscreen reserves no title-bar space. Outside layout editing, docked
+panel headers stay hidden and the resize dividers remain available.
+
+Keyboard gameplay does not require canvas focus. Native text fields and dropdowns
+keep their keys; sliders/radios keep navigation keys, and buttons keep their native
+activation keys. Other keys can reach the game from anywhere in the main window.
+Modal dialogs and layout editing block gameplay input. Clicking a dialog backdrop
+dismisses it and restores focus. Both playback toolbar and cursor hide after five
+seconds of pointer inactivity over the viewport.

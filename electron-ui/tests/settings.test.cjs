@@ -21,12 +21,12 @@ test('provisioned presentation settings survive updates, restarts, and removal/r
   assert.equal(entry(store, 'presentation.theme').source, 'profile');
   await Promise.all([store.set('presentation.theme', 'paper'), store.set('presentation.scale', 'integer')]);
   const removed = new SettingsStore(file, descriptors.filter(d => d.id !== 'temporary.side'));
-  await removed.set('presentation.scanlines', true);
+  await removed.set('presentation.scale', 'fit');
   assert.deepEqual(JSON.parse(fs.readFileSync(file)).values['future.setting'], { untouched: true });
   const restarted = new SettingsStore(file, descriptors);
   assert.equal(entry(restarted, 'presentation.theme').value, 'paper');
-  assert.equal(entry(restarted, 'presentation.scale').value, 'integer');
-  assert.equal(entry(restarted, 'presentation.scanlines').value, true);
+  assert.equal(entry(restarted, 'presentation.scale').value, 'fit');
+  assert.equal(entry(restarted, 'presentation.scanlines'), undefined);
   assert.equal(entry(restarted, 'temporary.side').value, true);
 });
 
