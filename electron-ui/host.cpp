@@ -778,7 +778,11 @@ int main(int argc, char** argv) {
   auto scriptInfo=[&](const ScriptService& job){auto config=scriptConfiguration+host.service.runtimeRequest("runtime.settings",{}).json;auto configHash=nall::Hash::SHA256({reinterpret_cast<const uint8_t*>(config.data()),config.size()}).digest();auto sourceHash=nall::Hash::SHA256({reinterpret_cast<const uint8_t*>(job.source.data()),job.source.size()}).digest();return "{\"capture_generation\":"+std::to_string(ares::Nintendo64::commandCapture.transformGeneration)+",\"frame_reference\":"+host.service.memoryTools.frameReference(execution.frame,execution.atBoundary)+",\"epoch\":"+std::to_string(host.service.epoch)+",\"frame\":"+std::to_string(execution.frame)+",\"frame_kind\":"+controlQuote(execution.frameKind)+",\"executor\":"+controlQuote(execution.executor)+",\"rom_sha256\":"+controlQuote(host.contentHash.data())+",\"config_sha256\":"+controlQuote(configHash.data())+",\"source_sha256\":"+controlQuote(sourceHash.data())+",\"n64_memory\":"+(n64?"true":"false")+"}";};
   scriptService.info=[&]{return scriptInfo(scriptService);};
   scriptService.canAdvance=[&]{return host.demonstration.state!="armed";};
-  scriptService.demonstration=[&](const std::string& method,const std::vector<std::string>& args){return host.demonstration.execute(method,args,scriptService.owner,host.service.epoch,execution.frame,host.contentHash.data(),host.service.session);};
+  scriptService.demonstration=[&](const std::string& method,const std::vector<std::string>& args){
+    auto result=host.demonstration.execute(method,args,scriptService.owner,host.service.epoch,execution.frame,host.contentHash.data(),host.service.session);
+    if(result.error.empty()&&method=="n64.demo.request"){std::lock_guard lock(runtime.inputMutex);host.armedInputJob=host.demonstration.id;host.inputStart.arm(host.demonstration.port==1);host.demonstration.inputStartReady=host.inputStart.neutral;}
+    return result;
+  };
   scriptService.regionRead=[&](const std::string& name,uint32_t offset,uint32_t length,std::vector<uint8_t>& bytes)->ControlResult {
     MemoryService::Region* match=nullptr;
     for(auto& region:host.memory.regions)if(region.id==name||region.node->name()==name.c_str()){if(match)return {"ambiguous_region",{}};match=&region;}

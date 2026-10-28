@@ -29,6 +29,8 @@ export class InputClips {
     const status=await request('session.status');
     let scriptPreparation=false;if(status.operation_id!=null){const op=await request('execution.status',{operationId:status.operation_id});scriptPreparation=op.kind==='script'&&op.owner===owner&&status.paused;}if((status.operation_id!=null||status.batch_id!=null)&&!scriptPreparation)throw new ServiceError('busy');
     const existing=await request('n64.demo.status');if(['armed','recording','replaying'].includes(existing.state))throw new ServiceError('busy');
+    const recording=await request('video.record.status');if(recording.available)throw new ServiceError('recording_exists');
+    const inputs=await request('n64.input.state');if(inputs.ports?.some((port:any)=>port.pending?.overridden||port.latched?.overridden))throw new ServiceError('input_owned');
     await request('state.info',{path:p.initialStatePath});
     await fs.mkdir(directory,{mode:0o700});
     const durableOwner='human-'+randomUUID();

@@ -65,6 +65,7 @@ struct DemonstrationService {
       owner=a[0];detached=true;return {{},status()};
     }
     if(method=="n64.demo.start"){
+      if(a.empty()&&state=="recording")return {{},status()};
       if(!a.empty()||state!="armed")return {"invalid_request",{}};
       if(execution->active||execution->reservation||input->hasOverrides())return {"busy",{}};
       state="recording";startedBy=who=="ui"?"ui_button":"mcp";deadline=Clock::now()+std::chrono::milliseconds(captureMs);start=end=f;epoch=e;*paused=false;return {{},status()};

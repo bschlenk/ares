@@ -1,7 +1,6 @@
 // Opt-in private-media regression. Originals are read-only; all writes are isolated.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
@@ -10,7 +9,7 @@ import {LocalServiceClient} from '../dist/services/local-endpoint.js';
 import {waitForScript} from '../dist/services/script-wait.js';
 const [bundle,romSource,stateSource,output]=process.argv.slice(2);
 assert(bundle&&romSource&&stateSource&&output,'Usage: continuous-packaged.js APP ROM STATE OUTPUT_DIRECTORY');
-const dir=await fs.mkdtemp(path.join(os.tmpdir(),'ares-continuous-'));
+const dir=await fs.mkdtemp('/tmp/ares-continuous-');
 await fs.mkdir(output,{recursive:true});
 const digest=async file=>createHash('sha256').update(await fs.readFile(file)).digest('hex');
 const original=[await digest(romSource),await digest(stateSource)];
