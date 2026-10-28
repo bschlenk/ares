@@ -2,6 +2,7 @@
 #include <iostream>
 #include <thread>
 #include <sys/resource.h>
+#include <csignal>
 #include <string>
 std::string controlQuote(const std::string& value){return "\""+value+"\"";}
 #include "../native/recording-service.hpp"
@@ -24,4 +25,8 @@ int main(){
  r.reset();assert(!r.frames.file);
  assert(start().error.empty());r.capture(rgba.data(),320,237,1,1,"vi",true);r.capture(rgba.data(),300,237,1,2,"vi",true);assert(r.reason=="dimensions_changed");
  r.reset();assert(start().error.empty());r.capture(rgba.data(),320,237,1,1,"vi",true);r.rebase("test",2);assert(r.frames.count==0&&r.epoch==2);r.reset();
+ // Force a real short disk write. Only full frames before the limit survive.
+ std::signal(SIGXFSZ,SIG_IGN);struct rlimit limit;getrlimit(RLIMIT_FSIZE,&limit);limit.rlim_cur=30;assert(!setrlimit(RLIMIT_FSIZE,&limit));
+ FrameSpool disk;assert(disk.open());for(unsigned n=0;n<4;++n)assert(disk.append(std::vector<uint8_t>(12,n)));
+ assert(!disk.seal());assert(disk.count==2);std::vector<uint8_t> prefix(12);assert(disk.read(12,prefix)&&prefix[0]==1);
 }
