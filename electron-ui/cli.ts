@@ -1,3 +1,4 @@
+import { ToolFailure, failureValue } from './tools/failures.js';
 import { waitForScript } from './services/script-wait.js';
 import { publishArtifact } from './services/artifact-writer.js';
 import fs from 'node:fs/promises';
@@ -37,12 +38,12 @@ export async function main(argv = process.argv.slice(2)) {
       }
       const started=await registry.call('run_script',{path:path.resolve(tool),args,state_paths,output_paths,file_base:process.cwd(),...(video_path?{video_path}:{})},abort.signal);
       const operation=JSON.parse(started.content[0].text);
-      if(started.isError)throw new Error(JSON.stringify(operation));
+      if(started.isError)throw new ToolFailure('script_start_failed', 'Could not start script', operation);
       const identity={...client.identity!};
       let consumed=false;
       try {
         const final=await waitForScript(client,operation,identity,{signal:abort.signal});
-        if(final.stop_reason!=='script_done'){const details=await client.request('script.read',identity,{offset:0,length:16384,operationId:operation.operation_id});throw new Error(JSON.stringify({...final,script_error:details.result?.error}));}
+        if(final.stop_reason!=='script_done'){const details=await client.request('script.read',identity,{offset:0,length:16384,operationId:operation.operation_id});throw new ToolFailure('script_error', String(details.result?.error??final.stop_reason), {...final,script_error:details.result?.error});}
         const chunks:Buffer[]=[];let offset=0,total=0;
         do {
           const page=await registry.call('script_result',{result_handle:operation.result_handle,offset,length:16384},abort.signal);
@@ -53,6 +54,7 @@ export async function main(argv = process.argv.slice(2)) {
           const bytes=Buffer.from(r.result.hex,'hex');chunks.push(bytes);offset+=bytes.length;total=r.result.bytes;
           if(!bytes.length&&offset<total)throw new Error('invalid_result_page');
         }while(offset<total);
+        if((final as any).script_output?.state==='failed')process.stderr.write(JSON.stringify({warning:{code:'script_output_failed',details:(final as any).script_output}})+'\n');
         const value=Buffer.concat(chunks).toString('utf8');
         if(outputPath)await publishArtifact(outputPath,false,async write=>{await write(value+'\n');},()=>{if(abort.signal.aborted)throw new Error('cancelled');});
         process.stdout.write(value+'\n');
@@ -82,7 +84,7 @@ export async function main(argv = process.argv.slice(2)) {
     (result.isError ? process.stderr : process.stdout).write(value + '\n');
     if (result.isError || abort.signal.aborted) process.exitCode = abort.signal.aborted ? 130 : 1;
   } catch (error) {
-    process.stderr.write(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }) + '\n');
+    process.stderr.write(JSON.stringify(failureValue(error)) + '\n');
     process.exitCode = abort.signal.aborted ? 130 : 1;
   } finally {
     process.removeListener('SIGINT', interrupt);
