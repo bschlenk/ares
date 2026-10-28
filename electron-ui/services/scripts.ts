@@ -133,7 +133,7 @@ export class ScriptJobs {
     try {
       if(p.videoPath){
         const paused=await client.request('session.pause',identity,undefined,owner);if(!paused.ok)throw new ServiceError(paused.error!);
-        const video=await client.request('video.record.scriptStart',identity,{maxFrames:36000,maxBytes:268435456,fps:60,timeoutMs:p.timeoutMs,discard:false},owner);if(!video.ok)throw new ServiceError(video.error!);
+        const video=await client.request('video.record.scriptStart',identity,{maxFrames:36000,maxBytes:1073741824,fps:60,timeoutMs:p.timeoutMs,discard:false},owner);if(!video.ok)throw new ServiceError(video.error!);
       }
       const op=await startScript(client,identity,p,owner,()=>current()&&!job.cancelled);job.id=op.operation_id;
       this.publications.set(op.operation_id,{state:'pending',result_handle:handle});
@@ -184,10 +184,10 @@ export class ScriptJobs {
           if(p.videoPath){
             if((page.stop_reason??completed.result?.stop_reason)!=='script_done')throw new ServiceError('script_video_interrupted');
             const status=await client.request('video.record.status',client.identity,undefined,owner);
-            if(!status.ok||!status.result||!status.result.active)throw new ServiceError('script_video_incomplete: '+(status.result?.stop_reason??status.error));
+            if(!status.ok||!status.result||!status.result.frames)throw new ServiceError('script_video_empty: '+(status.result?.stop_reason??status.error));
             const saved=await invoke.request('artifact.videoStop',client.identity,{path:p.videoPath,overwrite:false},owner);
             if(!saved.ok)throw new ServiceError(saved.error!);
-            if(generation===this.generation)this.outputs.set(id,{...this.outputs.get(id),state:'committed',video:saved.result});
+            if(generation===this.generation)this.outputs.set(id,{...this.outputs.get(id),state:'committed',video:saved.result,video_complete:status.result.active,warnings:status.result.active?[]:['Video stopped early: '+status.result.stop_reason]});
           }
           return;
         }

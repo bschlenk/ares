@@ -9,7 +9,7 @@ export class RecordingArtifacts {
   close() { for (const job of this.jobs.values()) job.abort(); }
   async stop(client: SessionClient & { identity: SessionIdentity }, identity: SessionIdentity, path: string, overwrite: boolean, owner: string, current: () => boolean) {
     if (this.jobs.has(owner) || this.jobs.size >= 2) throw new ServiceError('busy');
-    const job = new AbortController(), deadline = performance.now() + 25000; this.jobs.set(owner, job);
+    const job = new AbortController(), deadline = performance.now() + 300000; this.jobs.set(owner, job);
     const guard = () => {
       if (job.signal.aborted || !current()) throw new ServiceError('artifact_cancelled');
       if (client.identity.session !== identity.session || client.identity.epoch !== identity.epoch) throw new ServiceError('stale_epoch');
@@ -35,7 +35,7 @@ export class RecordingArtifacts {
         }
         await write(avi.index);
         unwrap(await client.request('video.record.status', identity, undefined, owner));
-      }, guard, 270000000, () => { committed = true; });
+      }, guard, 2150000000, () => { committed = true; });
       const result = { ...metadata, ...artifact, available: false, size: artifact.bytes, duration_seconds: snapshot.frames / snapshot.fps };
       try { unwrap(await client.request('video.record.release', identity, { snapshotId, consume: true }, owner)); snapshotId = undefined; return result; }
       catch (error) { return { ...result, cleanup_error: error instanceof ServiceError ? error.code : 'release_failed' }; }
