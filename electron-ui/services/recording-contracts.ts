@@ -6,7 +6,7 @@ export interface RecordingStatus {
 export interface RecordingServiceMap {
   'video.record.scriptStart': RecordingServiceMap['video.record.start'];
   'video.record.cancel': {params:undefined;result:{released:true}};
-  'video.record.start': { params: { maxFrames: number; maxBytes: number; fps: number; timeoutMs: number; discard: boolean }; result: RecordingStatus };
+  'video.record.start': { params: { maxFrames: number; maxBytes: number; fps: number; timeoutMs: number; discard: boolean; source?:'presented'|'framebuffer' }; result: RecordingStatus };
   'video.record.status': { params: undefined; result: RecordingStatus };
   'video.record.begin': { params: undefined; result: RecordingStatus & { snapshot_id: number } };
   'video.record.read': { params: { snapshotId: number; offset: number; length: number }; result: { snapshot_id: number; offset: number; length: number; hex: string } };
@@ -20,7 +20,7 @@ export function encodeRecording(method: string, p: any): string | undefined {
   if(method==='video.record.cancel')return p===undefined?'':undefined;
   if (method === 'artifact.videoStop') return keys(p, 'overwrite,path') && typeof p.path === 'string' && p.path.length > 0 && p.path.length <= 4096 && !p.path.includes('\0') && typeof p.overwrite === 'boolean' ? '' : undefined;
   if (method === 'video.record.status' || method === 'video.record.begin') return p === undefined ? '' : undefined;
-  if (method === 'video.record.start') return keys(p, 'discard,fps,maxBytes,maxFrames,timeoutMs') && int(p.maxFrames, 36000) && p.maxFrames > 0 && int(p.maxBytes, 2147483648) && p.maxBytes >= 1048576 && int(p.fps, 120) && p.fps > 0 && int(p.timeoutMs, 3600000) && p.timeoutMs > 0 && typeof p.discard === 'boolean' ? ` ${p.maxFrames} ${p.maxBytes} ${p.fps} ${p.timeoutMs} ${p.discard ? 1 : 0}` : undefined;
+  if (method === 'video.record.start') return (keys(p, 'discard,fps,maxBytes,maxFrames,timeoutMs') || keys(p, 'discard,fps,maxBytes,maxFrames,source,timeoutMs') && ['presented','framebuffer'].includes(p.source)) && int(p.maxFrames, 36000) && p.maxFrames > 0 && int(p.maxBytes, 2147483648) && p.maxBytes >= 1048576 && int(p.fps, 120) && p.fps > 0 && int(p.timeoutMs, 3600000) && p.timeoutMs > 0 && typeof p.discard === 'boolean' ? ` ${p.maxFrames} ${p.maxBytes} ${p.fps} ${p.timeoutMs} ${p.discard ? 1 : 0}${p.source?` ${p.source}`:''}` : undefined;
   if (method === 'video.record.release') return keys(p, 'consume,snapshotId') && int(p.snapshotId) && p.snapshotId > 0 && typeof p.consume === 'boolean' ? ` ${p.snapshotId} ${p.consume ? 1 : 0}` : undefined;
   if (method === 'video.record.read') return keys(p, 'length,offset,snapshotId') && int(p.snapshotId) && p.snapshotId > 0 && int(p.offset, 2147483648) && int(p.length, 16384) && p.length > 0 ? ` ${p.snapshotId} ${p.offset} ${p.length}` : undefined;
 }

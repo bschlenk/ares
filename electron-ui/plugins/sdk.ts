@@ -1,3 +1,4 @@
+import type {DemonstrationOptions} from './contracts.js';
 import type { PluginSettingDescriptor, PreferencesBridge } from '../settings/contracts.js'
 import type {
   SessionIdentity,
@@ -41,6 +42,7 @@ export interface PluginContext {
   }
   /** Host-owned ROM library; no arbitrary filesystem paths or remote URLs. */
   library: import('../library/contracts.js').LibraryAPI
+  demonstrations:{request(params:DemonstrationOptions):Promise<import('../services/demonstration-contracts.js').DemonstrationStatus>};
   clipboard:{writeText(text:string):Promise<{copied:true;bytes:number}>};
   exports:{saveText(params:import('../services/export-contracts.js').TextExport):Promise<import('../services/export-contracts.js').ExportStatus>;recordFrames(params:import('../services/export-contracts.js').FrameExport):Promise<import('../services/export-contracts.js').RecordingExport|import('../services/export-contracts.js').ExportStatus>};
   scripts: {

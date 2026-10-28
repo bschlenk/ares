@@ -52,11 +52,11 @@ struct RecordingService {
     if(method == "video.record.cancel"){if(!args.empty())return {"invalid_request",{}};clear();return {{},"{\"released\":true}"};}
     if(method == "video.record.start" || method == "video.record.scriptStart") {
       uint64_t count, bytes, rate, ms;
-      if(args.size() != 5 || !ExecutionService::number(args[0], count) || !count || count > 36000 || !ExecutionService::number(args[1], bytes) || bytes < (1 << 20) || bytes > (2ull << 30) ||
+      if((args.size() != 5 && args.size() != 6) || (args.size()==6 && args[5]!="framebuffer" && args[5]!="presented") || !ExecutionService::number(args[0], count) || !count || count > 36000 || !ExecutionService::number(args[1], bytes) || bytes < (1 << 20) || bytes > (2ull << 30) ||
         !ExecutionService::number(args[2], rate) || !rate || rate > 120 || !ExecutionService::number(args[3], ms) || !ms || ms > 3600000 || (args[4] != "0" && args[4] != "1")) return {"invalid_request", {}};
       if(pin) return {"busy", {}};
       if(active || (available && args[4] != "1")) return {"recording_exists", {}};
-      clear(); if(!frames.open()) return {"spool_open_failed", {}}; exact=method=="video.record.scriptStart"; owner = who; active = available = true; maxFrames = count; maxBytes = bytes; fps = rate;
+      clear(); if(!frames.open()) return {"spool_open_failed", {}}; exact=args.size()==6?args[5]=="framebuffer":method=="video.record.scriptStart"; owner = who; active = available = true; maxFrames = count; maxBytes = bytes; fps = rate;
       epoch = e; frameKind = kind; startFrame = endFrame = f; deadline = Clock::now() + std::chrono::milliseconds(ms);
       return {{}, status()};
     }
@@ -64,7 +64,7 @@ struct RecordingService {
     if(method == "video.record.begin") {
       if(!args.empty()) return {"invalid_request", {}};
       if(pin) return {"busy", {}};
-      finish("requested"); if(!frames.seal()) reason="spool_write_failed"; if((frames.count == 0)) return {"no_frames", {}};
+      finish("requested"); if(!frames.seal()){reason="spool_write_failed";if(exact&&frames.count)endFrame=startFrame+frames.count-1;} if(frames.count == 0) return {"no_frames", {}};
       pin = nextId++; pinDeadline = Clock::now() + std::chrono::seconds(360);
       auto json = status(); json.pop_back(); return {{}, json + ",\"snapshot_id\":" + std::to_string(pin) + "}"};
     }

@@ -20,6 +20,7 @@ struct ScriptService {
   unsigned artifactCount=0;
   std::function<ControlResult(const std::string&,const std::vector<std::string>&)> demonstration;
   ScriptJobQueue jobQueue;
+  std::function<bool()> canAdvance;
   uint64_t hostId=0;
   bool hostWaiting=false;
   ExecutionService* execution = nullptr;
@@ -114,6 +115,7 @@ struct ScriptService {
   }
   static JSValue advance(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
     auto& s=self(c);uint64_t n;
+    if(s.canAdvance&&!s.canAdvance())return fail(c,"demonstration_armed");
     if(s.readOnly)return fail(c,"read_only_callback");
     if(argc!=1||!number(c,argv[0],n,1000000)||s.waiting||s.hostWaiting||n>s.frameLimit-s.framesUsed)return fail(c,"invalid_frame_advance");
     if(n&&!s.execution->supported)return fail(c,"frame_boundary_unavailable");
@@ -151,7 +153,7 @@ struct ScriptService {
   static JSValue host(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
     auto& s=self(c);if(s.readOnly||s.waiting||s.hostWaiting||argc!=2||s.hostId>=64||!JS_IsString(argv[1]))return fail(c,"invalid_host_work");
     size_t kindLength;const char* kind=JS_ToCStringLen(c,&kindLength,argv[0]);if(!kind)return JS_EXCEPTION;if(kindLength>32){JS_FreeCString(c,kind);return fail(c,"invalid_host_work");}s.hostKind.assign(kind,kindLength);JS_FreeCString(c,kind);
-    if(s.hostKind!="state_load"&&s.hostKind!="state_save"&&s.hostKind!="screenshot"&&s.hostKind!="input_export"&&s.hostKind!="input_import")return fail(c,"invalid_host_work");
+    if(s.hostKind!="state_load"&&s.hostKind!="state_save"&&s.hostKind!="screenshot"&&s.hostKind!="input_export"&&s.hostKind!="input_import"&&s.hostKind!="input_prepare")return fail(c,"invalid_host_work");
     if(s.hostKind!="state_load"&&s.artifactCount>=8)return fail(c,"artifact_limit");
     JSValue encoded=JS_JSONStringify(c,argv[1],JS_UNDEFINED,JS_UNDEFINED);if(JS_IsException(encoded))return encoded;
     size_t length;const char* text=JS_ToCStringLen(c,&length,encoded);if(!text||length>8192){if(text)JS_FreeCString(c,text);JS_FreeValue(c,encoded);return fail(c,"invalid_path");}

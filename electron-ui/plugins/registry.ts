@@ -830,7 +830,7 @@ export class PluginRegistry {
   async request(token: string, method: ServiceMethod, params: any) {
     const r = this.lease(token)
     if(method==='scripts.run'||method==='scripts.observe') {
-      if(params?.outputPath!==undefined||(params?.statePaths?.length??0)>0||(params?.outputPaths?.length??0)>0)throw new ServiceError('plugin_capability_denied');
+      if(params?.videoPath!==undefined||params?.outputPath!==undefined||(params?.statePaths?.length??0)>0||(params?.outputPaths?.length??0)>0)throw new ServiceError('plugin_capability_denied');
       if(params?.path!==undefined) {
         if(typeof params.path!=='string'||path.isAbsolute(params.path)||params.source!==undefined)throw new ServiceError('plugin_capability_denied');
         const file=await this.within(r.root,params.path);if(!(await fs.stat(file)).isFile())throw new ServiceError('plugin_capability_denied');
@@ -845,6 +845,7 @@ export class PluginRegistry {
     if (['scripts.observe','script.observerRead','script.observerStop'].includes(method)) capability = 'memory.read'
     if(method==='n64.capture.control'){if(!r.manifest!.capabilities.includes('debug.read'))throw new ServiceError('plugin_capability_denied');capability='session.control';}
     if (method === 'script.read') capability = 'session.control'
+    if (['n64.demo.status','n64.demo.read'].includes(method))capability='session.read';
     if (method === 'session.status') capability = 'session.read'
     if (['memory.regions', 'memory.read',
               'memory.readMany', 'memory.sample', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes', 'n64.memory.readMany', 'n64.memory.read'].includes(method))

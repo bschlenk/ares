@@ -94,6 +94,7 @@ export interface PluginAction {
 export interface PluginBridge {
   library(token: string, request: import('../library/contracts.js').LibraryRequest): Promise<unknown | PluginBridgeFailure>;
   clipboard(token:string,text:string):Promise<{copied:true;bytes:number}|PluginBridgeFailure>;
+  demonstration(token:string,params:DemonstrationOptions):Promise<import('../services/demonstration-contracts.js').DemonstrationStatus|PluginBridgeFailure>;
   exportText(token:string,params:import('../services/export-contracts.js').TextExport):Promise<import('../services/export-contracts.js').ExportStatus|PluginBridgeFailure>;
   recordFrames(token:string,params:import('../services/export-contracts.js').FrameExport):Promise<import('../services/export-contracts.js').ExportStatus|PluginBridgeFailure>;
   finishExport(token:string,id:string,cancel:boolean):Promise<import('../services/export-contracts.js').ExportStatus|PluginBridgeFailure>;
@@ -131,3 +132,5 @@ export interface PluginBridge {
   changed(callback: (catalog: PluginCatalog) => void): () => void
 }
 export type PluginStatusReply = SessionReply<SessionStatus>
+
+export interface DemonstrationOptions {prompt:string;setup?:{address:string;hex:string}[];video?:boolean;maxFrames?:number;maxSeconds?:number}

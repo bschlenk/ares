@@ -25,18 +25,19 @@ export async function main(argv = process.argv.slice(2)) {
     }
     if(process.env.ARES_OWNER_LEASE&&!['build_info','owner_lease'].includes(tool))await client.manage({operation:'owner_lease',action:'use',lease_id:process.env.ARES_OWNER_LEASE});
     if (command === 'run' && tool) {
-      let args: unknown = {}, outputPath: string | undefined; let retain=false;let video_path:string|undefined;const state_paths:string[]=[],output_paths:string[]=[];
+      let args: unknown = {}, outputPath: string | undefined; let retain=false;let video_path:string|undefined;let videoSource:'presented'|'framebuffer'='framebuffer';const state_paths:string[]=[],output_paths:string[]=[];
       for (let i=0;i<flags.length;i+=2) {
         if(flags[i]==='--retain-result'){retain=true;--i;continue;}
         if (!flags[i+1]) throw new Error('Expected --args FILE or --output FILE');
         if (flags[i]==='--args') args=JSON.parse(await fs.readFile(flags[i+1],'utf8'));
         else if (flags[i]==='--state') state_paths.push(path.resolve(flags[i+1]));
         else if (flags[i]==='--artifact') output_paths.push(path.resolve(flags[i+1]));
+        else if(flags[i]==='--video-source'){if(!['presented','framebuffer'].includes(flags[i+1]))throw new ToolFailure('invalid_parameters','--video-source must be presented or framebuffer');videoSource=flags[i+1] as typeof videoSource;}
         else if (flags[i]==='--video') video_path=path.resolve(flags[i+1]);
         else if (flags[i]==='--output') outputPath=flags[i+1];
         else throw new Error(`Unknown flag: ${flags[i]}`);
       }
-      const started=await registry.call('run_script',{path:path.resolve(tool),args,state_paths,output_paths,file_base:process.cwd(),...(video_path?{video_path}:{})},abort.signal);
+      const started=await registry.call('run_script',{path:path.resolve(tool),args,state_paths,output_paths,file_base:process.cwd(),...(video_path?{video_path,video_source:videoSource}:{})},abort.signal);
       const operation=JSON.parse(started.content[0].text);
       if(started.isError)throw new ToolFailure('script_start_failed', 'Could not start script', operation);
       const identity={...client.identity!};

@@ -1,5 +1,5 @@
 import {FocusPause} from './focus-pause.js';
-import { InputClips } from './input-clips.js';
+import { heldButtons, InputClips } from './input-clips.js';
 import { startScript, ScriptJobs } from './scripts.js';
 import type { ScriptRunParams } from './script-contracts.js';
 import { MemoryArtifacts } from './memory-artifacts.js';
@@ -105,6 +105,7 @@ export class SessionRouter {
     return method.startsWith('session.') ? this.decorateState(reply as SessionReply) as SessionReply<ServiceResult<M>> : reply;
   }
   private async dispatchRequest<M extends ServiceMethod>(method: M, identity?: SessionIdentity, params?: ServiceParams<M>, owner = 'ui'): Promise<SessionReply<ServiceResult<M>>> {
+    if(method.startsWith('n64.demo.'))owner=this.inputClips.ownerFor(owner);
     if (!METHODS.includes(method)) throw new ServiceError('invalid_request');
     if (method === 'execution.release') { const start=this.observerStarts.get(owner);if(start)start.cancelled=true; this.scripts.release(owner); this.memoryArtifacts.release(owner); this.memoryDumps.release(owner); this.rdpArtifacts.release(owner); this.batches.release(owner); this.artifacts.release(owner); this.screenshots.release(owner); this.audio.release(owner); this.recording.release(owner); this.states.release(owner); this.stateArtifacts.release(owner); this.stateLoading.release(owner); }
     if (!this.client) throw new ServiceError('native_host_disconnected');
@@ -115,7 +116,7 @@ export class SessionRouter {
       const envelope = { protocol: PROTOCOL, id: `artifact${++this.nextArtifactId}`, ...startingIdentity };
       try {
         let result;
-        if(method==='artifact.inputRequest'||method==='artifact.inputExport'||method==='artifact.inputImport')result=await this.inputClips.run(this,startingIdentity,method,params,owner,()=>this.client===client);
+        if(method==='artifact.inputRetry'||method==='artifact.inputRequest'||method==='artifact.inputExport'||method==='artifact.inputImport')result=await this.inputClips.run(this,startingIdentity,method,params,owner,()=>this.client===client);
         else if (method === 'scripts.run') result = await this.scripts.start(client, this, startingIdentity, params as ScriptRunParams, owner, () => this.client === client);
         else if (method === 'scripts.observe') result = await this.startObserver(client,startingIdentity,params as ScriptRunParams,owner);
         else if (method === 'experiment.cancelBatch') {
@@ -137,7 +138,7 @@ export class SessionRouter {
           const p = params as { imageId: string; offset: number; length: number };
           result = method === 'artifact.imageRead' ? this.screenshots.read(p.imageId, p.offset, p.length, owner, startingIdentity) : this.screenshots.releaseImage(p.imageId, owner);
         }
-        return { ...envelope, ...((method === 'state.load' || method === 'experiment.batch') ? { epoch: (result as { epoch: number }).epoch } : {}), ok: true, result } as SessionReply<ServiceResult<M>>;
+        return { ...envelope, ...((method === 'state.load' || method === 'experiment.batch' || method==='artifact.inputRequest') ? { epoch: (result as { epoch: number }).epoch } : {}), ok: true, result } as SessionReply<ServiceResult<M>>;
       } catch (error) {
         if(!(error instanceof ServiceError))this.diagnose(method,error);
         return { ...envelope, ...client.identity, ok: false, error: error instanceof ServiceError ? error.code : ('unexpected_error: '+(error instanceof Error?error.message:String(error))).slice(0,2048) };
@@ -148,6 +149,8 @@ export class SessionRouter {
     const child = (method === 'session.pause' || method === 'execution.cancel') ? this.batches.child(owner) : undefined;
     const reply = await client.request(method, identity, params, child ?? owner);
     if(method==='execution.status'&&reply.ok&&reply.result){const output=this.scripts.outputs.get((reply.result as {operation_id:number}).operation_id);if(output)(reply.result as any).script_output=output;Object.assign(reply.result,this.scripts.metadata((reply.result as any).operation_id));}
+    if(reply.ok&&method==='n64.demo.read')for(const e of (reply.result as any).events)e.held=heldButtons(e.buttons);
+    if(reply.ok&&method.startsWith('n64.demo.')&&reply.result)Object.assign(reply.result,this.inputClips.metadata((reply.result as any).job_id));
     const cancelled = reply.result as { owner?: string; stop_reason?: string };
     if (child && reply.ok && (method === 'session.pause' || cancelled.owner === child && cancelled.stop_reason === 'cancelled')) this.batches.interrupt(owner, method === 'session.pause' ? 'paused' : 'cancelled');
     if (method.startsWith('session.')) mainCapabilities(reply);
