@@ -12,7 +12,7 @@ test('native input clips preserve exact button/axis latch traces, replay, bounds
  try{
   assert.equal((await request('n64.demo.cancel',undefined,'foreign')).state,'idle');
   await arm();const foreignCancelActive=await router.request('n64.demo.cancel',undefined,undefined,'foreign');assert.equal(foreignCancelActive.error,'wrong_owner');assert.equal((await request('n64.demo.status')).state,'armed');const foreign=await router.request('n64.demo.start',undefined,undefined,'foreign');assert.equal(foreign.error,'wrong_owner');
-  await request('n64.demo.start');await request('session.pause');
+  const firstStart=await request('n64.demo.start');assert.equal((await request('n64.demo.start')).start_frame,firstStart.start_frame);await request('session.pause');
   await request('n64.input.set',{port:1,buttons:1,x:19300,y:-11580,timeoutFrames:0,timeoutMs:0});await run(3);
   await request('n64.input.set',{port:1,buttons:2,x:-19300,y:11580,timeoutFrames:0,timeoutMs:0});await run(2);
   const stopped=await request('n64.demo.stop');assert(stopped.complete);assert(!stopped.overflow);

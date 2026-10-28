@@ -4,11 +4,11 @@ const os = require('node:os')
 const path = require('node:path')
 const { spawn } = require('node:child_process')
 const { once } = require('node:events')
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ares-profile-lock-'))
+const temporary = fs.mkdtempSync('/tmp/ares-profile-lock-')
 const children = []
 function launch(name) {
   const child = spawn(require('electron'), [path.join(__dirname, 'electron-profile.js')], {
-    env: { ...process.env, ARES_PROFILE_DIR: path.join(temporary, name), ARES_SAVE_DIR: '', ARES_ROM: '', ARES_BACKGROUND_TEST: '1', ARES_DEFAULT_PLUGINS: '0', ARES_SILENT: '1' },
+    env: { ...process.env, ARES_PROFILE_DIR: path.join(temporary, name), ARES_SERVICE_DIR:path.join(temporary,name+'-ipc'),ARES_ENABLE_SERVICES:'1', ARES_SAVE_DIR: '', ARES_ROM: '', ARES_BACKGROUND_TEST: '1', ARES_DEFAULT_PLUGINS: '0', ARES_SILENT: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   child.output = ''
@@ -28,6 +28,7 @@ async function ready(child) {
 async function run() {
   const first = launch('shared')
   await ready(first)
+  const {profileHolder}=await import('../dist/services/profile-holder.js');const holder=await profileHolder(path.join(temporary,'shared'));assert.equal(holder.pid,first.pid);assert.equal(holder.process_exists,true);assert.equal(holder.service_directory,path.join(temporary,'shared-ipc'));assert.equal(holder.service_directory_exists,true);assert(!Number.isNaN(Date.parse(holder.started_at)));
   const duplicate = launch('shared')
   const [code] = await duplicate.closed
   assert.equal(code, 1, duplicate.output)

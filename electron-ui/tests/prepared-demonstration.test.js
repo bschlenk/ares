@@ -20,7 +20,7 @@ test('prepared demonstration loads, writes, snapshots and arms under durable own
  }};
  try{
   const result=await service.run(client,{session:'test',epoch:1},'artifact.inputRequest',{initialStatePath:'/state',outputDirectory:path.join(dir,'recording'),prompt:'test',port:1,source:'human',maxFrames:60,timeoutMs:5000,setup:[{address:'0x80000010',hex:'01'},{address:'0x80000011',hex:'02'}]},'caller',()=>true);
-  assert.deepEqual(calls.slice(3,10).map(c=>c[0]),['session.pause','state.load','n64.state.layout','n64.memory.write','n64.memory.write','state.save','n64.demo.request']);
+  assert.deepEqual(calls.slice(5,12).map(c=>c[0]),['session.pause','state.load','n64.state.layout','n64.memory.write','n64.memory.write','state.save','n64.demo.request']);
   assert(owner.startsWith('human-'));assert.equal(service.ownerFor('caller'),owner);assert.equal(result.publication,'waiting');
   await fs.writeFile(path.join(dir,'recording/input.json'),'occupied');state='ready';
   for(let n=0;n<100&&service.metadata(1).publication!=='failed';++n)await new Promise(r=>setTimeout(r,20));
@@ -33,4 +33,10 @@ test('prepared demonstration loads, writes, snapshots and arms under durable own
   assert.equal(JSON.parse(await fs.readFile(path.join(dir,'recording/manifest.json'),'utf8')).initial_state.sha256,'b'.repeat(64));
   assert.deepEqual(heldButtons(0x4100),['b','right']);
  }finally{service.close();await fs.rm(dir,{recursive:true,force:true});}
+});
+test('preparation refuses another recording before pausing or loading',async()=>{
+ const service=new InputClips(),calls=[];
+ const client={request:async(method,identity)=>{calls.push(method);return {ok:true,...identity,result:method==='video.record.status'?{available:true}:method==='n64.demo.status'?{state:'idle'}:{paused:true,operation_id:null,batch_id:null}};}};
+ await assert.rejects(service.run(client,{session:'test',epoch:1},'artifact.inputRequest',{initialStatePath:'/state',outputDirectory:'/unused'},'caller',()=>true),{code:'recording_exists'});
+ assert(!calls.includes('session.pause'));assert(!calls.includes('state.load'));service.close();
 });
