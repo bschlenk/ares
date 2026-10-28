@@ -8,7 +8,7 @@
 struct RecordingService {
   using Clock = std::chrono::steady_clock;
   std::mutex mutex;
-  bool active = false, available = false, exact = false;
+  bool active = false, available = false, exact = false, scriptOwned = false;
   std::string owner, reason, frameKind = "unavailable";
   uint64_t epoch = 0, startFrame = 0, endFrame = 0, nextId = 1, pin = 0;
   uint64_t maxFrames = 600, maxBytes = 128ull << 20, fps = 60, width = 0, height = 0;
@@ -16,10 +16,10 @@ struct RecordingService {
   FrameSpool frames;
   void finish(const std::string& why) { if(active) { active = false; reason = why; } }
   void expire() { if(active && Clock::now() >= deadline) finish("seconds_limit"); if(pin && Clock::now() >= pinDeadline) pin = 0; }
-  void clear() { active = available = exact = false; owner.clear(); reason.clear(); frames.clear(); pin = 0; width = height = epoch = startFrame = endFrame = 0; }
+  void clear() { active = available = exact = scriptOwned = false; owner.clear(); reason.clear(); frames.clear(); pin = 0; width = height = epoch = startFrame = endFrame = 0; }
   void reset() { std::lock_guard lock(mutex); clear(); }
   void releaseOwner(const std::string& who) { std::lock_guard lock(mutex); if(owner == who) clear(); }
-  void rebase(const std::string& who,uint64_t e) {std::lock_guard lock(mutex);if(exact&&owner==who&&available){frames.open();width=height=startFrame=endFrame=0;epoch=e;}else clear();}
+  void rebase(const std::string& who,uint64_t e) {std::lock_guard lock(mutex);if(scriptOwned&&owner==who&&available){frames.open();width=height=startFrame=endFrame=0;epoch=e;}else clear();}
   void capture(const uint8_t* rgba, uint32_t w, uint32_t h, uint64_t e, uint64_t f, const std::string& kind = "unavailable", bool boundary = false) {
     std::lock_guard lock(mutex); expire(); if(!active || exact!=boundary) return;
     if(exact && f<=endFrame)return;
@@ -56,7 +56,7 @@ struct RecordingService {
         !ExecutionService::number(args[2], rate) || !rate || rate > 120 || !ExecutionService::number(args[3], ms) || !ms || ms > 3600000 || (args[4] != "0" && args[4] != "1")) return {"invalid_request", {}};
       if(pin) return {"busy", {}};
       if(active || (available && args[4] != "1")) return {"recording_exists", {}};
-      clear(); if(!frames.open()) return {"spool_open_failed", {}}; exact=args.size()==6?args[5]=="framebuffer":method=="video.record.scriptStart"; owner = who; active = available = true; maxFrames = count; maxBytes = bytes; fps = rate;
+      clear(); if(!frames.open()) return {"spool_open_failed", {}}; scriptOwned=method=="video.record.scriptStart"; exact=args.size()==6?args[5]=="framebuffer":method=="video.record.scriptStart"; owner = who; active = available = true; maxFrames = count; maxBytes = bytes; fps = rate;
       epoch = e; frameKind = kind; startFrame = endFrame = f; deadline = Clock::now() + std::chrono::milliseconds(ms);
       return {{}, status()};
     }
