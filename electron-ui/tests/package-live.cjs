@@ -123,6 +123,7 @@ async function run() {
     ],
     { cwd: temporary, env, input: 'quit\n', timeout: 10000 },
   )
+  env.ARES_PROFILE_DIR=path.join(temporary,'profile')
   const child = spawn(
     path.join(bundle, 'Contents/MacOS/Ares'),
     [`--user-data-dir=${path.join(temporary, 'profile')}`],

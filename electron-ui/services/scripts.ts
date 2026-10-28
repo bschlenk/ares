@@ -117,6 +117,7 @@ export class ScriptJobs {
       await new Promise(resolve=>setTimeout(resolve,10));
     }
   }
+  ownedEpoch(owner:string,identity:SessionIdentity){const id=this.jobs.get(owner)?.id;if(id){const lineage=this.lineages.get(id);if(lineage&&lineage.session===identity.session&&!lineage.epochs.includes(identity.epoch))lineage.epochs.push(identity.epoch);}}
   release(owner:string) { const job=this.jobs.get(owner);if(job)job.cancelled=true; }
   close() { ++this.generation;for(const job of this.jobs.values())job.cancelled=true;this.jobs.clear();this.outputs.clear();this.lineages.clear(); }
   async start(client:NativeSessionClient,invoke:import('./contracts.js').SessionClient,identity:SessionIdentity,p:ScriptRunParams,owner:string,current:()=>boolean) {

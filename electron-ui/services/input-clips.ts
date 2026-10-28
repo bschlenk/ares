@@ -35,7 +35,9 @@ export class InputClips {
     try {
      if(!scriptPreparation)await request('session.pause');
      await request('state.load',{path:p.initialStatePath,resume:false,keepOverrides:false});
-     for(const write of p.setup??[])await request('n64.memory.write',{address:write.address,hex:write.hex,view:'rdram'});
+     const writes=p.setup??[];
+     if(writes.length){const layout=await request('n64.state.layout');for(const w of writes){const address=BigInt(w.address),physical=address&0x1fffffffn;if(!((address<=0x7fffffn)||(address>=0x80000000n&&address<=0x807fffffn)||(address>=0xa0000000n&&address<=0xa07fffffn))||physical+BigInt(w.hex.length/2)>BigInt(layout.size))throw new ServiceError('setup_write_out_of_rdram');}}
+     for(const write of writes)await request('n64.memory.write',{address:write.address,hex:write.hex,view:'rdram'});
      const state=await request('state.save',{path:path.join(directory,'initial.state'),overwrite:false,metadata:true});
      if(p.video)await request('video.record.scriptStart',{maxFrames:p.maxFrames,maxBytes:1073741824,fps:60,timeoutMs:3600000,discard:false,source:'framebuffer'});
      const result=await request('n64.demo.request',{maxFrames:p.maxFrames,timeoutMs:p.timeoutMs,waitingMs:p.waitingMs??p.timeoutMs,port:p.port,source:p.source,prompt:p.prompt,stateHash:state.sha256});
@@ -65,7 +67,7 @@ export class InputClips {
      },100);job.timer.unref();
      while(this.jobs.size>8){const first=this.jobs.keys().next().value!;clearInterval(this.jobs.get(first)?.timer);this.jobs.delete(first);}
      return {...result,...this.metadata(result.job_id)};
-    }catch(e){await request('session.pause').catch(()=>{});await request('video.record.cancel').catch(()=>{});throw e;}
+    }catch(e){if(!scriptPreparation)await request('session.pause').catch(()=>{});await request('video.record.cancel').catch(()=>{});throw e;}
    }
    await request('session.pause');
    let state:any;if(p.statePath)state=await request('state.save',{path:p.statePath,overwrite:false,metadata:true});

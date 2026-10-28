@@ -10,6 +10,7 @@ test('prepared demonstration loads, writes, snapshots and arms under durable own
  const status=()=>({job_id:1,state,prompt:'test',source:'human',port:1,epoch:2,start_frame:0,end_frame:1,duration_frames:1,events:1,cursor:0,complete:true,overflow:false,stop_reason:'requested',rom_sha256:'a'.repeat(64),session:'test',state_sha256:'b'.repeat(64),boundary:'n64_si_gamepad_read',axis_convention:'signed_8bit_after_gate',rate:'vi_relative_variable_latches',version:1});
  const client={request:async(method,identity,p,who)=>{
   calls.push([method,p,who]);let result={};
+  if(method==='n64.state.layout')result={size:8388608};
   if(method==='state.load')result={epoch:2};
   if(method==='n64.demo.handoff')owner=p.owner;
   if(method==='state.save')result={path:p.path,sha256:'b'.repeat(64)};
@@ -19,7 +20,7 @@ test('prepared demonstration loads, writes, snapshots and arms under durable own
  }};
  try{
   const result=await service.run(client,{session:'test',epoch:1},'artifact.inputRequest',{initialStatePath:'/state',outputDirectory:path.join(dir,'recording'),prompt:'test',port:1,source:'human',maxFrames:60,timeoutMs:5000,setup:[{address:'0x80000010',hex:'01'},{address:'0x80000011',hex:'02'}]},'caller',()=>true);
-  assert.deepEqual(calls.slice(3,9).map(c=>c[0]),['session.pause','state.load','n64.memory.write','n64.memory.write','state.save','n64.demo.request']);
+  assert.deepEqual(calls.slice(3,10).map(c=>c[0]),['session.pause','state.load','n64.state.layout','n64.memory.write','n64.memory.write','state.save','n64.demo.request']);
   assert(owner.startsWith('human-'));assert.equal(service.ownerFor('caller'),owner);assert.equal(result.publication,'waiting');
   state='ready';
   for(let n=0;n<100&&service.metadata(1).publication!=='committed';++n)await new Promise(r=>setTimeout(r,20));

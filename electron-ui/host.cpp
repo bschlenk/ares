@@ -729,7 +729,7 @@ int main(int argc, char** argv) {
     if(method == "n64.dma.log") return dmaService.execute(args);
     if(method.starts_with("n64.trace.")) return traceService.execute(method, args, owner, host.service.epoch, host.service.paused, execution);
     if(method.starts_with("n64.input.")) return host.injectedInput.execute(method, args, owner, host.service.epoch, execution.frame, execution.active ? execution.active->owner : "");
-    auto result = n64Service.execute(method, args, host.service.epoch, bool(execution.active));
+    auto result = n64Service.execute(method, args, host.service.epoch, bool(execution.active) && !(scriptService.running&&scriptService.hostWaiting&&scriptService.hostKind=="input_prepare"&&scriptService.owner==owner&&method=="n64.memory.write"));
     if(n64) execution.executor = N64Service::executor();
     return result;
   };

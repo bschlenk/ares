@@ -582,3 +582,18 @@ background interaction; closing restores focus. An `autofocus` control receives
 initial focus. The host supplies a title, close button and Escape handling. Modal
 contents survive closing and receive visibility callbacks; disabling/reloading the
 plugin disposes them. Modal panels are omitted from workspace placement pickers.
+
+
+## Prepared human demonstrations
+
+A user command may call `await ctx.demonstrations.request({prompt, setup:
+[{address:"0x80000010",hex:"01"},{address:"0x80000011",hex:"02"}], video:false})`.
+It requires `session.control`, `memory.write` and `files.export` capabilities and
+a real user gesture. The host asks for the starting state and a new recording
+directory; plugins cannot supply arbitrary host paths. The shared service loads
+paused, writes RAM, snapshots the prepared state and arms the existing banner.
+The human starts with a controller gesture or Start recording and finishes with
+Stop recording; publication to the selected directory is automatic. The job
+outlives the originating plugin scope, including the epoch change caused by its
+state load. `services.request('n64.demo.status')` requires `session.read`.
+Physical keyboard/gamepad play and replay still require human acceptance.
