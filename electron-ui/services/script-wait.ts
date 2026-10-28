@@ -31,7 +31,8 @@ export async function waitForScript(client:LocalServiceClient, started:Execution
       final=await scriptStatus(client,started.operation_id,identity);
     }
     if((final as any).script_result?.state==='failed')throw new ServiceError('script_result_failed: '+((final as any).script_result.error??'transfer failed'));
-    if((final as any).script_output?.state==='failed')throw new ServiceError('script_output_failed: '+((final as any).script_output.error??'publication failed'));
+    // Artifact publication is independent of the retained script result.
+    // Callers inspect script_output for failures and may retry publication.
     return final;
   }finally{options.signal?.removeEventListener('abort',cancel);}
 }
