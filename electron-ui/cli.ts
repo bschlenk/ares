@@ -56,6 +56,7 @@ export async function main(argv = process.argv.slice(2)) {
           if(!bytes.length&&offset<total)throw new Error('invalid_result_page');
         }while(offset<total);
         if((final as any).script_output?.state==='failed')process.stderr.write(JSON.stringify({warning:{code:'script_output_failed',details:(final as any).script_output}})+'\n');
+        if((final as any).script_output?.video_complete===false)process.stderr.write(JSON.stringify({warning:{code:'script_video_partial',details:(final as any).script_output}})+'\n');
         const value=Buffer.concat(chunks).toString('utf8');
         if(outputPath)await publishArtifact(outputPath,false,async write=>{await write(value+'\n');},()=>{if(abort.signal.aborted)throw new Error('cancelled');});
         process.stdout.write(value+'\n');

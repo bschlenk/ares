@@ -9,6 +9,8 @@ std::string controlQuote(const std::string& value){return "\""+value+"\"";}
 int main(){
  RecordingService r;
  auto start=[&](uint64_t bytes=1073741824){return r.execute("video.record.scriptStart",{"3600",std::to_string(bytes),"60","60000","1"},"test",1,0,"vi");};
+ assert(r.execute("video.record.start",{"3600","1073741824","60","60000","1","framebuffer"},"test",1,0,"vi").error.empty());assert(r.exact);r.reset();
+ assert(r.execute("video.record.scriptStart",{"3600","1073741824","60","60000","1","presented"},"test",1,0,"vi").error.empty());assert(!r.exact);r.reset();
  assert(start().error.empty());
  std::vector<uint8_t> rgba(320*237*4);
  for(unsigned f=1;f<=1800;++f){

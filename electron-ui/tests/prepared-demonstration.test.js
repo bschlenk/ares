@@ -22,7 +22,11 @@ test('prepared demonstration loads, writes, snapshots and arms under durable own
   const result=await service.run(client,{session:'test',epoch:1},'artifact.inputRequest',{initialStatePath:'/state',outputDirectory:path.join(dir,'recording'),prompt:'test',port:1,source:'human',maxFrames:60,timeoutMs:5000,setup:[{address:'0x80000010',hex:'01'},{address:'0x80000011',hex:'02'}]},'caller',()=>true);
   assert.deepEqual(calls.slice(3,10).map(c=>c[0]),['session.pause','state.load','n64.state.layout','n64.memory.write','n64.memory.write','state.save','n64.demo.request']);
   assert(owner.startsWith('human-'));assert.equal(service.ownerFor('caller'),owner);assert.equal(result.publication,'waiting');
-  state='ready';
+  await fs.writeFile(path.join(dir,'recording/input.json'),'occupied');state='ready';
+  for(let n=0;n<100&&service.metadata(1).publication!=='failed';++n)await new Promise(r=>setTimeout(r,20));
+  assert.equal(service.metadata(1).publication,'failed');
+  await fs.unlink(path.join(dir,'recording/input.json'));
+  await service.run(client,{session:'test',epoch:2},'artifact.inputRetry',undefined,'caller',()=>true);
   for(let n=0;n<100&&service.metadata(1).publication!=='committed';++n)await new Promise(r=>setTimeout(r,20));
   assert.equal(service.metadata(1).publication,'committed');
   const clip=JSON.parse(await fs.readFile(path.join(dir,'recording/input.json'),'utf8'));assert.deepEqual(clip.events[0].held,['a']);
