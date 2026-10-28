@@ -24,6 +24,10 @@ int main() {
   assert(result == ScriptJobQueue::Result::JobLimit && executed == 4096);
 
   queue = {};
+  unsigned reads=0;
+  assert(queue.pump([&]{return reads<5000;}, []{return false;}, [&]{++reads;queue.progress();return true;}) == ScriptJobQueue::Result::Drained);
+  assert(queue.executed==5000 && queue.progressEvents==5000);
+  queue = {};
   assert(queue.pump([]{return true;}, []{return false;}, []{return false;}) == ScriptJobQueue::Result::Exception);
   std::cout << "SCRIPT_JOB_QUEUE_PASS\n";
 }
