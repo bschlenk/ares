@@ -88,7 +88,7 @@ struct ScriptService {
     if(!JS_IsString(argv[2]))return fail(c,"invalid_memory_view");
     const char* view=JS_ToCString(c,argv[2]);if(!view)return JS_EXCEPTION;std::string v=view;JS_FreeCString(c,view);
     if(s.observing&&(length>65536-s.observerReadBytes))return fail(c,"observer_copy_budget");if(s.observing)s.observerReadBytes+=length;
-    auto began=Clock::now();std::vector<uint8_t> bytes;auto r=s.read(address,v,length,bytes);++s.readCalls;s.readBytes+=bytes.size();s.readNs+=std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-began).count();if(!r.error.empty())return fail(c,r.error);
+    auto began=Clock::now();std::vector<uint8_t> bytes;auto r=s.read(address,v,length,bytes);++s.readCalls;s.readBytes+=bytes.size();s.readNs+=std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-began).count();if(!r.error.empty())return fail(c,r.error);s.jobQueue.progress();
     return JS_NewArrayBufferCopy(c,bytes.data(),bytes.size());
   }
   static JSValue region(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
@@ -96,7 +96,7 @@ struct ScriptService {
     if(argc!=3||!number(c,argv[1],offset)||!number(c,argv[2],length,65536)||!length)return fail(c,"invalid_memory_range");
     size_t size;const char* name=JS_ToCStringLen(c,&size,argv[0]);if(!name)return JS_EXCEPTION;if(size>256){JS_FreeCString(c,name);return fail(c,"invalid_region");}std::string id(name,size);JS_FreeCString(c,name);
     if(s.observing&&(length>65536-s.observerReadBytes))return fail(c,"observer_copy_budget");if(s.observing)s.observerReadBytes+=length;
-    auto began=Clock::now();std::vector<uint8_t> bytes;auto r=s.regionRead(id,offset,length,bytes);++s.readCalls;s.readBytes+=bytes.size();s.readNs+=std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-began).count();if(!r.error.empty())return fail(c,r.error);
+    auto began=Clock::now();std::vector<uint8_t> bytes;auto r=s.regionRead(id,offset,length,bytes);++s.readCalls;s.readBytes+=bytes.size();s.readNs+=std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-began).count();if(!r.error.empty())return fail(c,r.error);s.jobQueue.progress();
     return JS_NewArrayBufferCopy(c,bytes.data(),bytes.size());
   }
   static JSValue position(JSContext* c,JSValueConst,int,JSValueConst*) {
@@ -110,7 +110,7 @@ struct ScriptService {
     if(!data||!length||length>1024)return fail(c,"invalid_memory_range");
     if(!JS_IsString(argv[2]))return fail(c,"invalid_memory_view");
     const char* view=JS_ToCString(c,argv[2]);if(!view)return JS_EXCEPTION;std::string v=view;JS_FreeCString(c,view);
-    auto r=s.write(address,v,std::vector<uint8_t>(data,data+length));if(!r.error.empty())return fail(c,r.error);return JS_UNDEFINED;
+    auto r=s.write(address,v,std::vector<uint8_t>(data,data+length));if(!r.error.empty())return fail(c,r.error);s.jobQueue.progress();return JS_UNDEFINED;
   }
   static JSValue advance(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
     auto& s=self(c);uint64_t n;
@@ -126,7 +126,7 @@ struct ScriptService {
     auto& s=self(c);if(s.readOnly)return fail(c,"read_only_callback");if(argc!=4)return fail(c,"invalid_input");
     std::vector<std::string> values;
     for(int i=0;i<4;++i){size_t length;const char* text=JS_ToCStringLen(c,&length,argv[i]);if(!text)return JS_EXCEPTION;if(length>32){JS_FreeCString(c,text);return fail(c,"invalid_input");}values.emplace_back(text,length);JS_FreeCString(c,text);}
-    auto r=s.input(values);if(!r.error.empty())return fail(c,r.error);return JS_UNDEFINED;
+    auto r=s.input(values);if(!r.error.empty())return fail(c,r.error);s.jobQueue.progress();return JS_UNDEFINED;
   }
   static JSValue log(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
     auto& s=self(c);if(argc!=1)return fail(c,"invalid_log");
@@ -227,7 +227,7 @@ struct ScriptService {
     if(!error.empty()){finish("script_failed");return;}
     if(interrupt(runtime,this)){error="interrupted";finish("script_interrupted");return;}
     if(waiting && execution->frame>=target) {
-      waiting=false;*paused=true;
+      waiting=false;*paused=true;jobQueue.progress();
       JSValue v=JS_Call(context,resolve,JS_UNDEFINED,0,nullptr);JS_FreeValue(context,resolve);resolve=JS_UNDEFINED;
       if(JS_IsException(v)){error=exception();JS_FreeValue(context,v);finish("script_failed");return;}JS_FreeValue(context,v);
     }
@@ -236,7 +236,7 @@ struct ScriptService {
       [&]{return Clock::now()>=budget;},
       [&]{return JS_ExecutePendingJob(runtime,&jobContext)>=0;});
     if(jobs==ScriptJobQueue::Result::Yielded)return;
-    if(jobs==ScriptJobQueue::Result::JobLimit){error="promise_job_limit";finish("script_failed");return;}
+    if(jobs==ScriptJobQueue::Result::JobLimit){error="promise_job_limit: pending_jobs="+std::to_string(jobQueue.executed)+" host_progress="+std::to_string(jobQueue.progressEvents)+" reads="+std::to_string(readCalls)+" frames="+std::to_string(framesUsed);finish("script_failed");return;}
     if(jobs==ScriptJobQueue::Result::Exception){error=exception();finish("script_failed");return;}
     int state=JS_PromiseState(context,promise);
     if(state==JS_PROMISE_REJECTED){JSValue v=JS_PromiseResult(context,promise);error=valueText(v,"script_rejected");JS_FreeValue(context,v);finish("script_failed");return;}

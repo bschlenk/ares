@@ -1,3 +1,4 @@
+import {profileHolder} from './profile-holder.js';
 import {readWatchdog} from './watchdog.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import os from 'node:os';
@@ -97,7 +98,8 @@ export class AutomaticServiceClient extends LocalServiceClient {
         if (target?.ready) { this.launchedInstance = !exited ? target.instance : undefined; this.launchedApp = !exited; return target; }
         if (exited) {
           failure += await fs.readFile(logPath, 'utf8');
-          throw new ServiceError(failure.includes('profile_in_use') ? 'profile_in_use' : 'app_launch_failed');
+          if(failure.includes('profile_in_use'))throw Object.assign(new ServiceError('profile_in_use'),{details:await profileHolder(path.dirname(logDirectory))});
+          throw new ServiceError('app_launch_failed');
         }
         await new Promise(resolve => setTimeout(resolve, 100));
       }
