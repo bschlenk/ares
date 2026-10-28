@@ -901,7 +901,10 @@ int main(int argc, char** argv) {
         if(host.armedInputJob!=host.demonstration.id){host.armedInputJob=host.demonstration.id;host.inputStart.arm(host.demonstration.port==1);}
         host.demonstration.inputStartReady=host.inputStart.neutral;
         if(host.inputStart.triggered&&!execution.active&&!execution.reservation){auto started=host.demonstration.execute("n64.demo.start",{},host.demonstration.owner,host.service.epoch,execution.frame,host.demonstration.rom,host.demonstration.session);inputStarted=started.error.empty();if(inputStarted)host.demonstration.startedBy="controller_input";}
-      }else if(host.demonstration.state!="recording")host.inputStart.cancel();
+      }else if(host.demonstration.state!="recording"){
+        if(host.inputStart.holding&&host.joypad){auto latest=host.inputStart.latest;for(unsigned i=0;i<4;++i)host.joypad->axes().input(i).setValue(latest.axes[i]);for(unsigned i=0;i<32;++i)host.joypad->buttons().input(i).setValue((latest.mask>>i)&1);}
+        host.inputStart.cancel();
+      }
       if(host.inputStart.overflow&&host.demonstration.state=="recording")host.demonstration.finish("input_transition_overflow",execution.frame);
     }
     bool takeover = host.takeoverRequested.exchange(false) && !inputStarted && host.demonstration.state!="armed";

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdio>
+#include <sys/stat.h>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -26,7 +27,7 @@ struct FrameSpool {
     stopping = failed = writing = false;
   }
   bool open() {
-    clear(); file = std::tmpfile(); if(!file) return false;
+    clear(); file = std::tmpfile(); if(!file) return false;std::setvbuf(file,nullptr,_IONBF,0);
     worker = std::thread([this] {
       std::unique_lock lock(mutex);
       for(;;) {
@@ -53,7 +54,7 @@ struct FrameSpool {
     changed.wait(lock, [this] { return queue.empty() && !writing; });
     if(file && std::fflush(file)) failed = true;
     // Only complete frames form the readable prefix after a disk failure.
-    if(failed && file) { auto end = std::ftell(file); count = end < 0 ? 0 : size_t(end) / frameBytes; }
+    if(failed && file) { struct stat info{};count = !::fstat(::fileno(file),&info)&&frameBytes ? std::min(count,size_t(info.st_size)/frameBytes) : 0;std::clearerr(file); }
     return !failed;
   }
   bool read(uint64_t offset, std::vector<uint8_t>& bytes) {
