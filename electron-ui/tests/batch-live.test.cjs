@@ -47,7 +47,7 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
   const child = spawn(host, ['--rom', rom, '--system', 'Nintendo 64', '--settings', settings, '--silent', '--paused', '--save-dir', path.join(dir, 'saves'), '--control-session', identity.session], { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
   const closed = once(child, 'close'); let log = ''; child.stderr.on('data', b => log = (log + b).slice(-20000)); child.stdout.resume();
   const native = new NativeSessionClient(child.stdin, child.stdio[3], identity, () => {}), router = new SessionRouter(); router.attach(native);
-  const endpoint = new LocalServiceHost(router,async p=>{if(p.operation==='app_status')return {ready:true};throw new Error('unavailable');}); let peer, other;
+  const endpoint = new LocalServiceHost(router,async p=>{if(p.operation==='app_status')return {ready:true};if(p.operation==='script_result')return router.readScriptResult(p);throw new Error('unavailable');}); let peer, other;
   try {
     unwrap(await native.request('session.status')); await endpoint.listen(path.join(dir, 'ipc'));
     peer = new StdioPeer(process.execPath, [path.resolve(__dirname, '../dist/mcp/server.js'), '--connection', endpoint.metadataFile, '--instance', endpoint.instance]); await peer.initialize();
@@ -59,6 +59,14 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     const initializedFile = path.join(dir, 'initialized.bs'); fs.writeFileSync(initializedFile, initialized);
     assert.equal((await peer.tool('state_load', { path: initializedFile })).error, undefined);
     const baseline = path.join(dir, 'baseline.bs'); assert.equal((await peer.tool('state_save', { path: baseline })).error, undefined);
+    const demoDirectory=path.join(dir,'prepared-demo');
+    const preparedScript=await peer.tool('run_script',{source:'export default async({input,args})=>{const receipt=await input.demonstration.prepare(args);return {receipt,status:input.demonstration.status()}}',args:{initialStatePath:baseline,outputDirectory:demoDirectory,prompt:'Prepared fixture',setup:[{address:'0x80002000',hex:'12345678'},{address:'0x80002004',hex:'abcdef01'}]},state_paths:[baseline],output_paths:[demoDirectory]});
+    let preparedOp=preparedScript;for(let i=0;i<1000&&preparedOp.state==='running';++i){await sleep(5);preparedOp=await peer.tool('operation_status',{operation_id:preparedScript.operation_id});}
+    assert.equal(preparedOp.stop_reason,'script_done',JSON.stringify({preparedOp,page:await peer.tool('script_result',{result_handle:preparedScript.result_handle})}));
+    const preparedResult=await peer.tool('script_result',{result_handle:preparedScript.result_handle});const preparedValue=JSON.parse(Buffer.from(preparedResult.hex,'hex').toString());assert.equal(preparedValue.status.state,'armed');
+    assert(fs.existsSync(path.join(demoDirectory,'initial.state')));assert.equal((await peer.tool('demonstration_status')).state,'armed','human job survives originating script disconnect');
+    unwrap(await router.request('n64.demo.cancel',undefined,undefined,'ui'));await sleep(150);
+    assert.equal((await peer.tool('state_load',{path:baseline})).error,undefined);
     const recorderRegions=await peer.tool('memory_regions');const rdramRegion=recorderRegions.regions.find(r=>r.name==='RDRAM');
     const sample=await peer.tool('memory_sample',{reads:Array.from({length:128},(_,i)=>({region:rdramRegion.id,offset:0x2000+i*4,length:1024}))});assert.equal(sample.error,undefined,JSON.stringify(sample));
     const samplePage=await peer.tool('memory_capture_read',{handle:sample.handle,range:127,length:4});assert.equal(samplePage.frame_reference.native_session,identity.session);assert.equal(samplePage.frame_reference.presentation,null);
@@ -68,6 +76,7 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     const pairedRecorder=await peer.tool('memory_record_start',{reads:Array.from({length:7},(_,i)=>({region:rdramRegion.id,offset:0x2000+i,length:1})),capacity:200,duration:200});
     const recordingSource=`export default async({mem,frames,input})=>{
       mem.writeU32(0x2000,0x12345678,'rdram');
+      for(let i=0;i<5000;++i)await mem.u32(0x2000,'rdram');
       const typed={u8:mem.u8(0x2000,'rdram'),u16:mem.u16(0x2000,'rdram'),u32:mem.u32(0x2000,'rdram')};
       input({right:true});const samples=[];
       for(let i=0;i<200;i++){await frames(1);samples.push(Array.from({length:7},(_,j)=>mem.u8(0x2000+j,'rdram')))}
@@ -83,7 +92,7 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     }
     let scriptBytes=Buffer.alloc(0),scriptPage;
     do {scriptPage=await peer.tool('script_result',{offset:scriptBytes.length});scriptBytes=Buffer.concat([scriptBytes,Buffer.from(scriptPage.hex,'hex')]);}while(scriptBytes.length<scriptPage.bytes);
-    assert.equal(scriptPage.native_reads,1403);assert.equal(scriptPage.native_read_bytes,1407);
+    assert.equal(scriptPage.native_reads,6403);assert.equal(scriptPage.native_read_bytes,21407);
     console.log('SCRIPT_NATIVE_READ_COST_N64',JSON.stringify({reads:scriptPage.native_reads,bytes:scriptPage.native_read_bytes,native_read_ns:scriptPage.native_read_ns,elapsed_seconds:job.elapsed_seconds,result_bytes:scriptBytes.length}));
     const scriptValue=JSON.parse(scriptBytes.toString());assert.deepEqual(scriptValue.typed,{u8:0x12,u16:0x1234,u32:0x12345678});assert.equal(scriptValue.samples.length,200);
     await peer.tool('memory_record_stop',{handle:pairedRecorder.handle});

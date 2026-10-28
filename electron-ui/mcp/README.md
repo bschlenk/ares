@@ -314,9 +314,9 @@ this deliberately avoids losing the beginning of a late-saved capture.
 ### Video recording
 
 `video_start(max_frames=600, max_seconds=60, max_bytes=134217728, fps=60,
-discard_previous=false)` begins connection-owned native presented-frame capture;
-it does not advance emulation. Bounds match the reference: 1..36000 frames,
-0.001..3600 seconds, 1..256 MiB and 1..120 fps. Playback fps does not resample or
+discard_previous=false, source="presented")` begins connection-owned native capture;
+it does not advance emulation. Bounds are: 1..36000 frames,
+0.001..3600 seconds, 1 MiB..2 GiB and 1..120 fps. Playback fps does not resample or
 drive emulation. Raw frames use bottom-up BGR24 with four-byte row padding. AVI
 has one uncompressed video stream and no audio. Capture shares the native
 screenshot tap's 4194304-source-pixel limit and works without canvas credits.
@@ -331,9 +331,9 @@ requires `discard_previous: true` to replace. Other owners may read status.
 `video_stop(path, overwrite=false)` freezes and exports the recording atomically.
 No frames returns `no_frames`; failed export retains stopped frames for retry.
 Successful export consumes frames and returns path, size/bytes, SHA-256, duration
-and captured coordinates. Native pins expire after 30 seconds; main exports have
-a 25-second deadline and stream bounded pages without assembling the entire AVI
-in memory. Maximum artifact size is 270000000 bytes including headers/index.
+and captured coordinates. Native pins expire after 360 seconds; main exports have
+a 300-second deadline and stream bounded pages without assembling the entire AVI
+in memory. Maximum artifact size is 2150000000 bytes including headers/index.
 Late cleanup errors retain successful file metadata as `cleanup_error`.
 
 ### Native states (task 8)
@@ -950,7 +950,7 @@ Adapter-only `build_info` remains usable without contacting the app.
 bounded raw BGR24 AVI capture for the script. One image is sampled from the N64
 framebuffer at each advanced VI boundary; synthetic runs capture their generated
 frame. This is independent of presentation credits and the eight script artifact
-limit. The capture is limited to 36,000 frames, 256 MiB and the script deadline;
+limit. The capture is limited to 36,000 frames, 1 GiB of disk storage and the script deadline;
 a limit, blank/invalid framebuffer, frame gap, cancellation or failed script fails
 publication. A successful script atomically publishes a new AVI, with metadata in
 `operation_status.script_output.video`. No audio is captured; playback is 60 fps.
@@ -1021,3 +1021,66 @@ expiry, pending reservations and byte/slot limits. On backpressure, explicitly
 release an unneeded unconsumed handle or wait for its reported expiry. CLI
 cancellation also discards a pending result before transfer, so a late completion
 cannot silently retain it. Script output failures include the publication reason.
+
+
+### Prepared human recording (October 28)
+
+Use `demonstration_prepare(initial_state_path, output_directory, prompt, setup=[],
+video=false, max_frames=3600, max_seconds=300, waiting_seconds=300)` for the new
+required-state contract. The output directory must not exist. Legacy
+`demonstration_request(state_path=...)` retains its old meaning: save the current
+paused state to that path. It does not load a starting state.
+
+Preparation checks ownership and the source file, loads paused, applies the
+bounded `{address, hex}` RAM write list, saves and hashes `initial.state`, then
+arms. Errors leave emulation paused. The returned numeric job survives the
+requesting script/CLI connection. `demonstration_status` reports publication
+separately from input completion. Waiting expiry has its own budget; capture
+gets a fresh max_seconds budget when it starts.
+
+Mapped physical port-one input can start capture while paused, after held
+controls return to neutral. Unmapped keys, consumed UI input and injected MCP
+input do not trigger this path. Mapped stick movement must pass the mapping's
+deadzone and the native deliberate-motion threshold. Start recording permits
+intentional neutral frames. The initiating press is held through the first
+eligible native SI latch; subsequent physical transitions are queued in order
+(up to 128, then explicit cancellation). Other selected ports support explicit
+Start/MCP start; this frontend currently maps physical controls to port one.
+`started_by` identifies controller_input, ui_button or mcp. Stop pauses at a VI
+boundary and automatically publishes `input.json`, `initial.state`, optional
+`video.avi`, and a provenance/hash manifest. Failed saves retain input and expose
+Retry saving in the banner or `demonstration_retry`. Limits produce an explicit
+partial clip; partial clips export for inspection and cannot be imported as
+complete replays. Friendly `held` names are additive version-1 fields; `raw`
+remains authoritative and importers ignore derived names.
+
+Scripts use `await input.demonstration.prepare({initialStatePath,
+outputDirectory,prompt,setup,video,maxFrames,timeoutMs,waitingMs})`; grant the
+initial state through `--state` and the new output directory through `--artifact`.
+The script can return the receipt and poll status without advancing an armed
+job. Its state load is recorded in the script epoch lineage.
+
+Both video APIs accept `source: "framebuffer" | "presented"`. `video_start`
+defaults to presented renderer output; `run_script`/`ares run --video` defaults
+to exact VI framebuffer capture (`--video-source` overrides). Dimensions come
+from the selected source: the reported Kirby example is 320×237 framebuffer
+versus 640×240 presented, not universal fixed dimensions. Presented capture
+can omit/repeat emulated coordinates and does not promise exact VI coverage.
+Framebuffer capture starts at the next completed VI boundary. fps affects AVI
+playback only; neither source adds audio.
+
+Raw BGR24 frames spool to private anonymous disk storage behind a 16 MiB native
+producer queue. Backpressure stops capture with a readable prefix instead of
+silently dropping frames. Disk/open/write/read errors are explicit; reset,
+cancellation, owner release and shutdown remove the spool. At 320×237 each frame
+is 227,520 bytes; the 1 GiB script budget permits 4,719 complete frames, subject
+to the frame/time limits and actual source dimensions. Artifact failure no longer
+throws away script JSON; CLI emits the result and an independent warning.
+State loads still rebase the one script video, retaining only the latest state
+segment. Explicit multiple-video segments remain deferred because safe output
+reservation and per-segment ownership need additional API work.
+
+The microtask storm guard allows 4,096 jobs without successful host progress;
+reads/writes or actual frame completion renew that budget, scheduling yields do
+not. The script deadline, memory and frame limits still apply. Limit errors
+include executed jobs, host-progress events, reads and frames.

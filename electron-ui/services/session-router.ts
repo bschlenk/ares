@@ -123,7 +123,7 @@ export class SessionRouter {
           if(startingIdentity.session !== client.identity.session) throw new ServiceError('wrong_session');
           result={cancelled:this.batches.cancel(owner,(params as {token:string}).token)};
         } else if (method === 'experiment.batch') result = await this.batches.run(client, this, startingIdentity, params as BatchParams, owner, () => this.client === client, child => { this.stateLoading.release(child); this.screenshots.release(child); });
-        else if (method === 'state.load') result = await this.stateLoading.load(client, startingIdentity, params as { path: string; resume: boolean; keepOverrides: boolean }, owner, () => this.client === client);
+        else if (method === 'state.load') {result = await this.stateLoading.load(client, startingIdentity, params as { path: string; resume: boolean; keepOverrides: boolean }, owner, () => this.client === client);this.scripts.ownedEpoch(owner,{session:client.identity.session,epoch:result.epoch});}
         else if (method === 'state.save') result = await this.stateArtifacts.save(client, startingIdentity, params as { path: string; overwrite: boolean; metadata: boolean }, owner, () => this.client === client);
         else if (method === 'state.info' || method === 'state.list' || method === 'state.peek') result = await this.states.inspect(client, startingIdentity, method, params, owner, () => this.client === client);
         else if (method === 'artifact.memoryExport') result = await this.memoryArtifacts.export(client, startingIdentity, params as MemoryExportParams, owner, () => this.client === client);
@@ -151,6 +151,7 @@ export class SessionRouter {
     if(method==='execution.status'&&reply.ok&&reply.result){const output=this.scripts.outputs.get((reply.result as {operation_id:number}).operation_id);if(output)(reply.result as any).script_output=output;Object.assign(reply.result,this.scripts.metadata((reply.result as any).operation_id));}
     if(reply.ok&&method==='n64.demo.read')for(const e of (reply.result as any).events)e.held=heldButtons(e.buttons);
     if(reply.ok&&method.startsWith('n64.demo.')&&reply.result)Object.assign(reply.result,this.inputClips.metadata((reply.result as any).job_id));
+    if(reply.ok&&method==='n64.state.loadCommit')this.scripts.ownedEpoch(owner,{session:reply.session,epoch:reply.epoch});
     const cancelled = reply.result as { owner?: string; stop_reason?: string };
     if (child && reply.ok && (method === 'session.pause' || cancelled.owner === child && cancelled.stop_reason === 'cancelled')) this.batches.interrupt(owner, method === 'session.pause' ? 'paused' : 'cancelled');
     if (method.startsWith('session.')) mainCapabilities(reply);
