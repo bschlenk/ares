@@ -314,7 +314,7 @@ if (params.get('autotest') === '1') {
 const demonstrationBanner=document.createElement('aside');
 demonstrationBanner.id='demonstration-banner';demonstrationBanner.setAttribute('aria-live','polite');demonstrationBanner.hidden=true;
 const demonstrationText=document.createElement('span');demonstrationBanner.append(demonstrationText);
-for(const [label,method]of [['Start recording','n64.demo.start'],['Stop recording','n64.demo.stop'],['Cancel','n64.demo.cancel']] as const){
+for(const [label,method]of [['Start recording','n64.demo.start'],['Stop recording','n64.demo.stop'],['Cancel','n64.demo.cancel'],['Retry saving','artifact.inputRetry']] as const){
  const button=document.createElement('button');button.textContent=label;button.dataset.method=method;
  button.onclick=async()=>{button.blur();try{const s=await window.ares.session('session.status');if(s.ok){const r=await window.ares.session(method,{session:s.session,epoch:s.epoch});if(!r.ok)notify(r.error??'Demonstration failed');}}catch(e){notify(String(e));}};demonstrationBanner.append(button);
 }
@@ -323,8 +323,8 @@ let demonstrationPolling=false;
 setInterval(async()=>{
  if(demonstrationPolling)return;demonstrationPolling=true;
  try{const s=await window.ares.session('session.status');if(!s.ok)return;const r=await window.ares.session('n64.demo.status',{session:s.session,epoch:s.epoch});const d=r.result;
-  demonstrationBanner.hidden=!r.ok||!d||!['armed','recording','replaying'].includes(d.state);
-  if(d){demonstrationText.textContent=`${d.state==='armed'?'Demonstration requested':d.state==='recording'?'Recording controller input':'Replaying controller input'}: ${d.prompt} (${d.events} latches)`;
-   for(const b of demonstrationBanner.querySelectorAll('button'))b.hidden=b.dataset.method==='n64.demo.start'?d.state!=='armed':b.dataset.method==='n64.demo.stop'?d.state!=='recording':false;}
+  demonstrationBanner.hidden=!r.ok||!d||!(['armed','recording','replaying'].includes(d.state)||['failed','finalizing'].includes(d.publication??''));
+  if(d){demonstrationText.textContent=`${d.publication==='failed'?'Saving failed. Recording retained; retry saving':d.publication==='finalizing'?'Saving recording':d.state==='armed'?(d.input_start_ready?'Press a controller button or move the stick to start':'Release controls to enable input start'):d.state==='recording'?'Recording controller input':'Replaying controller input'}: ${d.prompt} (${d.duration_frames} frames, ${d.events} latches)`;
+   for(const b of demonstrationBanner.querySelectorAll('button'))b.hidden=b.dataset.method==='artifact.inputRetry'?d.publication!=='failed':b.dataset.method==='n64.demo.start'?d.state!=='armed':b.dataset.method==='n64.demo.stop'?d.state!=='recording':!['armed','recording','replaying'].includes(d.state);}
  }catch{demonstrationBanner.hidden=true;}finally{demonstrationPolling=false;}
 },250);

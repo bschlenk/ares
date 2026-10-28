@@ -48,6 +48,7 @@ const api: AresBridge = {
   plugins: {
     library: (token, request) => ipcRenderer.invoke('plugin.library', token, request),
     clipboard:(token,text)=>ipcRenderer.invoke('plugin.clipboard',token,text,takeExportGesture()),
+    demonstration:(token,params)=>ipcRenderer.invoke('plugin.demonstration',token,params,takeExportGesture()),
     exportText:(token,params)=>ipcRenderer.invoke('plugin.exportText',token,params,takeExportGesture()),
     recordFrames:(token,params)=>ipcRenderer.invoke('plugin.recordFrames',token,params,takeExportGesture()),
     finishExport:(token,id,cancel)=>ipcRenderer.invoke('plugin.finishExport',token,id,cancel),

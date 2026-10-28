@@ -37,7 +37,7 @@ import { performance } from 'node:perf_hooks'
 import { FrameParser, type NativeFrame } from './protocol.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { NativeSessionClient } from './services/native-client.js'
-import { LocalServiceHost } from './services/local-endpoint.js'
+import { defaultServiceDirectory, LocalServiceHost } from './services/local-endpoint.js'
 import { installCliHelpers, mcpConfiguration, isBundledCliRuntime } from './agent-integration.js'
 import { SessionRouter } from './services/session-router.js'
 import type { NativeCommand, StartOptions } from './bridge.js'
@@ -68,6 +68,7 @@ const saveDirectory = (() => {
       console.error(`profile_in_use: ${profileDirectory}; choose ARES_PROFILE or ARES_PROFILE_DIR`)
       app.exit(1)
     }
+    fs.writeFileSync(path.join(profileDirectory,'lock-holder.json'),JSON.stringify({pid:process.pid,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600});
     fs.mkdirSync(app.getPath('sessionData'), { recursive: true })
     app.setAppLogsPath(path.join(profileDirectory, 'logs'))
     return profileSaves(profileDirectory, process.env.ARES_SAVE_DIR)
@@ -141,6 +142,20 @@ const pluginExports=new PluginExports({
   stop(owner){return sessions.request('execution.release',undefined,undefined,owner);},
 });
 sessions.onObserverSample=sample=>{const value={...sample,frame_reference:{...sample.frame_reference,app_instance:serviceHost.instance}};pluginExports.observe(value);observerDeliveries.publish(value);};
+ipcMain.handle('plugin.demonstration',(event,token:unknown,params:unknown,gesture:unknown)=>pluginBridgeResult(async()=>{
+ if(!window||event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||typeof token!=='string'||gesture!==true)throw new ServiceError('user_gesture_required');
+ const authorize=()=>{const info=plugins.authorize(token);if(!['session.control','memory.write','files.export'].every(c=>info.manifest?.capabilities.includes(c as any)))throw new ServiceError('plugin_capability_denied');return info;};
+ authorize();
+ const p=params as import('./plugins/contracts.js').DemonstrationOptions;
+ // Only data crosses the bridge; the host chooses both file capabilities.
+ if(!p||Object.keys(p).some(k=>!['prompt','setup','video','maxFrames','maxSeconds'].includes(k)))throw new ServiceError('invalid_request');
+ const picked=await dialog.showOpenDialog(window,{title:'Choose the demonstration starting state',properties:['openFile'],filters:[{name:'Save state',extensions:['state']} ]});
+ if(picked.canceled)throw new ServiceError('cancelled');authorize();
+ const output=await dialog.showSaveDialog(window,{title:'Save demonstration recording directory',defaultPath:'demonstration',properties:['createDirectory']});
+ if(output.canceled||!output.filePath)throw new ServiceError('cancelled');const info=authorize();
+ const r=await sessions.request('artifact.inputRequest',info.lease!.identity,{initialStatePath:picked.filePaths[0],outputDirectory:output.filePath,prompt:p.prompt,setup:p.setup??[],video:p.video??false,maxFrames:p.maxFrames??3600,timeoutMs:Math.ceil((p.maxSeconds??300)*1000),port:1,source:'human'},'plugin-'+token);
+ if(!r.ok||!r.result)throw new ServiceError(r.error??'demonstration_failed');return r.result;
+}));
 for(const operation of ['clipboard','exportText','recordFrames','finishExport'] as const)ipcMain.handle('plugin.'+operation,(event,token:unknown,params:unknown,extra:unknown)=>pluginBridgeResult(async()=>{
   if(!window||event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||typeof token!=='string')throw new Error('invalid_sender');
   if(operation==='clipboard'){if(typeof params!=='string')throw new Error('invalid_export_request');return pluginExports.clipboard(token,params,extra===true);}

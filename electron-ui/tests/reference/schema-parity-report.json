@@ -4,7 +4,7 @@
     "sha256": "28db87365993793d6844bf05894372fe3f19b30a64a856f06aaabd249ed0465c",
     "mcp_version": "1.30.0"
   },
-  "signature_matching": 67,
+  "signature_matching": 66,
   "signature_differences": [
     {
       "name": "batch",
@@ -62,10 +62,89 @@
           "steps"
         ]
       }
+    },
+    {
+      "name": "video_start",
+      "reference": {
+        "properties": {
+          "discard_previous": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fps": {
+            "default": 60,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_bytes": {
+            "default": 134217728,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_frames": {
+            "default": 600,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "discard_previous": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fps": {
+            "default": 60,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_bytes": {
+            "default": 134217728,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_frames": {
+            "default": 600,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "source": {
+            "default": "presented",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
     }
   ],
   "reference_count": 68,
-  "current_count": 109,
+  "current_count": 111,
   "missing": [],
   "added": [
     "app_health",
@@ -75,8 +154,10 @@
     "demonstration_cancel",
     "demonstration_export",
     "demonstration_import",
+    "demonstration_prepare",
     "demonstration_replay",
     "demonstration_request",
+    "demonstration_retry",
     "demonstration_start",
     "demonstration_status",
     "demonstration_stop",
@@ -3502,7 +3583,7 @@
           },
           "current": {
             "default": 134217728,
-            "maximum": 268435456,
+            "maximum": 2147483648,
             "minimum": 1048576,
             "type": "integer"
           }
@@ -3531,6 +3612,18 @@
             "maximum": 3600,
             "minimum": 0.001,
             "type": "number"
+          }
+        },
+        {
+          "field": "source",
+          "reference": null,
+          "current": {
+            "default": "presented",
+            "enum": [
+              "framebuffer",
+              "presented"
+            ],
+            "type": "string"
           }
         }
       ]

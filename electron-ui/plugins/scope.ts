@@ -157,6 +157,7 @@ export class PluginScope {
         contextMenu: async id => { writable(); unwrapPluginBridge(await window.ares.plugins.library(this.token, { operation: 'contextMenu', id })); },
       },
       clipboard:{writeText:async text=>{writable();return unwrapPluginBridge(await window.ares.plugins.clipboard(this.token,text));}},
+      demonstrations:{request:async params=>{writable();return unwrapPluginBridge(await window.ares.plugins.demonstration(this.token,params));}},
       exports:{
         saveText:async params=>{writable();return unwrapPluginBridge(await window.ares.plugins.exportText(this.token,params));},
         recordFrames:async params=>{
