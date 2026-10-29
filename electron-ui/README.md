@@ -676,3 +676,35 @@ The worker retains only the latest snapshot (64 KiB), one pending heartbeat and
 a two-file, 64-KiB-per-file `logs/watchdog.jsonl` transition journal. Normal service
 shutdown removes the sidecar and worker; abrupt parent death leaves a diagnostic
 snapshot. Fresh CLI/MCP clients can read it without a main-process handshake.
+
+### Rebuilds and installed MCP helpers
+
+`./scripts/build-macos-app.sh` rebuilds the TypeScript/MCP files and packages the
+new `dist` inside `build_macos/ares.app`. Installed CLI/MCP helpers delegate to that
+bundle; rebuilding at the same path does not require reinstalling them. Reinstall
+helpers after moving the app or changing which app copy they target. Restart Ares
+and the client's MCP connection after rebuilding: already running processes retain
+loaded code. `build_info(app: true)` compares their frozen build provenance.
+
+### Save states
+
+The video toolbar has adjacent **Save State** and **Load State** controls. Every
+Save creates a new checkpoint. Load opens a screenshot grid without pausing;
+double-click a screenshot (or press Enter on it) to resume that position. States
+can be named, revealed in Finder/the platform file manager, or moved to Trash.
+Naming an autosave permanently keeps it; clearing the name does not undo that.
+
+An orderly ROM switch or app/window closure creates an autosave after ten seconds
+of accumulated unpaused play, or immediately after successfully loading a state.
+The newest ten autosaves are retained separately from unlimited permanent saves.
+A failed exit save offers Retry, Stay in game, or Leave without saving. The latest
+autosave is offered for ten seconds when a game opens; ignoring it leaves normal
+play running. There are no periodic saves, pre-load backups, or force-quit recovery.
+
+Settings → General → Save States controls the storage folder and date labels.
+The default is the owned profile's `states` directory. Changing folders does not
+move or delete files; switching back restores that collection. ROM paths/names do
+not determine identity. See [SAVE-STATES-PLAN.md](SAVE-STATES-PLAN.md#technical-audit-and-implementation-decisions-october-28-2026)
+for the system audit, content/media identity and publication schema. Saturn and
+ZX Spectrum currently report save states unavailable because their core payloads
+are incomplete.

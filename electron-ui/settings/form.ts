@@ -1,3 +1,4 @@
+import {CHECKPOINT_FORMAT_PRESETS,formatCheckpoint,validateCheckpointFormat} from '../services/checkpoint-format.js';
 import type { PreferencesBridge, SettingEntry, SettingsSnapshot } from './contracts.js';
 
 /** Descriptor-driven controls; reusable by a settings plugin with the same API. */
@@ -6,7 +7,7 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
   message.setAttribute('role', 'status');
   const sections = document.createElement('div');
   element.append(sections, message);
-  type Row = { entry: SettingEntry; input: HTMLInputElement | HTMLSelectElement; note: HTMLElement; slider?: HTMLInputElement; dirty: boolean; busy: boolean; timer?: ReturnType<typeof setTimeout>; finished?: Promise<void> };
+  type Row = { entry: SettingEntry; input: HTMLInputElement | HTMLSelectElement; preview?: () => void; note: HTMLElement; slider?: HTMLInputElement; dirty: boolean; busy: boolean; timer?: ReturnType<typeof setTimeout>; finished?: Promise<void> };
   const rows = new Map<string, Row>();
   let disposed = false, revision = -1, signature = '';
   const value = (row: Row) => row.entry.descriptor.type === 'boolean' ? (row.input as HTMLInputElement).checked
@@ -86,7 +87,19 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
         } else { label.append(input); controls.append(label); }
         field.append(controls);
         const row: Row = { entry, input, note, slider, dirty: false, busy: false }; rows.set(descriptor.id, row);
-        input.oninput = () => { if (slider && input.checkValidity() && input.value !== '') slider.value = input.value; edit(row); };
+        let preview:HTMLElement|undefined;
+        const datePreview=()=>{if(preview){const error=validateCheckpointFormat(input.value);input.setCustomValidity(error||'');preview.textContent=error||formatCheckpoint(new Date(),input.value)}};
+        if(descriptor.id==='states.dateFormat'){
+          preview=document.createElement('p');preview.setAttribute('aria-live','polite');
+          const presets=document.createElement('select');presets.setAttribute('aria-label','Date format presets');
+          const placeholder=document.createElement('option');placeholder.textContent='Date format presets…';placeholder.value='';presets.append(placeholder);
+          for(const format of CHECKPOINT_FORMAT_PRESETS){const option=document.createElement('option');option.value=format;option.textContent=formatCheckpoint(new Date(),format);presets.append(option)}
+          presets.onchange=()=>{if(presets.value){input.value=presets.value;datePreview();edit(row);save(row)}};
+          controls.append(presets);field.append(preview);
+          const help=document.createElement('p');help.textContent='Supported: %% %Y %y %m %B %b %d %e %H %I %M %S %p %a %z. Changes labels only.';field.append(help);
+        }
+        row.preview=datePreview;
+        input.oninput = () => {datePreview(); if (slider && input.checkValidity() && input.value !== '') slider.value = input.value; edit(row); };
         if (slider) {
           slider.oninput = () => { input.value = slider!.value; edit(row); };
           slider.onchange = slider.onblur = () => save(row);
@@ -112,6 +125,7 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
           browse.onclick = () => { void run(row, () => bridge.chooseFile(descriptor.id)); };
           controls.append(browse);
         }
+        input.addEventListener('focus',datePreview);
         const reset = document.createElement('button'); reset.textContent = 'Reset';
         reset.className = 'setting-reset';
         reset.setAttribute('aria-label', `Reset ${descriptor.title}`);
@@ -125,6 +139,7 @@ export function mountSettingsForm(element: HTMLElement, bridge: PreferencesBridg
         if (entry.descriptor.type === 'boolean') (row.input as HTMLInputElement).checked = entry.value === true;
         else { row.input.value = String(entry.value); if (row.slider) row.slider.value = String(entry.value); }
       }
+      row.preview?.();
       row.note.textContent = `${entry.source} · ${entry.pending ? `Saved; applies ${entry.descriptor.apply === 'next-rom' ? 'on next ROM load' : entry.descriptor.apply === 'restart' ? 'after restart' : 'when applied'}` : entry.descriptor.apply === 'next-rom' ? 'Next ROM load' : entry.descriptor.apply === 'restart' ? 'Restart required' : 'Live'}`;
       row.note.dataset.pending = String(entry.pending);
     }

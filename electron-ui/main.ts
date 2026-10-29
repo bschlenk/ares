@@ -1,3 +1,9 @@
+import {romDisplayTitle} from './library/title.js';
+import {zipEntries} from './library/zip.js';
+import {systems as librarySystems} from './library/systems.js';
+import {CheckpointLibrary} from './services/checkpoint-library.js';
+import {Checkpoints} from './services/checkpoints.js';
+import {DEFAULT_CHECKPOINT_FORMAT,validateCheckpointFormat} from './services/checkpoint-format.js';
 import { RomLibrary } from './library/service.js'
 import {MainWatchdog} from './services/watchdog.js';
 import {ServiceError} from './services/contracts.js'
@@ -95,6 +101,9 @@ interface NativeSession {
   outstanding: boolean
   lastSequence: number
   diagnostic: string
+  checkpoints?: Checkpoints
+  checkpointReason?: string
+  checkpointLoadedAt?: number
   failure?: string
   lastPresentation?:import('./services/frame-contracts.js').FrameReference
   lastFrame?: NativeFrame
@@ -351,6 +360,8 @@ export const workspace = new WorkspaceStore(path.join(app.getPath('userData'), '
 export const preferences = new SettingsStore(
   path.join(app.getPath('userData'), 'preferences.json'), [
     ...presentationSettings,
+    {id:'states.root',title:'Save-state storage folder (existing files are not moved or deleted)',section:'Save States',type:'string',default:path.join(app.getPath('userData'),'states'),apply:'live',file:{extensions:[],directory:true}},
+    {id:'states.dateFormat',title:'Capture date format',section:'Save States',type:'string',default:DEFAULT_CHECKPOINT_FORMAT,maxLength:256,apply:'live'},
     { id: 'emulation.pauseOnFocusLoss', title: 'Pause when the window loses focus', section: 'Emulation', type: 'boolean', default: false, apply: 'live' },
     { id: 'library.directory', title: 'ROM directory', section: 'ROM Library', type: 'string', default: '', apply: 'live', file: { extensions: [], directory: true } },
     { id: 'library.browser', title: 'Open ROM browser command (native or plugin-id:command)', section: 'ROM Library', type: 'string', default: 'ares.library:open', apply: 'live' },
@@ -428,6 +439,8 @@ async function refreshNativeSettings() {
   preferences.inherit(importedValues(info, preferences.catalog().entries.map(entry => entry.descriptor)))
 }
 async function setPreference(id: string, value: unknown, reset = false, guard: () => void = () => {}) {
+  if(id==='states.dateFormat' && !reset) {const error=validateCheckpointFormat(String(value));if(error)throw new Error(error)}
+  if(id==='states.root' && !reset && (typeof value!=='string'||!path.isAbsolute(value)))throw new Error('Choose an absolute storage folder')
   if (reset) await preferences.reset(id, guard); else await preferences.set(id, value, guard)
   if (id === 'paths.importBml') await refreshNativeSettings()
   return preferences.catalog()
@@ -483,7 +496,7 @@ ipcMain.handle('plugin.library', (event, token: unknown, request: import('./libr
         if (typeof request.id !== 'string') throw new Error('invalid_library_request')
         const options = await romLibrary.launchInfo(request.id)
         guard(capability)
-        await enqueue(() => { guard(capability); return start(options) })
+        await enqueue(() => { guard(capability); return start({...options,title:romLibrary.cached()?.games.find(game=>game.id===request.id)?.title}) })
         return
       }
       case 'contextMenu': {
@@ -525,9 +538,33 @@ function command(text: string) {
   if (active && !active.child.stdin.destroyed && active.child.stdin.writable)
     active.child.stdin.write(text + '\n')
 }
+let checkpointBusy=false
+function checkpointLibrary() {return new CheckpointLibrary(String(preferenceValue('states.root')),file=>shell.trashItem(file),message=>appLogs.write('checkpoint-retention','warn',message))}
+async function saveCheckpoint(permanent:boolean) {
+  if(checkpointBusy)throw new Error('checkpoint_busy')
+  const session=active;if(!session?.checkpoints)throw new Error(session?.checkpointReason||'Save states unavailable')
+  checkpointBusy=true
+  try{return await session.checkpoints.save(checkpointLibrary(),permanent)}finally{checkpointBusy=false}
+}
+async function autosaveBeforeStop(old:NativeSession) {
+  if(!old.checkpoints)return
+  for(;;) {
+    try{
+      const state=await sessions.request('session.status',sessions.identity)
+      if(!state.ok)throw new Error(state.error)
+      if(!state.result?.checkpoint_eligible)return
+      await saveCheckpoint(false);return
+    }catch(error) {
+      const choice=await dialog.showMessageBox(window,{type:'error',title:'Could not save your game',message:'The game is still open.',detail:String(error),buttons:['Retry','Stay in game','Leave without saving'],defaultId:0,cancelId:1,noLink:true})
+      if(choice.response===1)throw new Error('checkpoint_stay_in_game')
+      if(choice.response===2)return
+    }
+  }
+}
 async function stop() {
   const old = active
   if (!old) return
+  await autosaveBeforeStop(old)
   active = null
   plugins.disconnect()
   sessions.detach()
@@ -542,7 +579,7 @@ async function hashRom(file: string) {
   for await (const bytes of fs.createReadStream(file)) hash.update(bytes)
   return hash.digest('hex')
 }
-async function start(options: StartOptions & { agent?: boolean; romHash?: string }) {
+async function start(options: StartOptions & { agent?: boolean; romHash?: string; title?: string }) {
   const romHash = options.rom ? options.romHash ?? await hashRom(options.rom) : undefined
   let system = 'Synthetic'
   await refreshNativeSettings()
@@ -573,6 +610,12 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
       if (choice.response === matches.length) return
       system = matches[choice.response]
     }
+  }
+  let gameTitle=options.rom?options.title||romDisplayTitle(path.basename(options.rom,path.extname(options.rom))):undefined
+  if(options.rom&&!options.title&&path.extname(options.rom).toLowerCase()==='.zip'){
+    const members=await zipEntries(options.rom)
+    const member=members.find(entry=>librarySystems[path.posix.extname(entry.name).slice(1).toLowerCase()]?.name===system)??members.find(entry=>librarySystems[path.posix.extname(entry.name).slice(1).toLowerCase()])
+    if(member)gameTitle=romDisplayTitle(path.posix.basename(member.name,path.posix.extname(member.name)))
   }
   await stop()
   const args = options.rom ? ['--rom', options.rom] : ['--synthetic']
@@ -636,8 +679,17 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
       }
     },
   )
-  const gameTitle = options.rom ? path.basename(options.rom, path.extname(options.rom)).replace(/\s*[([][^)\]]*[)\]]/g, '').trim() : undefined
+
+  session.checkpointLoadedAt=Date.now()
   sessions.attach(client, gameTitle)
+  void client.request('checkpoint.info').then(reply=>{
+    if(active!==session||!reply.ok||!reply.result)return
+    session.checkpointLoadedAt=Date.now()
+    session.checkpointReason=reply.result.reason||'Save states unavailable'
+    const configuration={configuration_sha256:reply.result.configuration}
+    if(reply.result.available)session.checkpoints=new Checkpoints(sessions,{hash:reply.result.hash,system,title:gameTitle||system},()=>sessions.identity,()=>active===session,()=>configuration)
+    window?.webContents.send('checkpoint-changed')
+  }).catch(error=>status(String(error)))
   if (window && !window.isDestroyed()) window.setTitle(gameTitle ? `${gameTitle} — ares` : 'ares')
   void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window?.isFocused() ?? false).catch(error => appLogs.write('focus-pause', 'error', error))
   void client.request('session.status').then(reply => {
@@ -695,6 +747,7 @@ function queueOperation<T>(task: () => Promise<T>) {
 }
 function enqueue(task: () => Promise<void>) {
   return queueOperation(task).catch((error) => {
+    if(error.message==='checkpoint_stay_in_game')return
     status(error.message)
     console.error(error)
   })
@@ -749,6 +802,7 @@ app
         backgroundThrottling: false,
       },
     })
+    window.on('close',event=>{if(!quitReady){event.preventDefault();app.quit()}})
     window.on('page-title-updated', event => event.preventDefault());
     const focusChanged = () => { void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window.isFocused()).catch(error => appLogs.write('focus-pause', 'error', error)); };
     window.on('focus', focusChanged); window.on('blur', () => { command('fastforward 0'); focusChanged(); });
@@ -977,6 +1031,24 @@ app
         throw new Error('invalid_request')
       })
     }
+    ipcMain.handle('checkpoints',async(event,request:unknown)=>{
+      if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!request||typeof request!=='object')throw new Error('invalid_request')
+      const p=request as {operation:string;id?:string;name?:string;session?:string}
+      if(p.operation==='status')return {session:sessions.identity?.session,available:!!active?.checkpoints,reason:active?.checkpointReason||'No game loaded',loadedAt:active?.checkpointLoadedAt}
+      return queueOperation(async()=>{
+        const controller=active?.checkpoints
+        if(!controller||!p.session||p.session!==sessions.identity?.session)throw new Error('checkpoint_session_changed')
+        const library=checkpointLibrary()
+        if(p.operation==='list')return library.list(controller.game,true)
+        if(p.operation==='save')return saveCheckpoint(true)
+        if(typeof p.id!=='string')throw new Error('invalid_request')
+        if(p.operation==='load'){await controller.load(library,p.id);return}
+        if(p.operation==='rename'&&typeof p.name==='string')return library.rename(controller.game,p.id,p.name)
+        if(p.operation==='delete')return library.delete(controller.game,p.id)
+        if(p.operation==='reveal'){shell.showItemInFolder(await library.revealPath(controller.game,p.id));return}
+        throw new Error('invalid_request')
+      })
+    })
     ipcMain.handle('systems', async (event) => {
       if (event.sender !== window.webContents) return []
       return (await probe(['--systems'])).split('\n').filter(Boolean)
@@ -1073,7 +1145,8 @@ app.on('before-quit', (event) => {
   void (async()=>{
     // Window closure or another signal can request quit again while these await.
     // Keep every request blocked until all owners and service claims are released.
-    for(const close of [()=>enqueue(stop),()=>plugins.close(),()=>mainWatchdog.close(),()=>serviceHost.close()]){
+    try{await queueOperation(stop)}catch(error){quitting=false;if((error as Error).message!=='checkpoint_stay_in_game')status(String(error));return}
+    for(const close of [()=>plugins.close(),()=>mainWatchdog.close(),()=>serviceHost.close()]){
       try{await close()}catch(error){appLogs.write('main','error',error)}
     }
     quitReady=true

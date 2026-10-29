@@ -22,6 +22,8 @@
           <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="m8 4 12 8-12 8z"/></svg>
         </button>
         <button id="video-fast-forward" aria-label="Hold to fast-forward" title="Hold to fast-forward" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="m5 5 9 7-9 7V5Zm9 0 9 7-9 7V5Z"/></svg></button>
+        <button id="video-save-state" aria-label="Save State" title="Save State" disabled><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3h12l4 4v14H3V3h2Zm2 0v7h10V3M7 21v-7h10v7"/></svg></button>
+        <button id="video-load-state" aria-label="Load State" title="Load State" disabled><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h7l2 3h9l-3 12H3V6Zm9 6v6m-3-3 3 3 3-3"/></svg></button>
         <button id="video-reset" aria-label="Reset game" title="Reset game"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10a6.5 6.5 0 1 0 .5 5M18 5v5h-5"/></svg></button>
         <span id="recording-controls" role="group" aria-label="Recording controls" hidden>
           <button id="video-record" aria-label="Start recording" title="Start recording" aria-describedby="recording-description" aria-pressed="false">
@@ -35,6 +37,11 @@
       </div>
     </section>
   </div>
+  <aside id="state-resume" aria-label="Resume last game" role="status" hidden></aside>
+  <dialog id="state-browser" class="plugin-modal" aria-labelledby="state-title">
+    <header><h2 id="state-title">Save States</h2><button id="state-close" aria-label="Close save states">×</button></header>
+    <p id="state-feedback" role="status"></p><div id="state-grid" class="plugin-modal-content"></div>
+  </dialog>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
     <header class="settings-header"><h1 id="settings-title">Settings</h1><button id="close-settings" aria-label="Close settings">×</button></header>
     <div class="settings-layout">

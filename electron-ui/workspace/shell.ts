@@ -65,7 +65,7 @@ for (const [id, action] of [['copy-mcp-config', 'copy'], ['install-cli-helpers',
     catch (error) { element('agent-status').textContent = String(error); }
   };
 }
-mountSettingsForm(element('settings-general'), window.ares.preferences, entry => ['Presentation', 'Emulation', 'Audio', 'Video', 'ROM Library'].includes(entry.descriptor.section));
+mountSettingsForm(element('settings-general'), window.ares.preferences, entry => ['Presentation', 'Emulation', 'Audio', 'Video', 'ROM Library', 'Save States'].includes(entry.descriptor.section));
 mountSettingsForm(element('settings-input-advanced'), window.ares.preferences, entry => entry.descriptor.id.startsWith('input.'));
 mountSettingsForm(element('settings-firmware'), window.ares.preferences, entry => entry.descriptor.id.startsWith('firmware.') || entry.descriptor.id === 'paths.importBml');
 mountSettingsForm(element('settings-core'), window.ares.preferences, entry => !!entry.descriptor.nativeKey && !['Presentation', 'Audio', 'Video', 'Firmware', 'Paths'].includes(entry.descriptor.section));

@@ -49,6 +49,7 @@
 #include "native/recording-service.hpp"
 #include "native/state-snapshot.hpp"
 #include "native/state-loader.hpp"
+#include "native/checkpoint-service.hpp"
 #include "native/settings-service.hpp"
 #include "native/script-service.hpp"
 
@@ -61,12 +62,19 @@ struct Host : ares::Platform {
   RecordingService recording;
   StateSnapshot stateSnapshot;
   StateLoader stateLoader;
+  CheckpointService checkpoints;
+  std::vector<std::pair<std::string,std::shared_ptr<vfs::directory>>> mediaPaks;
   std::atomic<bool> takeoverRequested{false};
   InputStartGate inputStart;
   uint64_t armedInputJob=0;
   ares::Node::System root;
   string contentHash;
   uint64_t contentSize = 0;
+  double gameplayMs=0;
+  bool gameplayRunning=false, loadedCheckpoint=false;
+  Clock::time_point gameplayTick=Clock::now();
+  void accountGameplay() {auto now=Clock::now();if(gameplayRunning)gameplayMs+=std::chrono::duration<double,std::milli>(now-gameplayTick).count();gameplayTick=now;gameplayRunning=root&&!service.paused&&!nall::GDB::server.isHalted()&&!(root->name()=="Nintendo 64"&&ares::Nintendo64::cpu.debugControl.halted);}
+
   std::shared_ptr<HID::Joypad> joypad;
   std::shared_ptr<HID::Keyboard> keyboard;
   std::shared_ptr<HID::Mouse> mouse;
@@ -101,7 +109,9 @@ struct Host : ares::Platform {
     for(int i = 0; i < 8; i++) p[i] = bits >> (8 * i);
   }
   auto pak(ares::Node::Object node) -> std::shared_ptr<vfs::directory> override {
-    return emulator ? emulator->pak(node) : nullptr;
+    auto pak = emulator ? emulator->pak(node) : nullptr;
+    if(pak && std::ranges::none_of(mediaPaks,[&](auto& entry){return entry.second==pak;})) mediaPaks.emplace_back(node->name().data(),pak);
+    return pak;
   }
   void setupInput() {
     joypad = std::make_shared<HID::Joypad>(); joypad->setID(0xe1ec0003);
@@ -470,6 +480,45 @@ int main(int argc, char** argv) {
       host.contentSize = bytes->size();
       host.contentHash = nall::Hash::SHA256({bytes->data(), bytes->size()}).digest();
     }
+    // Hash normalized mounted content, never container bytes, paths, titles,
+    // battery RAM or system firmware. Mount order distinguishes companion slots.
+    nall::Hash::SHA256 identityHash;
+    auto text=[&](const std::string& value){identityHash.input(std::span<const uint8_t>{reinterpret_cast<const uint8_t*>(value.data()),value.size()});identityHash.input(uint8_t(0));};
+    text("ares-checkpoint-content-v1");text(host.systemName.data());text(host.root->name().data());
+    unsigned mediaCount=0;
+    for(auto& [mount,pak]:host.mediaPaks) {
+      if(emulator->system && pak==emulator->system->pak) continue;
+      auto files=pak->files();std::ranges::sort(files,{},[](auto& file){return std::string(file->name().data());});
+      for(auto& file:files) {
+        auto name=file->name();
+        if(!name.endsWith(".rom") && !name.endsWith(".exe") && !name.endsWith(".disk") && !name.endsWith(".error") && !name.endsWith(".tape") && !name.endsWith(".pcm") && !name.find(".side")) continue;
+        text(mount);text(name.data());text(std::to_string(file->size()));
+        auto offset=file->offset();file->seek(0);
+        std::vector<uint8_t> buffer(65536);
+        for(uint64_t remaining=file->size();remaining;) {auto count=std::min<uint64_t>(remaining,buffer.size());file->read(buffer.data(),count);identityHash.input(std::span<const uint8_t>{buffer.data(),size_t(count)});remaining-=count;}
+        file->seek(offset);++mediaCount;
+      }
+    }
+    // Compatibility describes this actual machine and its loaded firmware,
+    // not unrelated settings for every registered system or firmware paths.
+    nall::Hash::SHA256 configurationHash;
+    auto configText=[&](const std::string& value){configurationHash.input(std::span<const uint8_t>{reinterpret_cast<const uint8_t*>(value.data()),value.size()});configurationHash.input(uint8_t(0));};
+    configText("ares-checkpoint-configuration-v1");configText(host.root->attribute("configuration").data());
+    if(emulator->system && emulator->system->pak) {
+      auto files=emulator->system->pak->files();std::ranges::sort(files,{},[](auto& file){return std::string(file->name().data());});
+      for(auto& file:files) {
+        auto name=file->name();if(!name.endsWith(".rom")&&!name.endsWith(".bios")&&!name.endsWith(".bin"))continue;
+        configText(name.data());configText(std::to_string(file->size()));auto offset=file->offset();file->seek(0);
+        std::vector<uint8_t> buffer(65536);
+        for(uint64_t remaining=file->size();remaining;){auto count=std::min<uint64_t>(remaining,buffer.size());file->read(buffer.data(),count);configurationHash.input(std::span<const uint8_t>{buffer.data(),size_t(count)});remaining-=count;}
+        file->seek(offset);
+      }
+    }
+    host.checkpoints.configuration=configurationHash.digest().data();
+    if(mediaCount) host.checkpoints.hash=identityHash.digest().data();
+    else host.checkpoints.reason="No stable mounted game-content identity";
+    if(host.systemName=="Saturn") host.checkpoints.reason="This core has no save-state payload";
+    if(host.systemName.beginsWith("ZX Spectrum")) host.checkpoints.reason="This core omits video, sound and keyboard state";
     updatePalette();
   }
   std::cerr << "ready: " << (synthetic ? "synthetic RGBA source" : host.systemName.data())
@@ -536,7 +585,9 @@ int main(int argc, char** argv) {
   ViewerService viewerService;
   if(n64) viewerService.loadRom(rom);
   host.service.statusFields = [&] {
+    host.accountGameplay();
     MachineService::Object status;
+    status.add("checkpoint_eligible", host.loadedCheckpoint||host.gameplayMs>=10000 ? "true":"false");
     if(host.contentHash) {
       MachineService::Object game; game.add("sha256", controlQuote(host.contentHash.data()));
       game.number("size", host.contentSize); game.add("kind", controlQuote("program.rom"));
@@ -622,8 +673,9 @@ int main(int argc, char** argv) {
   host.service.audioRequest = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
     return host.audioCapture.execute(method, args, owner, !host.streams.empty());
   };
-  host.service.onReleaseOwner = [&](const std::string& owner) { for(auto it=observers.begin();it!=observers.end();)if(it->second->owner==owner){it->second->finish("disconnected");it=observers.erase(it);}else ++it;observerPreparations.erase(owner); host.demonstration.releaseOwner(owner,execution.frame); host.injectedInput.releaseOwner(owner); profilerService.releaseOwner(owner); host.captures.releaseOwner(owner); host.audioCapture.releaseOwner(owner); host.recording.releaseOwner(owner); host.stateSnapshot.releaseOwner(owner); host.stateLoader.releaseOwner(owner); rspDebugService.releaseOwner(owner); rdpCaptureService.releaseOwner(owner); inspectionService.releaseOwner(owner); callService.releaseOwner(owner); viewerService.releaseOwner(owner); };
+  host.service.onReleaseOwner = [&](const std::string& owner) { for(auto it=observers.begin();it!=observers.end();)if(it->second->owner==owner){it->second->finish("disconnected");it=observers.erase(it);}else ++it;observerPreparations.erase(owner); host.demonstration.releaseOwner(owner,execution.frame); host.injectedInput.releaseOwner(owner); profilerService.releaseOwner(owner); host.captures.releaseOwner(owner); host.audioCapture.releaseOwner(owner); host.recording.releaseOwner(owner); host.stateSnapshot.releaseOwner(owner); host.stateLoader.releaseOwner(owner); host.checkpoints.releaseOwner(owner); rspDebugService.releaseOwner(owner); rdpCaptureService.releaseOwner(owner); inspectionService.releaseOwner(owner); callService.releaseOwner(owner); viewerService.releaseOwner(owner); };
   host.service.beforeRequest = [&](const std::string& method, const std::string& owner) -> std::string {
+    host.accountGameplay();
     host.demonstration.tick(host.service.epoch,execution.frame);
     const bool demoScriptLifecycle = (owner==host.demonstration.owner||owner==host.demonstration.requester) && (method=="execution.status" || method=="execution.cancel" || method=="script.pending" || method=="script.read" || method=="script.ack" || method=="script.resolve");
     if(host.demonstration.state=="armed"&&!demoScriptLifecycle&&method!="execution.release"&&method!="session.reset"&&!method.starts_with("n64.demo.")&&method!="session.status"&&method!="runtime.settings"&&method!="video.record.status"&&!method.starts_with("n64.state.")&&!method.starts_with("memory.read"))return "demonstration_armed";
@@ -632,6 +684,7 @@ int main(int argc, char** argv) {
     if(host.demonstration.state=="recording"&&host.demonstration.source=="human"&&(method.starts_with("n64.input.")&&method!="n64.input.state"||method.starts_with("execution.run")||method=="execution.stepInstructions"||method.starts_with("script.start")))return "demonstration_human_only";
     rspDebugService.service(execution, host.service.paused);
     if(!rspDebugService.permitted(method, owner, bool(execution.active))) return "busy";
+    if(host.checkpoints.transfer && host.checkpoints.transfer->upload && !method.starts_with("checkpoint.") && method!="session.status" && method!="execution.release") return "busy";
     auto& load = host.stateLoader;
     if(load.upload && Clock::now() >= load.upload->deadline) load.reset();
     if(load.upload && (method == "session.pause" || method == "session.resume") && owner != "ui" && owner != load.upload->owner) return "busy";
@@ -646,6 +699,34 @@ int main(int argc, char** argv) {
     return std::find(allowed.begin(), allowed.end(), method) != allowed.end() ? std::string{} : "busy";
   };
   host.service.n64Request = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
+    if(method.starts_with("checkpoint.")) {
+      const bool busy=bool(execution.active)||bool(execution.reservation)||host.stateLoader.upload.has_value()||scriptService.running||!observers.empty();
+      if(method!="checkpoint.commit") return host.checkpoints.execute(method,args,owner,host.root,host.captures,host.service.epoch,execution.frame,n64,busy,host.service.paused);
+      auto& transfer=host.checkpoints.transfer;uint64_t id;
+      if(args.size()!=2 || !ExecutionService::number(args[0],id) || (args[1]!="0"&&args[1]!="1"))return ControlResult{"invalid_request",{}};
+      if(!transfer || transfer->id!=id || Clock::now()>=transfer->expires)return ControlResult{"stale_upload",{}};
+      if(transfer->owner!=owner || busy || nall::GDB::server.hasClient())return ControlResult{"busy",{}};
+      if(!transfer->upload || transfer->written!=transfer->bytes.size())return ControlResult{"state_truncated",{}};
+      auto current=host.root->serialize(true);auto& bytes=transfer->bytes;
+      if(bytes.size()!=current.size() || bytes.size()<533 || std::memcmp(bytes.data(),current.data(),21))return ControlResult{"state_configuration_mismatch",{}};
+      // Preserve configuration checks implemented by the core; roll back any
+      // partially restored state and invalidate all old epoch-owned captures.
+      nall::serializer state{bytes.data(),uint32_t(bytes.size())};
+      bool loaded=host.root->unserialize(state)&&state.size()==bytes.size();
+      bool restored=true;
+      if(!loaded){nall::serializer backup{current.data(),current.size()};restored=host.root->unserialize(backup)&&backup.size()==current.size();}
+      transfer.reset();++host.service.epoch;host.service.memoryTools.sync(host.service.epoch);
+      host.injectedInput.releaseAll();host.injectedInput.operationRunning=false;host.injectedInput.epoch=host.service.epoch;
+      host.demonstration.tick(host.service.epoch,0);
+      traceService.reset();profilerService.reset();rdpCaptureService.reset();inspectionService.reset();callService.reset();viewerService.reset();
+      host.captures.reset(host.service.epoch);host.audioCapture.reset();host.recording.rebase(owner,host.service.epoch);host.stateSnapshot.reset();
+      if(n64){ares::Nintendo64::executionCoordinate.reset();ares::Nintendo64::executionCoordinate.atBoundary=false;ares::Nintendo64::dmaProvenance.reset(host.service.epoch);ares::Nintendo64::taskProvenance.reset(host.service.epoch);ares::Nintendo64::cpu.debugControl.power();}
+      execution.frame=0;execution.atBoundary=false;execution.finished.clear();host.output.clear();host.service.paused=!loaded||args[1]!="1";
+      if(loaded)host.loadedCheckpoint=true;
+      if(!loaded)return ControlResult{restored?"state_load_failed_restored":"state_restore_failed",{}};
+      if(n64)host.showPausedFramebuffer();else if(emulator)emulator->refresh();
+      return ControlResult{{},"{\"loaded\":true}"};
+    }
     if(method.starts_with("n64.demo.")){
       if(!n64&&!synthetic)return ControlResult{"unavailable",{}};
       auto result=host.demonstration.execute(method,args,owner,host.service.epoch,execution.frame,host.contentHash.data(),host.service.session);
@@ -681,7 +762,7 @@ int main(int argc, char** argv) {
         host.demonstration.tick(host.service.epoch,0);
         host.injectedInput.releaseAll(); host.injectedInput.operationRunning = false;
         traceService.reset(); profilerService.reset(); rdpCaptureService.reset(); inspectionService.reset(); callService.reset(); viewerService.reset(); host.captures.reset(host.service.epoch);
-        host.audioCapture.reset(); host.recording.rebase(owner,host.service.epoch); host.stateSnapshot.reset();
+        host.audioCapture.reset(); host.recording.rebase(owner,host.service.epoch); host.stateSnapshot.reset(); host.checkpoints.transfer.reset();
         ares::Nintendo64::executionCoordinate.reset();
         ares::Nintendo64::executionCoordinate.atBoundary = false; // restored VI phase is not an observed boundary
         ares::Nintendo64::dmaProvenance.reset(host.service.epoch);
@@ -709,7 +790,7 @@ int main(int argc, char** argv) {
             + ",\"stopped\":" + (host.service.paused ? "true" : "false") + ",\"paused\":" + (host.service.paused ? "true" : "false") + ",\"running\":" + (host.service.paused ? "false" : "true") + ",\"input\":" + host.injectedInput.state() + "}";
         }
       }
-      if(result.error.empty()&&method=="n64.state.loadCommit")host.showPausedFramebuffer();
+      if(result.error.empty()&&method=="n64.state.loadCommit"){host.loadedCheckpoint=true;host.showPausedFramebuffer();}
       return result;
     }
     if(method == "n64.state.begin" || method == "n64.state.read" || method == "n64.state.release") return host.stateSnapshot.execute(method, args, owner, host.service.epoch, execution.frame, n64, bool(execution.active) && !(scriptService.running && scriptService.hostWaiting && (scriptService.hostKind=="state_save"||scriptService.hostKind=="input_prepare") && scriptService.owner==owner), host.service.paused);
@@ -892,6 +973,7 @@ int main(int argc, char** argv) {
   uint64_t previewEpoch = 0;
   auto previewDeadline = Clock::now();
   while(!host.quit) {
+    host.accountGameplay();
     if(n64) {
       execution.frame = ares::Nintendo64::executionCoordinate.frame;
       execution.atBoundary = ares::Nintendo64::executionCoordinate.atBoundary;
@@ -909,12 +991,14 @@ int main(int argc, char** argv) {
       host.audioCapture.reset();
       host.recording.reset();
       host.stateSnapshot.reset();
+      host.checkpoints.transfer.reset();
       host.stateLoader.reset(); rspDebugService.reset(); rdpCaptureService.reset(); inspectionService.reset(); callService.reset(); viewerService.reset();
       ares::Nintendo64::executionCoordinate.reset(); syntheticPhase = 0;
       ares::Nintendo64::dmaProvenance.reset(host.service.epoch + 1);
       ares::Nintendo64::taskProvenance.reset(host.service.epoch+1);
       if(host.root) { host.output.clear(); host.root->power(); }
     }, host.memory)) { host.quit = true; break; }
+    host.accountGameplay();
     bool inputStarted=false;
     {std::lock_guard lock(runtime.inputMutex);
       if(host.demonstration.state=="armed") {

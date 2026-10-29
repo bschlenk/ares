@@ -114,6 +114,7 @@ async function main() {
     ['electron-plugin-settings', 'electron-plugin-settings.js', []],
     ['electron-workspace', 'electron-workspace.js', []],
     ['electron-settings', 'electron-settings.js', []],
+    ['electron-save-states', 'electron-checkpoints.js', []],
     ['electron-agent', 'electron-agent-integration.js', []],
     ['electron-agent-forced-on', 'electron-agent-integration.js', ['--services']],
     ['electron-agent-forced-off', 'electron-agent-integration.js', ['--no-services']],
