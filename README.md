@@ -66,6 +66,27 @@ behavior and deferred desktop features. Windows/Linux frontend distribution and
 public-release packaging remain separate projects. Release links above describe
 upstream ares, not releases of this fork's Electron frontend.
 
+Merging upstream changes
+------------------------
+
+From a clean working tree on the branch you want to update, run:
+
+```sh
+./scripts/pull-upstream.sh
+```
+
+The script creates `upstream` pointing to `https://github.com/ares-emulator/ares.git`
+if missing, verifies an existing remote points to that repository, and fetches
+and merges upstream `master`. Pass a branch name to merge another upstream branch:
+`./scripts/pull-upstream.sh branch-name`. An existing remote pointing elsewhere
+is left unchanged and reported as an error.
+
+Conflicts are left for manual review, including changes to the retired desktop
+frontend. Resolve and stage them, then run `git merge --continue`, or cancel with
+`git merge --abort`. Run the relevant build and tests after merging.
+See [the upstream merge guide](scripts/UPSTREAM.md) for the script's behavior,
+conflict review procedure and maintenance guidance.
+
 High-level Components
 ---------------------
 
