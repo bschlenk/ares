@@ -67,6 +67,38 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     assert(fs.existsSync(path.join(demoDirectory,'initial.state')));assert.equal((await peer.tool('demonstration_status')).state,'armed','human job survives originating script disconnect');
     unwrap(await router.request('n64.demo.cancel',undefined,undefined,'ui'));await sleep(150);
     assert.equal((await peer.tool('state_load',{path:baseline})).error,undefined);
+    const clipDirectory=path.join(dir,...Array.from({length:9},(_,i)=>String(i).padEnd(98,'x')));fs.mkdirSync(clipDirectory,{recursive:true});
+    const clips=[path.join(clipDirectory,'first.avi'),path.join(dir,'second.avi')];
+    const segmented=await peer.tool('run_script',{source:`export default async({emu,frames,mem,args})=>{
+      await emu.loadState(args.baseline);await emu.video.start();
+      let overlap;try{await emu.video.start()}catch(e){overlap=String(e)}
+      mem.writeU32(0x2000,0xf801f801,'rdram');await frames(2);
+      for(const color of [0x07c107c1,0x003f003f,0xf83ff83f]){await emu.loadState(args.baseline);mem.writeU32(0x2000,color,'rdram');await frames(1);}
+      const first=await emu.video.stop(args.clips[0]);
+      await emu.video.start();await frames(2);
+      let denied;try{await emu.video.stop(args.denied)}catch(e){denied=String(e)}
+      let retry;try{await emu.video.stop(args.clips[0])}catch(e){retry=String(e)}
+      const retained=await emu.video.status();const second=await emu.video.stop(args.clips[1]);const released=await emu.video.status();if(released.available||released.segments.length)throw Error('recording not released');
+      return {first,second,overlap,denied,retry,retained};
+    }`,args:{baseline,clips,denied:path.join(dir,'not-granted.avi')},state_paths:[baseline],output_paths:clips});
+    let segmentedOp=segmented;for(let i=0;i<1000&&(segmentedOp.state==='running'||segmentedOp.script_result?.state==='pending');++i){await sleep(5);segmentedOp=await peer.tool('operation_status',{operation_id:segmented.operation_id});}
+    const segmentedPage=await peer.tool('script_result',{result_handle:segmented.result_handle});assert.equal(segmentedOp.stop_reason,'script_done',JSON.stringify({segmentedOp,segmentedPage}));
+    const movies=JSON.parse(Buffer.from(segmentedPage.hex,'hex').toString());
+    assert(Buffer.byteLength(JSON.stringify(movies.first))>1536,'video metadata traverses the enlarged bounded host reply');assert.equal(movies.first.frames,5);assert.deepEqual(movies.first.segments.map(s=>[s.first_frame,s.frames]),[[0,2],[2,1],[3,1],[4,1]]);assert.equal(movies.second.frames,2);assert.equal(movies.second.segments.length,1);
+    assert.match(movies.overlap,/recording_exists/);assert.match(movies.denied,/capability_denied/);assert.match(movies.retry,/file_exists/);assert.equal(movies.retained.frames,2);assert.equal(movies.retained.available,true);
+    const firstAvi=fs.readFileSync(clips[0]),firstFrameBytes=movies.first.captured_bytes/5;
+    assert.equal(firstAvi.readUInt32LE(48),5);assert.equal(fs.readFileSync(clips[1]).readUInt32LE(48),2);
+    assert.notDeepEqual(firstAvi.subarray(232,232+firstFrameBytes),firstAvi.subarray(232+2*(firstFrameBytes+8),232+2*(firstFrameBytes+8)+firstFrameBytes),'pixels on both sides of the load survive');
+    const abandoned=await peer.tool('run_script',{source:'export default async({emu,frames,args})=>{await emu.video.start();await frames(1);await emu.video.stop(args.path);await emu.video.start();await frames(1);throw Error("after-saved-clips")}',args:{path:path.join(dir,'saved-before-failure.avi')},output_paths:[path.join(dir,'saved-before-failure.avi')],max_seconds:10});
+    let abandonedOp=abandoned;for(let i=0;i<500&&abandonedOp.state==='running';++i){await sleep(5);abandonedOp=await peer.tool('operation_status',{operation_id:abandoned.operation_id});}
+    assert.equal(abandonedOp.stop_reason,'script_failed');for(let i=0;i<100&&(await peer.tool('video_status')).available;++i)await sleep(5);assert.equal((await peer.tool('video_status')).available,false);assert.deepEqual(fs.readFileSync(clips[0]),firstAvi);assert.equal(fs.readFileSync(path.join(dir,'saved-before-failure.avi')).readUInt32LE(48),1);
+    const eightPaths=Array.from({length:8},(_,i)=>path.join(dir,`quota-${i}.avi`));
+    const quota=await peer.tool('run_script',{source:`export default async({emu,frames,args})=>{const counts=[];for(const path of args.paths){await emu.video.start();await frames(1);counts.push((await emu.video.stop(path)).frames);}let limit;try{await emu.video.start()}catch(e){limit=String(e)}return {counts,limit,status:await emu.video.status()}}`,args:{paths:eightPaths},output_paths:eightPaths});
+    let quotaOp=quota;for(let i=0;i<1000&&(quotaOp.state==='running'||quotaOp.script_result?.state==='pending');++i){await sleep(5);quotaOp=await peer.tool('operation_status',{operation_id:quota.operation_id});}
+    const quotaPage=await peer.tool('script_result',{result_handle:quota.result_handle});assert.equal(quotaOp.stop_reason,'script_done',JSON.stringify({quotaOp,quotaPage}));const quotaValue=JSON.parse(Buffer.from(quotaPage.hex,'hex').toString());assert.deepEqual(quotaValue.counts,Array(8).fill(1));assert.match(quotaValue.limit,/artifact_limit/);assert.equal(quotaValue.status.available,false);
+    await peer.tool('state_load',{path:baseline});await peer.tool('video_start',{source:'framebuffer'});await peer.tool('run_frames',{n:2});await peer.tool('state_load',{path:baseline});await peer.tool('run_frames',{n:3});
+    const publicMovie=await peer.tool('video_stop',{path:path.join(dir,'public-stitch.avi')});assert.equal(publicMovie.frames,5);assert.deepEqual(publicMovie.segments.map(s=>s.frames),[2,3]);
+    await peer.tool('state_load',{path:baseline});
     const recorderRegions=await peer.tool('memory_regions');const rdramRegion=recorderRegions.regions.find(r=>r.name==='RDRAM');
     const sample=await peer.tool('memory_sample',{reads:Array.from({length:128},(_,i)=>({region:rdramRegion.id,offset:0x2000+i*4,length:1024}))});assert.equal(sample.error,undefined,JSON.stringify(sample));
     const samplePage=await peer.tool('memory_capture_read',{handle:sample.handle,range:127,length:4});assert.equal(samplePage.frame_reference.native_session,identity.session);assert.equal(samplePage.frame_reference.presentation,null);
@@ -130,7 +162,7 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     const ioResult=await peer.tool('script_result',{});assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'script-result.json'),'utf8')),JSON.parse(Buffer.from(ioResult.hex,'hex').toString()));assert.equal(ioResult.artifacts.length,2);assert(fs.existsSync(scriptState));assert(fs.existsSync(scriptPng));
     const cliScript=path.join(dir,'capture.ts'),cliArgs=path.join(dir,'capture-args.json');
     fs.writeFileSync(cliScript,'export default async({args,emu,frames})=>{await emu.loadState(args.state);await frames(3);await emu.loadState(args.state);await frames(200);await emu.screenshot(args.png);return {frames:200,epoch:emu.info().epoch}}');fs.writeFileSync(cliArgs,JSON.stringify({state:'baseline.bs',png:'relative.png'}));
-    const captureCli=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),'run','capture.ts','--args','capture-args.json','--state','baseline.bs','--artifact','relative.png','--video','relative.avi'],{cwd:dir,env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc')}});let captureOut='',captureErr='';captureCli.stdout.on('data',b=>captureOut+=b);captureCli.stderr.on('data',b=>captureErr+=b);assert.equal((await once(captureCli,'close'))[0],0,captureErr);assert.equal(JSON.parse(captureOut).frames,200);assert(fs.existsSync(path.join(dir,'relative.png')));assert.equal(fs.readFileSync(path.join(dir,'relative.avi')).readUInt32LE(48),200);
+    const captureCli=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),'run','capture.ts','--args','capture-args.json','--state','baseline.bs','--artifact','relative.png','--video','relative.avi'],{cwd:dir,env:{...process.env,ARES_SERVICE_DIR:path.join(dir,'ipc')}});let captureOut='',captureErr='';captureCli.stdout.on('data',b=>captureOut+=b);captureCli.stderr.on('data',b=>captureErr+=b);assert.equal((await once(captureCli,'close'))[0],0,captureErr);assert.equal(JSON.parse(captureOut).frames,200);assert(fs.existsSync(path.join(dir,'relative.png')));assert.equal(fs.readFileSync(path.join(dir,'relative.avi')).readUInt32LE(48),203);
     await peer.tool('state_load',{path:baseline});
     const timeline = await peer.tool('batch', { steps: [
       { kind: 'state_load', path: baseline },

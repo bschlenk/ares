@@ -66,27 +66,27 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> rgba{255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,255,255};
     check(video.execute("video.record.start", {"2", "1048576", "60", "1000", "0"}, "one", 1, 0).error.empty(), "record start");
     video.capture(rgba.data(), 2, 2, 1, 1); video.capture(rgba.data(), 2, 2, 1, 2); video.capture(rgba.data(), 2, 2, 1, 3);
-    check(video.frames.size() == 2 && video.reason == "frames_limit", "record bounded frame limit");
-    check(video.frames[0] == std::vector<uint8_t>({255,0,0,255,255,255,0,0, 0,0,255,0,255,0,0,0}), "record bottom-up BGR row padding");
+    check(video.frames.count == 2 && video.reason == "frames_limit", "record bounded frame limit");
     check(video.execute("video.record.begin", {}, "two", 1, 2).error == "busy", "record foreign export");
     video.execute("video.record.begin", {}, "one", 1, 2); auto id = std::to_string(video.pin);
+    std::vector<uint8_t> bgr(16);check(video.frames.read(0,bgr)&&bgr==std::vector<uint8_t>({255,0,0,255,255,255,0,0, 0,0,255,0,255,0,0,0}),"record bottom-up BGR row padding");
     check(video.execute("video.record.start", {"2", "1048576", "60", "1000", "1"}, "one", 1, 2).error == "busy", "record pin prevents discard");
     check(video.execute("video.record.read", {id, "31", "2"}, "one", 1, 2).error == "out_of_bounds", "record read bounds");
     video.execute("video.record.release", {id, "0"}, "one", 1, 2);
-    check(video.available && video.frames.size() == 2, "failed video export retains frames");
+    check(video.available && video.frames.count == 2, "failed video export retains frames");
     video.execute("video.record.start", {"2", "1048576", "60", "1000", "1"}, "one", 1, 2);
     video.capture(rgba.data(), 2, 2, 2, 3); check(video.reason == "epoch_changed", "record old epoch rejected");
     video.execute("video.record.start", {"2", "1048576", "60", "1000", "1"}, "one", 1, 2);
     video.capture(rgba.data(), 2, 2, 1, 3); video.capture(rgba.data(), 3, 2, 1, 4);
-    check(video.reason == "dimensions_changed" && video.frames.size() == 1, "record dimension stop");
-    video.releaseOwner("one"); check(!video.available && video.frames.empty(), "record disconnect cleanup");
+    check(video.reason == "dimensions_changed" && video.frames.count == 1, "record dimension stop");
+    video.releaseOwner("one"); check(!video.available && (video.frames.count==0), "record disconnect cleanup");
     video.execute("video.record.start", {"2", "1048576", "60", "1000", "0"}, "one", 1, 0);
     video.deadline = RecordingService::Clock::now(); video.execute("video.record.status", {}, "two", 1, 0);
     check(video.reason == "seconds_limit", "record wall deadline");
     video.reset(); video.execute("video.record.start", {"10", "1048576", "60", "1000", "0"}, "one", 1, 0);
     std::vector<uint8_t> large(512 * 512 * 4);
     video.capture(large.data(), 512, 512, 1, 1); video.capture(large.data(), 512, 512, 1, 2);
-    check(video.reason == "bytes_limit" && video.frames.size() == 1, "record byte bound");
+    check(video.reason == "bytes_limit" && video.frames.count == 1, "record byte bound");
   }
 
   {
@@ -208,15 +208,16 @@ int main(int argc, char** argv) {
     RecordingService video;std::vector<uint8_t> pixels(64*64*4);
     check(video.execute("video.record.scriptStart",{"1000","4194304","60","10000","0"},"script",1,0,"vi").error.empty(),"exact script capture starts");
     for(unsigned frame=1;frame<=200;++frame){pixels[0]=frame;video.capture(pixels.data(),64,64,1,frame,"vi",true);video.capture(pixels.data(),64,64,1,frame,"vi",true);}
-    check(video.frames.size()==200&&video.startFrame==1&&video.endFrame==200,"exact 200-frame capture deduplicates boundaries");
-    for(unsigned n=0;n<200;++n)check(video.frames[n][63*192+2]==uint8_t(n+1),"frame pixels preserve exact order");
-    video.rebase("script",2);check(video.exact&&video.active&&video.frames.empty()&&video.epoch==2,"owned load deliberately restarts capture interval");
-    pixels[0]=9;video.capture(pixels.data(),64,64,2,1,"vi",true);check(video.frames.size()==1,"new epoch frame zero is excluded");
-    check(video.execute("video.record.cancel",{},"script",2,1).error.empty()&&!video.available&&video.frames.empty(),"cancel discards unpublished frames");
+    check(video.frames.count==200&&video.startFrame==1&&video.endFrame==200,"exact 200-frame capture deduplicates boundaries");
+    video.rebase("script",2);check(video.exact&&video.active&&video.frames.count==200&&video.epoch==2,"owned load preserves captured pixels");
+    pixels[0]=9;video.capture(pixels.data(),64,64,2,1,"vi",true);check(video.frames.count==201&&video.segments.size()==2,"new epoch appends after prior frames");
+    check(video.execute("video.record.begin",{},"script",2,1).error.empty(),"seal multi-epoch capture");
+    for(unsigned n=0;n<200;++n){std::vector<uint8_t> frame(12288);check(video.frames.read(uint64_t(n)*12288,frame)&&frame[63*192+2]==uint8_t(n+1),"frame pixels preserve exact order across load");}
+    check(video.execute("video.record.cancel",{},"script",2,1).error.empty()&&!video.available&&(video.frames.count==0),"cancel discards unpublished frames");
     video.execute("video.record.scriptStart",{"1000","1048576","60","10000","0"},"script",2,0,"vi");
     for(unsigned frame=1;frame<=100;++frame)video.capture(pixels.data(),64,64,2,frame,"vi",true);
-    check(!video.active&&video.reason=="bytes_limit"&&video.frames.size()*12288<=1048576,"native capture bounds bytes before allocation");
-    video.reset();video.execute("video.record.scriptStart",{"1000","1048576","60","10000","0"},"script",2,0,"vi");video.deadline=RecordingService::Clock::now();video.capture(pixels.data(),64,64,2,1,"vi",true);check(!video.active&&video.frames.empty()&&video.reason=="seconds_limit","native deadline prevents partial late capture");
+    check(!video.active&&video.reason=="bytes_limit"&&video.frames.count*12288<=1048576,"native capture bounds bytes before allocation");
+    video.reset();video.execute("video.record.scriptStart",{"1000","1048576","60","10000","0"},"script",2,0,"vi");video.deadline=RecordingService::Clock::now();video.capture(pixels.data(),64,64,2,1,"vi",true);check(!video.active&&(video.frames.count==0)&&video.reason=="seconds_limit","native deadline prevents partial late capture");
     video.reset();video.execute("video.record.scriptStart",{"1000","1048576","60","10000","0"},"script",2,0,"vi");video.capture(pixels.data(),64,64,2,2,"vi",true);check(video.reason=="frame_gap","noncontiguous frame capture fails explicitly");
   }
   cpu.load(root);

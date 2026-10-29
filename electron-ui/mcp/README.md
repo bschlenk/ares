@@ -1076,11 +1076,62 @@ cancellation, owner release and shutdown remove the spool. At 320×237 each fram
 is 227,520 bytes; the 1 GiB script budget permits 4,719 complete frames, subject
 to the frame/time limits and actual source dimensions. Artifact failure no longer
 throws away script JSON; CLI emits the result and an independent warning.
-State loads still rebase the one script video, retaining only the latest state
-segment. Explicit multiple-video segments remain deferred because safe output
-reservation and per-segment ownership need additional API work.
+State loads preserve the current script video across epochs. Scripts can also
+save separate sequential clips; see “Multiple videos from one script” below.
 
 The microtask storm guard allows 4,096 jobs without successful host progress;
 reads/writes or actual frame completion renew that budget, scheduling yields do
 not. The script deadline, memory and frame limits still apply. Limit errors
 include executed jobs, host-progress events, reads and frames.
+
+### Multiple videos from one script
+
+Use the sequential script video API with pregranted output paths:
+
+```js
+export default async ({emu, frames, args}) => {
+  await emu.loadState(args.state);
+  await emu.video.start({source: 'framebuffer'});
+  await frames(120);
+  await emu.loadState(args.state); // Keeps the first 120 captured frames.
+  await frames(180);
+  const first = await emu.video.stop(args.firstVideo); // Saves 300 frames.
+
+  await emu.video.start();
+  await frames(60);
+  const second = await emu.video.stop(args.secondVideo);
+  return {first, second};
+};
+```
+
+Grant the state using `--state` and each AVI using `--artifact`. `stop(path)`
+returns the published video metadata and releases that recording before the next
+`start()`. Output overwrite is disabled. A failed save retains the stopped clip:
+fix the destination or choose another granted path and retry `stop(path)`.
+`status()` inspects the current recording; `cancel()` discards it. These are all
+awaited operations. Only one recording can exist at a time; a second start fails
+with `recording_exists` until the clip is saved or cancelled. Automatic `--video`
+capture cannot be combined with explicit start/stop/cancel in the same script.
+
+`start` defaults are source `framebuffer`, maxFrames 36000, maxBytes 1073741824,
+fps 60 and timeoutMs equal to the script's configured timeout. Those five fields
+may be overridden within the public recording bounds. Frame/byte/time budgets
+apply to the whole clip and do not reset on state loads. Source dimensions must
+remain consistent: a dimension change stops capture with a usable prefix and
+`dimensions_changed`; start a new clip for a different resolution.
+
+Same-owner state loads preserve captured pixels in explicit recordings,
+`ares run --video`, and lease-owned `video_start` recordings. Frames are appended in capture order at the selected playback
+fps, with a visual cut at each load. No frames are generated while the script
+waits for state loading or AVI publication. `segments` metadata records each
+captured epoch's native start/end frame, its zero-based AVI `first_frame` offset,
+and its frame count. Top-level epoch/start_frame/end_frame describe the current
+native epoch (zero frame coordinates after a load until its first capture); a multi-epoch video is not one uninterrupted native VI interval.
+Exact framebuffer coverage applies within each captured segment; presented-frame
+capture retains its existing timing limitations. A clip allows up to 64 captured
+epoch segments, and exceeding that bound retains the prefix with `segments_limit`.
+
+The existing script quotas allow eight published artifacts and 64 host requests
+per run. Video start/status/cancel do not consume artifact slots; successful video
+stops do. Script termination cancels any unsaved current recording. Videos already
+published remain intact if a later operation fails or the script is cancelled.
