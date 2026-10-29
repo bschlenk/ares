@@ -1051,7 +1051,7 @@ Start/MCP start; this frontend currently maps physical controls to port one.
 `started_by` identifies controller_input, ui_button or mcp. Stop pauses at a VI
 boundary and automatically publishes `input.json`, `initial.state`, optional
 `video.avi`, and a provenance/hash manifest. Failed saves retain input and expose
-Retry saving in the banner or `demonstration_retry`. Limits produce an explicit
+Retry saving in the toolbar or `demonstration_retry`. Limits produce an explicit
 partial clip; partial clips export for inspection and cannot be imported as
 complete replays. Friendly `held` names are additive version-1 fields; `raw`
 remains authoritative and importers ignore derived names.
@@ -1137,3 +1137,21 @@ The existing script quotas allow eight published artifacts and 64 host requests
 per run. Video start/status/cancel do not consume artifact slots; successful video
 stops do. Script termination cancels any unsaved current recording. Videos already
 published remain intact if a later operation fails or the script is cancelled.
+
+
+### Compact human-recording controls and prepared-state preview
+
+An armed human recording adds two icon buttons to the playback toolbar: a red
+circle to start and an X to cancel. The same red button becomes a rounded stop
+square while recording. The prompt and neutral-input guidance remain available
+in the tooltip and accessible description. The toolbar stays reachable during
+an active job even when its normal pointer-idle timer expires. Save failures
+expose a retry icon; successful automatic publication gives a brief saved notice.
+
+Paused N64 state loads and demonstration arming present the restored framebuffer
+immediately. This is a read-only preview of saved RAM, without GPU synchronization
+or core execution. It does not advance a VI, sample a controller, feed the video
+recording tap, or claim a matched gameplay-frame/origin reference. Blank/invalid
+VI data shows a black preview instead of retaining an unrelated old scene. Normal
+renderer frame credits still apply, so the preview also survives a temporarily
+unavailable or reloading renderer.
