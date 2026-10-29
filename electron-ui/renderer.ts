@@ -256,6 +256,7 @@ onSessionAction(action => {
 });
 function stress() { const until = performance.now() + 250; while (performance.now() < until) {} }
 window.ares.onStatus(text => { if (!/^ready:|^stopped$/.test(text)) notify(text); });
+window.ares.onNativeDiagnostic(text => console.log('[native]', text));
 const percentile = (array: number[], p: number) => array.length ? [...array].sort((a, b) => a - b)[Math.min(array.length - 1, Math.floor(array.length * p))] : 0;
 function record(array: number[], value: number) { array.push(value); if (array.length > 3600) array.shift(); }
 function stats(): RendererStats {

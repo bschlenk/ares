@@ -97,6 +97,8 @@ const api: AresBridge = {
     ipcRenderer.on('session-state', (_event, reply) => callback(reply)),
   onStatus: (callback) =>
     ipcRenderer.on('status', (_event, text) => callback(text)),
+  onNativeDiagnostic: (callback) =>
+    ipcRenderer.on('native-diagnostic', (_event, text) => callback(text)),
 }
 contextBridge.exposeInMainWorld('ares', api)
 ipcRenderer.on('frames', (event) => {

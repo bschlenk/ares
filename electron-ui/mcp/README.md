@@ -874,6 +874,14 @@ and recent errors, without requiring a ROM/native response. It cannot diagnose a
 stalled main event loop independently. `build_info` identifies the adapter build;
 `build_info --app true` also identifies the connected app.
 
+Native stderr diagnostics appear in the Developer Tools Console (View → Show
+Developer Tools), prefixed with `[native]`, and remain available through
+`app_logs` and the profile's rotating JSONL logs. They do not trigger on-screen
+notifications; startup, host exit, and command failures still do. N64's
+`Stalled compile ... success: yes` warning reports synchronous shader pipeline
+compilation taking at least 5 ms. It can indicate a brief hitch, but compilation
+succeeded; it is not a game or rendering failure.
+
 `memory_sample` freezes up to 256 explicit debugger-region ranges / 1 MiB at one
 safe point or the next native boundary. Existing `readMany` limits remain 64 ranges /
 64 KiB. New sample handles expire after 30 seconds; each owner may retain four.
