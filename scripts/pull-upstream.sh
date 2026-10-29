@@ -47,16 +47,21 @@ else
   if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
     # Only resolve retired paths that are absent from our pre-merge tree.
     # NUL delimiters preserve spaces and other special characters in paths.
+    deleted=()
     while IFS= read -r -d '' path; do
       case "$path" in
         desktop-ui/*|hiro/*|tools/genius/*|mia/program/*|mia/cmake/*|ruby/video/*|ruby/input/*|.github/workflows/build.yml|.github/workflows/build-aux.yml|.github/workflows/pr.yml|.github/workflows/push.yml|.github/workflows/release.yml|.github/scripts/build_macos.sh|.github/scripts/build_ubuntu.sh|.github/scripts/build_windows.sh|.github/scripts/package_artifacts.sh)
           if ! git cat-file -e "HEAD:$path" 2>/dev/null; then
-            git rm -f -- "$path"
-            echo "Preserved intentional deletion: $path"
+            deleted+=("$path")
           fi
           ;;
       esac
     done < <(git --no-optional-locks diff --name-only --diff-filter=U -z)
+
+    if [ "${#deleted[@]}" -gt 0 ]; then
+      git rm -f -- "${deleted[@]}"
+      printf 'Preserved intentional deletion: %s\n' "${deleted[@]}"
+    fi
 
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
       git commit --no-edit
