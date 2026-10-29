@@ -41,4 +41,5 @@ export interface AresBridge {
   command(data: NativeCommand): void;
   onSessionState(callback: (reply: SessionReply) => void): void;
   onStatus(callback: (text: string) => void): void;
+  onNativeDiagnostic(callback: (text: string) => void): void;
 }

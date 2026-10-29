@@ -654,7 +654,10 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   child.stderr.on('data', (data) => {
     appLogs.native(data, session.generation)
     session.diagnostic = data.toString().trim().slice(0,8192)
-    if (active === session) status(session.diagnostic)
+    // stderr is a diagnostic stream (including successful shader compiles),
+    // not a user notification. Host and command failures are reported separately.
+    if (active === session && window && !window.isDestroyed())
+      window.webContents.send('native-diagnostic', session.diagnostic)
   })
   const parser = new FrameParser((frame) => {
     if (active !== session) return
