@@ -16,10 +16,17 @@ files. Commit the merge tooling separately before trying a real merge.
 3. Fetches exactly `refs/heads/<branch>` without fetching tags, then merges
    `FETCH_HEAD` with `--no-edit`. This also works with custom fetch refspecs.
    Git may fast-forward, create a merge commit, or report already up to date.
-4. On conflicts, exits nonzero and leaves Git's merge state intact. It prints
-   commands to continue or abort. Other fetch/merge failures also exit nonzero.
+4. On conflicts, automatically preserves deletions for retired paths listed in
+   the script, but only when the path is absent from pre-merge `HEAD`. The list
+   covers desktop-ui, Hiro, standalone genius/MIA GUI paths, Ruby video/input
+   backends and specific retired CI workflows/scripts. It prints each resolution.
+   Extracted runtime paths are outside this list and remain for manual review.
+5. If all conflicts are resolved, commits the merge with its default message.
+   Otherwise prints the remaining conflicts and commands to continue or abort,
+   exits nonzero and leaves the merge open. Other failures also exit nonzero.
 
-The script does not choose conflict resolutions, run builds, push, or update
+Beyond preserving listed intentional deletions, the script does not choose
+semantic conflict resolutions, run builds, push, or update
 subtrees separately. It uses normal Git configuration, including URL rewrites,
 merge drivers and hooks. A successful merge command alone does not establish
 that the combined code builds or behaves correctly.
@@ -42,7 +49,7 @@ Use upstream's diff from the merge base to understand the intended fix.
   extracted runtime or another active consumer first.
 - Resolve CMake/resource/CI conflicts against the Electron build. Review new
   upstream files under retired directories even when Git reports no conflict.
-- Do not accept all of one side, automate broad directory deletions, or import
+- Do not accept all of one side, delete active runtime directories, or import
   the ares-64 conflict list. That fork has different supported systems and UI.
 
 Stage explicit paths with `git add -- path` or `git rm -- path`. Review
@@ -61,11 +68,16 @@ To discard the merge attempt, use `git merge --abort` before committing it.
   runtime code, changes supported frontends, or adds/removes active consumers.
 - If recurring conflicts justify automation, document a narrow, reviewed rule
   tied to this fork's architecture and add integration fixtures before enabling
-  it. Currently all semantic resolutions are manual.
+  it. Maintain the retired-path patterns in `pull-upstream.sh` when retiring or
+  restoring subsystems. The absence-in-HEAD guard protects existing files even
+  within listed directories. New upstream files that merge cleanly are not
+  removed by these conflict rules; review them separately. Active-code semantic
+  resolutions remain manual.
 - Adjust validation commands as build targets or test entry points change.
 
-Run `sh -n scripts/pull-upstream.sh` and
+Run `bash -n scripts/pull-upstream.sh` and
 `node --test scripts/tests/pull-upstream.test.js` after changing the script.
 The tests use temporary local Git repositories and URL rewrites, exercising
 remote creation/validation, repeated runs, alternate branches, dirty-tree
-rejection, conflicts/abort and fetch failure without network access.
+rejection, conflicts/abort, automatic deletions (alone and mixed with active
+conflicts) and fetch failure without network access.

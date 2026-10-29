@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Merge official ares changes into the current branch.
 set -eu
 
@@ -45,6 +45,26 @@ if git merge --no-edit FETCH_HEAD; then
   echo "Upstream merge complete."
 else
   if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+    # Only resolve retired paths that are absent from our pre-merge tree.
+    # NUL delimiters preserve spaces and other special characters in paths.
+    while IFS= read -r -d '' path; do
+      case "$path" in
+        desktop-ui/*|hiro/*|tools/genius/*|mia/program/*|mia/cmake/*|ruby/video/*|ruby/input/*|.github/workflows/build.yml|.github/workflows/build-aux.yml|.github/workflows/pr.yml|.github/workflows/push.yml|.github/workflows/release.yml|.github/scripts/build_macos.sh|.github/scripts/build_ubuntu.sh|.github/scripts/build_windows.sh|.github/scripts/package_artifacts.sh)
+          if ! git cat-file -e "HEAD:$path" 2>/dev/null; then
+            git rm -f -- "$path"
+            echo "Preserved intentional deletion: $path"
+          fi
+          ;;
+      esac
+    done < <(git diff --name-only --diff-filter=U -z)
+
+    if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
+      git commit --no-edit
+      echo "Upstream merge complete (intentional deletions preserved)."
+      exit 0
+    fi
+    echo "Remaining conflicts:" >&2
+    git diff --name-only --diff-filter=U >&2
     echo "Resolve conflicts, stage the resolved files, then run: git merge --continue" >&2
     echo "To cancel the merge, run: git merge --abort" >&2
   fi

@@ -81,8 +81,9 @@ and merges upstream `master`. Pass a branch name to merge another upstream branc
 `./scripts/pull-upstream.sh branch-name`. An existing remote pointing elsewhere
 is left unchanged and reported as an error.
 
-Conflicts are left for manual review, including changes to the retired desktop
-frontend. Resolve and stage them, then run `git merge --continue`, or cancel with
+Conflicts in listed retired paths are automatically resolved by preserving our
+deletions when those paths are absent from `HEAD`. Remaining conflicts are left
+for manual review. Resolve and stage them, then run `git merge --continue`, or cancel with
 `git merge --abort`. Run the relevant build and tests after merging.
 See [the upstream merge guide](scripts/UPSTREAM.md) for the script's behavior,
 conflict review procedure and maintenance guidance.

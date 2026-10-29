@@ -34,7 +34,7 @@ function fixture(t) {
   writeFileSync(join(source, 'core.txt'), 'upstream\n');
   git(source, 'commit', '-am', 'Upstream update');
   git(repo, 'config', `url.${source}.insteadOf`, official);
-  const run = (...args) => spawnSync('sh', ['scripts/pull-upstream.sh', ...args], { cwd: repo, env, encoding: 'utf8' });
+  const run = (...args) => spawnSync('bash', ['scripts/pull-upstream.sh', ...args], { cwd: repo, env, encoding: 'utf8' });
   return { repo, source, git, run };
 }
 
@@ -92,3 +92,30 @@ test('fetch failures do not merge stale FETCH_HEAD', (t) => {
   assert.notEqual(run('missing-branch').status, 0);
   assert.equal(git(repo, 'rev-parse', 'HEAD'), before);
 });
+
+for (const mixed of [false, true]) {
+  test(`preserves intentional deletions${mixed ? ' while leaving active conflicts' : ' and completes merge'}`, (t) => {
+    const { repo, source, git, run } = fixture(t);
+    // Create a shared retired file, then delete it only in the fork.
+    git(source, 'checkout', 'main');
+    mkdirSync(join(source, 'desktop-ui'));
+    writeFileSync(join(source, 'desktop-ui', 'old window.cpp'), 'base\n');
+    git(source, 'add', '.');
+    git(source, 'commit', '-m', 'Shared desktop file');
+    git(repo, 'fetch', source, 'main');
+    git(repo, 'merge', '--ff-only', 'FETCH_HEAD');
+    git(repo, 'rm', 'desktop-ui/old window.cpp');
+    if (mixed) writeFileSync(join(repo, 'core.txt'), 'fork\n');
+    git(repo, 'commit', '-am', 'Retire desktop');
+    writeFileSync(join(source, 'desktop-ui', 'old window.cpp'), 'upstream\n');
+    writeFileSync(join(source, 'core.txt'), 'upstream\n');
+    git(source, 'commit', '-am', 'Upstream changes');
+    const result = run('main');
+    assert.equal(result.status, mixed ? 1 : 0, result.stderr);
+    assert.match(result.stdout, /Preserved intentional deletion/);
+    assert.equal(git(repo, 'ls-files', 'desktop-ui/old window.cpp'), '');
+    assert.equal(git(repo, 'diff', '--name-only', '--diff-filter=U'), mixed ? 'core.txt' : '');
+    if (mixed) git(repo, 'merge', '--abort');
+    else assert.equal(git(repo, 'rev-list', '--parents', '-n', '1', 'HEAD').split(' ').length, 3);
+  });
+}
