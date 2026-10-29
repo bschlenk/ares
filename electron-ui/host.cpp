@@ -23,7 +23,7 @@
 #include <fcntl.h>
 #include <io.h>
 #endif
-#include "native/runtime/runtime.hpp"
+#include <desktop-ui/desktop-ui.hpp>
 #include <n64/n64.hpp>
 #include <ares/frame-observer.hpp>
 #include <nall/gdb/server.hpp>

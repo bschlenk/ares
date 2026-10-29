@@ -18,9 +18,10 @@ files. Commit the merge tooling separately before trying a real merge.
    Git may fast-forward, create a merge commit, or report already up to date.
 4. On conflicts, automatically preserves deletions for retired paths listed in
    the script, but only when the path is absent from pre-merge `HEAD`. The list
-   covers desktop-ui, Hiro, standalone genius/MIA GUI paths, Ruby video/input
+   covers retired desktop GUI paths (not the active emulator/input/settings
+   sources), Hiro, standalone genius/MIA GUI paths, Ruby video/input
    backends and specific retired CI workflows/scripts. It prints each resolution.
-   Extracted runtime paths are outside this list and remain for manual review.
+   Active runtime paths are outside this list and remain for manual review.
 5. If all conflicts are resolved, commits the merge with its default message.
    Otherwise prints the remaining conflicts and commands to continue or abort,
    exits nonzero and leaves the merge open. Other failures also exit nonzero.
@@ -42,7 +43,7 @@ Use upstream's diff from the merge base to understand the intended fix.
 - Preserve emulator/core improvements while retaining Electron services,
   execution ownership, instrumentation and runtime integration.
 - For modify/delete conflicts, consult
-  [the retirement inventory](../electron-ui/DESKTOP-RETIREMENT.md). Desktop UI,
+  [the retirement inventory](../electron-ui/DESKTOP-RETIREMENT.md). Desktop GUI windows,
   Hiro, standalone MIA/genius GUI and old Ruby video/input backends were
   intentionally removed. Keep deletions where appropriate with
   `git rm -- path`; inspect whether upstream changes need porting to the
@@ -81,3 +82,7 @@ The tests use temporary local Git repositories and URL rewrites, exercising
 remote creation/validation, repeated runs, alternate branches, dirty-tree
 rejection, conflicts/abort, automatic deletions (alone and mixed with active
 conflicts) and fetch failure without network access.
+
+Upstream-derived runtime sources retain their original `desktop-ui/` paths.
+See [desktop-ui/README.md](../desktop-ui/README.md). Keep new runtime files at
+those paths; review upstream GUI additions separately.

@@ -98,24 +98,46 @@ for (const mixed of [false, true]) {
     const { repo, source, git, run } = fixture(t);
     // Create a shared retired file, then delete it only in the fork.
     git(source, 'checkout', 'main');
-    mkdirSync(join(source, 'desktop-ui'));
-    writeFileSync(join(source, 'desktop-ui', 'old window.cpp'), 'base\n');
+    mkdirSync(join(source, 'desktop-ui', 'presentation'), { recursive: true });
+    writeFileSync(join(source, 'desktop-ui', 'presentation', 'old window.cpp'), 'base\n');
     git(source, 'add', '.');
     git(source, 'commit', '-m', 'Shared desktop file');
     git(repo, 'fetch', source, 'main');
     git(repo, 'merge', '--ff-only', 'FETCH_HEAD');
-    git(repo, 'rm', 'desktop-ui/old window.cpp');
+    git(repo, 'rm', 'desktop-ui/presentation/old window.cpp');
     if (mixed) writeFileSync(join(repo, 'core.txt'), 'fork\n');
     git(repo, 'commit', '-am', 'Retire desktop');
-    writeFileSync(join(source, 'desktop-ui', 'old window.cpp'), 'upstream\n');
+    writeFileSync(join(source, 'desktop-ui', 'presentation', 'old window.cpp'), 'upstream\n');
     writeFileSync(join(source, 'core.txt'), 'upstream\n');
     git(source, 'commit', '-am', 'Upstream changes');
     const result = run('main');
     assert.equal(result.status, mixed ? 1 : 0, result.stderr);
     assert.match(result.stdout, /Preserved intentional deletion/);
-    assert.equal(git(repo, 'ls-files', 'desktop-ui/old window.cpp'), '');
+    assert.equal(git(repo, 'ls-files', 'desktop-ui/presentation/old window.cpp'), '');
     assert.equal(git(repo, 'diff', '--name-only', '--diff-filter=U'), mixed ? 'core.txt' : '');
     if (mixed) git(repo, 'merge', '--abort');
     else assert.equal(git(repo, 'rev-list', '--parents', '-n', '1', 'HEAD').split(' ').length, 3);
   });
 }
+
+test('keeps active desktop sources conflicted and imports new runtime files in place', (t) => {
+  const { repo, source, git, run } = fixture(t);
+  git(source, 'checkout', 'main');
+  mkdirSync(join(source, 'desktop-ui', 'input'), { recursive: true });
+  const active = 'desktop-ui/input/input.cpp';
+  writeFileSync(join(source, active), 'base\n');
+  git(source, 'add', '.');
+  git(source, 'commit', '-m', 'Shared runtime');
+  git(repo, 'fetch', source, 'main');
+  git(repo, 'merge', '--ff-only', 'FETCH_HEAD');
+  writeFileSync(join(repo, active), 'fork\n');
+  git(repo, 'commit', '-am', 'Adapt runtime');
+  writeFileSync(join(source, active), 'upstream\n');
+  writeFileSync(join(source, 'desktop-ui/input/game-input.hpp'), 'new helper\n');
+  git(source, 'add', '.');
+  git(source, 'commit', '-m', 'Update runtime');
+  assert.equal(run('main').status, 1);
+  assert.equal(git(repo, 'diff', '--name-only', '--diff-filter=U'), active);
+  assert.equal(readFileSync(join(repo, 'desktop-ui/input/game-input.hpp'), 'utf8'), 'new helper\n');
+  git(repo, 'merge', '--abort');
+});

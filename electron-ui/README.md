@@ -17,7 +17,7 @@ UI customization and bundled settings is in [PLUGIN-PLAN.md](PLUGIN-PLAN.md).
 The ares-64 debugging audit and preservation plan for the existing MCP tools are
 in [MCP-PORT-PLAN.md](MCP-PORT-PLAN.md).
 
-The native host **uses the extracted `native/runtime/emulator/` registry and loaders**.
+The native host **uses the extracted `../desktop-ui/emulator/` registry and loaders**.
 Every system included in `ARES_CORES` is available, including each core's frontend
 variants (for example, Mega Drive/32X/CD and PC Engine/SuperGrafx/CD). There is no
 second per-system loading implementation in the Electron code. Firmware and valid
@@ -193,9 +193,11 @@ backpressure while native audio/emulation continue.
 - `host.cpp` supplies an `ares::Platform` adapter, native SDL audio, virtual HID
   input, and the emulator loop. System loading, firmware, peripherals, and saves
   are delegated to the existing `Emulator` implementations.
-- `native/runtime/` owns loader, imported BML configuration and virtual-input
-  mappings. Electron neither compiles desktop frontend sources nor includes/links
-  Hiro. [Retirement inventory and deferred features](DESKTOP-RETIREMENT.md).
+- `../desktop-ui/` owns loader, imported BML configuration and virtual-input
+  mappings at their upstream paths. Electron compiles these headless sources;
+  it does not build the desktop GUI or include/link Hiro.
+  [Runtime layout](../desktop-ui/README.md) and
+  [retirement inventory and deferred features](DESKTOP-RETIREMENT.md).
 - Media databases resolve only through the selected runtime's resource root.
   Electron passes `--resource-dir` to the host; `ARES_RESOURCE_DIR` can select a
   different resource root. Development snapshots copy that root's `Database/`.

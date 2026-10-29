@@ -7,8 +7,8 @@ parity. Source can be recovered with `git show b9f42e052:desktop-ui/<path>`.
 
 | Desktop implementation | Disposition in the Electron product |
 | --- | --- |
-| `emulator/` registry, all core-specific constructors/loaders, firmware, region selection, peripheral setup, media/save routing and keyboard mappings | Extracted into `native/runtime/emulator/`. All 40 compiled variants retain their registry entries. Core options and saved peripheral selection still import from explicit BML configuration. |
-| `input/input.*` virtual ports, direct/inherited bindings, digital/analog/relative mapping, trigger ranges and rumble forwarding | Runtime mappings extracted into `native/runtime/input/`; input mutex and capture flags belong to `FrontendRuntime`. Existing Electron virtual-device defaults stay in the host until task 13. No new physical-device/multiplayer/rumble support is claimed. |
+| `emulator/` registry, all core-specific constructors/loaders, firmware, region selection, peripheral setup, media/save routing and keyboard mappings | Extracted, now kept at upstream path `../desktop-ui/emulator/`. All 40 compiled variants retain their registry entries. Core options and saved peripheral selection still import from explicit BML configuration. |
+| `input/input.*` virtual ports, direct/inherited bindings, digital/analog/relative mapping, trigger ranges and rumble forwarding | Runtime mappings extracted, now kept at upstream path `../desktop-ui/input/`; input mutex and capture flags belong to `FrontendRuntime`. Existing Electron virtual-device defaults stay in the host until task 13. No new physical-device/multiplayer/rumble support is claimed. |
 | `settings/settings.*` data model and BML binding process | Extracted without the windows, write-on-load or import/export UI. Profile settings and explicitly selected BML files are read only until task 13 provides owned settings. No migration or implicit import of the desktop user's configuration. |
 | `program/utility.cpp` palette application | Extracted as `updatePalette`; screen luminance/saturation/gamma continue to apply after loading. |
 | `program/platform.cpp`, drivers and emulator loop | Replaced by the existing host platform, SDL audio, copied video and single execution coordinator. Cores, native services and Ruby remain intact. Desktop event-loop/thread guards were inactive in the Electron host; emulation-thread ownership remains authoritative, with the cross-thread input mutex retained. |
@@ -89,3 +89,10 @@ Validation on macOS arm64:
   video/input backend, Carbon or Metal/MetalKit presentation dependency remains.
   Cocoa remains a separate nall dependency. Physical audio/gamepads and
   Windows/Linux builds were not tested on this machine.
+
+## Upstream layout restoration
+
+Active emulator, input and settings sources now retain their original
+`desktop-ui/` paths, with a headless `desktop-ui.hpp` shared header. This reverses
+only the organizational relocation; retired GUI code stays retired. Electron
+compiles those sources directly. See [desktop-ui/README.md](../desktop-ui/README.md).

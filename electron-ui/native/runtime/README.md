@@ -1,20 +1,11 @@
-# Frontend-native runtime support
+# Electron runtime integration
 
-Extracted from `desktop-ui/` at `b9f42e052`; licensed under the repository ISC
-license. See [the retirement inventory](../../DESKTOP-RETIREMENT.md) for feature
-coverage and explicit deferrals.
+Upstream-derived loaders, input and settings have returned to their original
+`desktop-ui/` paths to simplify upstream merges. See
+[desktop-ui/README.md](../../../../desktop-ui/README.md) for ownership and scope.
 
-- `emulator/`: compiled-system registry, loaders, firmware, peripheral configuration,
-  save/media routing and per-system input nodes.
-- `input/`: virtual ports and inherited/direct mappings, without desktop hotkeys,
-  assignment windows or icon helpers. Physical keyboard/mouse/gamepad input comes
-  from Electron; no native hardware polling/capture backend remains.
-- `settings/`: imported BML data and binding process, without desktop windows or
-  implicit writing/import migration.
-- `runtime.*`: cross-thread input mutex/capture flags, explicit companion-media
-  queue and palette application. Core mutation/loading stays on the native host's
-  emulation thread. The old desktop event loop and its `Program` global are gone.
-
-This code includes no Hiro headers, timers, widgets or desktop resource compiler.
-The host selects MIA resources explicitly; built-in core/MIA resources remain in
-those libraries. Preserve the actual loader behavior when adding settings APIs.
+`runtime.cpp` remains here because it defines the Electron-specific
+`FrontendRuntime` global and palette integration. The shared headless header is
+`desktop-ui/desktop-ui.hpp`. Core mutation/loading stays on the native emulation
+thread; input updates share its input mutex. This layout does not restore Hiro,
+the desktop application, native hardware polling or GUI timers.

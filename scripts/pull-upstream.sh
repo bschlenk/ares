@@ -50,7 +50,7 @@ else
     deleted=()
     while IFS= read -r -d '' path; do
       case "$path" in
-        desktop-ui/*|hiro/*|tools/genius/*|mia/program/*|mia/cmake/*|ruby/video/*|ruby/input/*|.github/workflows/build.yml|.github/workflows/build-aux.yml|.github/workflows/pr.yml|.github/workflows/push.yml|.github/workflows/release.yml|.github/scripts/build_macos.sh|.github/scripts/build_ubuntu.sh|.github/scripts/build_windows.sh|.github/scripts/package_artifacts.sh)
+        desktop-ui/cmake/*|desktop-ui/game-browser/*|desktop-ui/presentation/*|desktop-ui/program/*|desktop-ui/resource/*|desktop-ui/settings/audio.cpp|desktop-ui/settings/cores.cpp|desktop-ui/settings/developer.cpp|desktop-ui/settings/emulators.cpp|desktop-ui/settings/firmware.cpp|desktop-ui/settings/home.cpp|desktop-ui/settings/hotkeys.cpp|desktop-ui/settings/importexport.cpp|desktop-ui/settings/input.cpp|desktop-ui/settings/options.cpp|desktop-ui/settings/paths.cpp|desktop-ui/settings/video.cpp|desktop-ui/input/hotkeys.cpp|desktop-ui/tools/*|desktop-ui/CMakeLists.txt|desktop-ui/desktop-ui.cpp|desktop-ui/macos-fix-jit.cpp|hiro/*|tools/genius/*|mia/program/*|mia/cmake/*|ruby/video/*|ruby/input/*|.github/workflows/build.yml|.github/workflows/build-aux.yml|.github/workflows/pr.yml|.github/workflows/push.yml|.github/workflows/release.yml|.github/scripts/build_macos.sh|.github/scripts/build_ubuntu.sh|.github/scripts/build_windows.sh|.github/scripts/package_artifacts.sh)
           if ! git cat-file -e "HEAD:$path" 2>/dev/null; then
             deleted+=("$path")
           fi
