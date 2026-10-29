@@ -1,5 +1,9 @@
 # October 28 implementation and acceptance
 
+Follow-up: original item 5 is now implemented and verified. See
+[sequential video acceptance](VIDEO-SEGMENTS-ACCEPTANCE.md). The deferral below
+describes the earlier build and is superseded by that follow-up.
+
 Implementation branch: `kirby-feedback-2026-10-28`. Product source tested at
 `1fb001ebd2abc7e3f2d76a08ad2b641535695531`; later documentation commits do not
 change that product build. The plan's original request numbers are preserved here.

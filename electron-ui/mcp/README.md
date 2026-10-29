@@ -951,11 +951,13 @@ bounded raw BGR24 AVI capture for the script. One image is sampled from the N64
 framebuffer at each advanced VI boundary; synthetic runs capture their generated
 frame. This is independent of presentation credits and the eight script artifact
 limit. The capture is limited to 36,000 frames, 1 GiB of disk storage and the script deadline;
-a limit, blank/invalid framebuffer, frame gap, cancellation or failed script fails
-publication. A successful script atomically publishes a new AVI, with metadata in
+a limit, blank/invalid framebuffer or frame gap stops capture and retains the
+usable prefix, which a successful script publishes with a separate warning.
+Cancellation or script failure discards its current unsaved recording.
+A successful script atomically publishes a new AVI, with metadata in
 `operation_status.script_output.video`. No audio is captured; playback is 60 fps.
-An intentional `emu.loadState` discards pre-load pictures and restarts the capture
-interval at frame zero in the new owned epoch. External loads/reset invalidate it.
+An intentional same-owner `emu.loadState` preserves pre-load pictures and begins
+a new epoch segment in the same AVI. Other-owner loads and resets invalidate it.
 
 ### Human controller demonstrations
 
@@ -1122,7 +1124,7 @@ remain consistent: a dimension change stops capture with a usable prefix and
 
 Same-owner state loads preserve captured pixels in explicit recordings,
 `ares run --video`, and lease-owned `video_start` recordings. Frames are appended in capture order at the selected playback
-fps, with a visual cut at each load. No frames are generated while the script
+fps, with a visual cut at each load. Emulated frame advancement remains paused while the script
 waits for state loading or AVI publication. `segments` metadata records each
 captured epoch's native start/end frame, its zero-based AVI `first_frame` offset,
 and its frame count. Top-level epoch/start_frame/end_frame describe the current
