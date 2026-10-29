@@ -61,7 +61,7 @@ struct FrameService {
   void releaseOwner(const std::string& owner) {
     std::lock_guard guard(mutex); std::erase_if(pins, [&](const Pin& pin) { return pin.owner == owner; });
   }
-  static ControlResult framebuffer(std::shared_ptr<const Image>& result, uint64_t e, uint64_t f) {
+  static ControlResult framebuffer(std::shared_ptr<const Image>& result, uint64_t e, uint64_t f, bool synchronize = true) {
     using namespace ares::Nintendo64;
     auto& io = vi.io;
     uint32_t origin = io.dramAddress, width = io.width, depth = io.colorDepth;
@@ -78,7 +78,7 @@ struct FrameService {
     height = std::min<uint64_t>(height, fit);
     if(!height) return {"vi_invalid", {}};
 #if defined(VULKAN)
-    if(vulkan.enable) vulkan.flush();
+    if(vulkan.enable && synchronize) vulkan.flush();
 #endif
     auto image = std::make_shared<Image>();
     image->width = width; image->height = height; image->origin = origin; image->depth = depth;

@@ -6,6 +6,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { inflateSync } = require('node:zlib');
+const {FrameParser}=require('../dist/protocol.js');
 const { NativeSessionClient } = require('../dist/services/native-client.js');
 const { SessionRouter } = require('../dist/services/session-router.js');
 const { LocalServiceHost, LocalServiceClient } = require('../dist/services/local-endpoint.js');
@@ -45,7 +46,7 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
   const dir = fs.mkdtempSync('/tmp/ares-batch-live-'), identity = { session: 'batch-live', epoch: 1 }, { image, instructions } = imageFixture();
   const rom = path.join(dir, 'fixture.z64'), settings = path.join(dir, 'settings.bml'); fs.writeFileSync(rom, image); fs.writeFileSync(settings, '');
   const child = spawn(host, ['--rom', rom, '--system', 'Nintendo 64', '--settings', settings, '--silent', '--paused', '--save-dir', path.join(dir, 'saves'), '--control-session', identity.session], { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
-  const closed = once(child, 'close'); let log = ''; child.stderr.on('data', b => log = (log + b).slice(-20000)); child.stdout.resume();
+  const closed = once(child, 'close'); let log = ''; child.stderr.on('data', b => log = (log + b).slice(-20000)); child.stdout.resume();const previewFrames=[];const previewParser=new FrameParser(frame=>previewFrames.push(frame));child.stdout.on('data',bytes=>previewParser.push(bytes));
   const native = new NativeSessionClient(child.stdin, child.stdio[3], identity, () => {}), router = new SessionRouter(); router.attach(native);
   const endpoint = new LocalServiceHost(router,async p=>{if(p.operation==='app_status')return {ready:true};if(p.operation==='script_result')return router.readScriptResult(p);throw new Error('unavailable');}); let peer, other;
   try {
@@ -59,12 +60,17 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
     const initializedFile = path.join(dir, 'initialized.bs'); fs.writeFileSync(initializedFile, initialized);
     assert.equal((await peer.tool('state_load', { path: initializedFile })).error, undefined);
     const baseline = path.join(dir, 'baseline.bs'); assert.equal((await peer.tool('state_save', { path: baseline })).error, undefined);
+    await peer.tool('run_frames',{n:1});const visibleBaseline=path.join(dir,'visible-baseline.bs');assert.equal((await peer.tool('state_save',{path:visibleBaseline})).error,undefined);
     const demoDirectory=path.join(dir,'prepared-demo');
-    const preparedScript=await peer.tool('run_script',{source:'export default async({input,args})=>{const receipt=await input.demonstration.prepare(args);return {receipt,status:input.demonstration.status()}}',args:{initialStatePath:baseline,outputDirectory:demoDirectory,prompt:'Prepared fixture',setup:[{address:'0x80002000',hex:'12345678'},{address:'0x80002004',hex:'abcdef01'}]},state_paths:[baseline],output_paths:[demoDirectory]});
+    const preparedScript=await peer.tool('run_script',{source:'export default async({input,args})=>{const receipt=await input.demonstration.prepare(args);return {receipt,status:input.demonstration.status()}}',args:{initialStatePath:visibleBaseline,outputDirectory:demoDirectory,prompt:'Prepared fixture',video:true,setup:[{address:'0x80002000',hex:'12345678'},{address:'0x80002004',hex:'abcdef01'}]},state_paths:[visibleBaseline],output_paths:[demoDirectory]});
     let preparedOp=preparedScript;for(let i=0;i<1000&&preparedOp.state==='running';++i){await sleep(5);preparedOp=await peer.tool('operation_status',{operation_id:preparedScript.operation_id});}
     assert.equal(preparedOp.stop_reason,'script_done',JSON.stringify({preparedOp,page:await peer.tool('script_result',{result_handle:preparedScript.result_handle})}));
     const preparedResult=await peer.tool('script_result',{result_handle:preparedScript.result_handle});const preparedValue=JSON.parse(Buffer.from(preparedResult.hex,'hex').toString());assert.equal(preparedValue.status.state,'armed');
     assert(fs.existsSync(path.join(demoDirectory,'initial.state')));assert.equal((await peer.tool('demonstration_status')).state,'armed','human job survives originating script disconnect');
+    child.stdin.write('ack 0\n');for(let i=0;i<100&&!previewFrames.length;++i)await sleep(5);
+    assert(previewFrames.length,'paused prepared state reaches the presentation pipe: '+log+' host='+host);const preview=previewFrames.at(-1);assert.equal(preview.width,4);assert.equal(preview.height,2);assert.deepEqual([...preview.pixels.subarray(0,4)],[16,66,214,255]);assert.equal(preview.frameReference,undefined,'paused preview does not fabricate VI provenance');
+    await sleep(100);assert.equal((await peer.tool('emu_status')).frame,0);assert.equal((await peer.tool('demonstration_status')).events,0);assert.equal((await peer.tool('video_status')).frames,0,'preview is excluded from requested video');
+    const preparedCopy=await peer.tool('state_save',{path:path.join(dir,'armed-copy.bs')});assert.equal(preparedCopy.sha256,preparedValue.status.state_sha256,'showing the prepared pixels leaves the exact starting state unchanged');
     unwrap(await router.request('n64.demo.cancel',undefined,undefined,'ui'));await sleep(150);
     assert.equal((await peer.tool('state_load',{path:baseline})).error,undefined);
     const clipDirectory=path.join(dir,...Array.from({length:9},(_,i)=>String(i).padEnd(98,'x')));fs.mkdirSync(clipDirectory,{recursive:true});

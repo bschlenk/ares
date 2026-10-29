@@ -1,0 +1,36 @@
+// Opt-in visual QA of a prepared state; all writable media stays isolated.
+import {app,BrowserWindow} from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const romSource=process.env.ARES_PLUGIN_TEST_ROM,stateSource=process.env.ARES_PLUGIN_TEST_STATE;
+assert(romSource&&stateSource,'Set ARES_PLUGIN_TEST_ROM and ARES_PLUGIN_TEST_STATE');
+const dir=fs.mkdtempSync('/tmp/ares-record-preview-'),profile=path.join(dir,'profile');
+const artifacts=path.resolve(import.meta.dirname,'../artifacts/recording-ui-preview');fs.mkdirSync(artifacts,{recursive:true});
+const rom=path.join(dir,'game.z64'),state=path.join(dir,'start.state');fs.copyFileSync(romSource,rom);fs.copyFileSync(stateSource,state);
+app.setPath('userData',profile);
+Object.assign(process.env,{ARES_PROFILE_DIR:profile,ARES_SERVICE_DIR:path.join(dir,'ipc'),ARES_ROM:rom,ARES_SYSTEM:'Nintendo 64',ARES_BACKGROUND_TEST:'1',ARES_SILENT:'1',ARES_DEFAULT_PLUGINS:'0',ARES_AUTOTEST:''});
+delete process.env.ARES_DISABLE_PLUGINS;
+process.argv.push('--no-services');
+const {sessions}=await import('../dist/main.js');
+const until=async predicate=>{for(let i=0;i<400;++i){const result=await predicate();if(result)return result;await new Promise(r=>setTimeout(r,25));}throw Error('Recording preview timed out');};
+const deadline=setTimeout(()=>app.exit(1),45000);
+app.on('will-quit',()=>{clearTimeout(deadline);fs.rmSync(dir,{recursive:true,force:true});});
+app.whenReady().then(async()=>{try{
+ const window=await until(()=>BrowserWindow.getAllWindows()[0]),js=code=>window.webContents.executeJavaScript(code);
+ const request=async(method,params)=>{const reply=await sessions.request(method,undefined,params,'preview-test');assert(reply.ok,JSON.stringify(reply));return reply.result;};
+ await until(async()=>{try{return (await request('session.status')).system==='Nintendo 64';}catch{return false;}});
+ await request('artifact.inputRequest',{initialStatePath:state,outputDirectory:path.join(dir,'recording'),prompt:'Try Stone+Cutter, then stop recording.',setup:[{address:'0x8012e850',hex:'00000014'},{address:'0x800d6e90',hex:'00000014'}],video:true,maxFrames:600,timeoutMs:20000,port:1,source:'human'});
+ await until(()=>js("!document.querySelector('#recording-controls').hidden && window.stats().width===320"));
+ const colored=await js("(()=>{const canvas=document.querySelector('#screen'),gl=canvas.getContext('webgl2'),pixels=new Uint8Array(canvas.width*canvas.height*4);gl.readPixels(0,0,canvas.width,canvas.height,gl.RGBA,gl.UNSIGNED_BYTE,pixels);let count=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]||pixels[i+1]||pixels[i+2])++count;return count})()");
+ assert(colored>1000,'the prepared-state canvas is visibly nonblack');
+ assert.equal((await request('session.status')).frame,0);assert.equal((await request('n64.demo.status')).events,0);assert.equal((await request('video.record.status')).frames,0);
+ assert.equal(await js("document.querySelector('#settings-dialog').open"),false);
+ await until(()=>js("document.querySelector('#status').hidden"));
+ await window.webContents.capturePage().then(image=>fs.writeFileSync(path.join(artifacts,'armed.png'),image.toPNG()));
+ await js("document.querySelector('#video-record').click()");await until(async()=>(await request('n64.demo.status')).state==='recording');
+ await until(()=>js("document.querySelector('#video-record').getAttribute('aria-label')==='Stop recording'"));
+ await window.webContents.capturePage().then(image=>fs.writeFileSync(path.join(artifacts,'recording.png'),image.toPNG()));
+ await js("document.querySelector('#video-record').click()");await until(async()=>(await request('n64.demo.status')).publication==='committed');
+ console.log('RECORDING_PREVIEW_PASS: nonblack restored state at VI zero, zero input/video samples while armed, compact record/stop toolbar, automatic save');app.quit();
+}catch(error){console.error(error);app.exit(1);}});
