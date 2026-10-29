@@ -591,7 +591,7 @@ A user command may call `await ctx.demonstrations.request({prompt, setup:
 It requires `session.control`, `memory.write` and `files.export` capabilities and
 a real user gesture. The host asks for the starting state and a new recording
 directory; plugins cannot supply arbitrary host paths. The shared service loads
-paused, writes RAM, snapshots the prepared state and arms the existing banner.
+paused, writes RAM, snapshots the prepared state and arms the compact recording toolbar.
 The human starts with a controller gesture or Start recording and finishes with
 Stop recording; publication to the selected directory is automatic. The job
 outlives the originating plugin scope, including the epoch change caused by its
