@@ -234,7 +234,7 @@ export function decodeReply<M extends ServiceMethod = 'session.status'>(line: st
     if (method === 'n64.input.tap') { decodeReply(JSON.stringify(r), 'execution.status'); valid = s.kind === 'controller_tap'; }
     if (method.startsWith('session.')) valid = !!s && typeof s.paused === 'boolean' && typeof s.system === 'string' && typeof s.synthetic === 'boolean' && Array.isArray(s.capabilities) && s.capabilities.every((m: ServiceMethod) => METHODS.includes(m)) && (s.game == null || typeof s.game === 'object' && /^[a-f0-9]{64}$/.test(s.game.sha256) && integer(s.game.size) && s.game.kind === 'program.rom');
     if (method === 'script.resolve') valid = s?.resolved === true;
-    if (method === 'script.pending') valid = typeof s?.running==='boolean' && (s.pending===null || integer(s.pending?.id) && ['state_load','state_save','screenshot','input_export','input_import','input_prepare'].includes(s.pending.kind) && typeof s.pending.path==='string');
+    if (method === 'script.pending') valid = typeof s?.running==='boolean' && (s.pending===null || integer(s.pending?.id) && ['state_load','state_save','screenshot','input_export','input_import','input_prepare','video_start','video_stop','video_status','video_cancel'].includes(s.pending.kind) && typeof s.pending.path==='string');
     if (method === 'script.observerStop') valid = s?.stopped === true;
     if (method === 'script.observerStart' || method === 'scripts.observe') valid = integer(s?.observer_id) && s.observer_id>0;
     if (method === 'script.prepare' || method === 'script.observerPrepare') valid = s?.ready === true;

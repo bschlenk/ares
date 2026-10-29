@@ -1,5 +1,6 @@
 export const RECORDING_METHODS = ['video.record.scriptStart','video.record.cancel','video.record.start', 'video.record.status', 'video.record.begin', 'video.record.read', 'video.record.release'] as const;
 export interface RecordingStatus {
+  segments?: {epoch:number;start_frame:number;end_frame:number;first_frame:number;frames:number}[];
   active: boolean; available: boolean; frames: number; fps: number; width: number; height: number; epoch: number; start_frame: number; end_frame: number;
   frame_kind: 'vi' | 'synthetic-vi' | 'unavailable'; stop_reason: string; format: 'avi_raw_bgr24'; audio: false; source: 'presented' | 'framebuffer'; max_frames: number; max_bytes: number; captured_bytes: number;
 }
@@ -29,6 +30,7 @@ export function validRecording(method: string, s: any): boolean {
   if (method === 'video.record.release'||method==='video.record.cancel') return s.released === true;
   if (method === 'video.record.read') return int(s.snapshot_id) && s.snapshot_id > 0 && int(s.offset, 2147483648) && int(s.length, 16384) && s.length > 0 && typeof s.hex === 'string' && s.hex.length === s.length * 2 && /^[a-f0-9]+$/.test(s.hex);
   if (!(typeof s.active === 'boolean' && typeof s.available === 'boolean' && int(s.frames, 36000) && int(s.fps, 120) && s.fps > 0 && int(s.width, 4096) && int(s.height, 4096) && int(s.epoch) && int(s.start_frame) && int(s.end_frame) && s.end_frame >= s.start_frame && ['vi', 'synthetic-vi', 'unavailable'].includes(s.frame_kind) && typeof s.stop_reason === 'string' && s.format === 'avi_raw_bgr24' && s.audio === false && ['presented','framebuffer'].includes(s.source) && int(s.max_frames, 36000) && s.max_frames > 0 && s.frames <= s.max_frames && int(s.max_bytes, 2147483648) && s.max_bytes >= 1048576 && int(s.captured_bytes, s.max_bytes) && s.captured_bytes === s.frames * Math.ceil(s.width * 3 / 4) * 4 * s.height)) return false;
+  if(s.segments!==undefined){let offset=0;if(!Array.isArray(s.segments)||s.segments.length>64||!s.segments.every((segment:any)=>{if(!int(segment.epoch)||!int(segment.start_frame)||!int(segment.end_frame)||segment.end_frame<segment.start_frame||segment.first_frame!==offset||!int(segment.frames)||!segment.frames)return false;offset+=segment.frames;return true;})||offset!==s.frames)return false;}
   if (method === 'video.record.begin') return int(s.snapshot_id) && s.snapshot_id > 0 && s.frames > 0 && s.width > 1 && s.height > 1 && s.active === false;
   if (method === 'artifact.videoStop') return typeof s.path === 'string' && s.path.length > 0 && s.path.length <= 4096 && int(s.bytes, 2150000000) && s.size === s.bytes && /^[a-f0-9]{64}$/.test(s.sha256) && s.duration_seconds === s.frames / s.fps && (s.cleanup_error === undefined || typeof s.cleanup_error === 'string');
   return true;

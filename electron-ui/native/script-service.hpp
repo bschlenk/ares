@@ -150,11 +150,12 @@ struct ScriptService {
     std::istringstream stream(text);std::vector<std::string> args;std::string word;while(stream>>word)args.push_back(word);
     auto result=s.demonstration("n64.demo."+name,args);if(!result.error.empty())return fail(c,result.error.c_str());return JS_ParseJSON(c,result.json.data(),result.json.size(),"demonstration");
   }
+  static bool publishesArtifact(const std::string& kind){return kind!="state_load"&&kind!="video_start"&&kind!="video_status"&&kind!="video_cancel";}
   static JSValue host(JSContext* c,JSValueConst,int argc,JSValueConst* argv) {
     auto& s=self(c);if(s.readOnly||s.waiting||s.hostWaiting||argc!=2||s.hostId>=64||!JS_IsString(argv[1]))return fail(c,"invalid_host_work");
     size_t kindLength;const char* kind=JS_ToCStringLen(c,&kindLength,argv[0]);if(!kind)return JS_EXCEPTION;if(kindLength>32){JS_FreeCString(c,kind);return fail(c,"invalid_host_work");}s.hostKind.assign(kind,kindLength);JS_FreeCString(c,kind);
-    if(s.hostKind!="state_load"&&s.hostKind!="state_save"&&s.hostKind!="screenshot"&&s.hostKind!="input_export"&&s.hostKind!="input_import"&&s.hostKind!="input_prepare")return fail(c,"invalid_host_work");
-    if(s.hostKind!="state_load"&&s.artifactCount>=8)return fail(c,"artifact_limit");
+    if(s.hostKind!="state_load"&&s.hostKind!="state_save"&&s.hostKind!="screenshot"&&s.hostKind!="input_export"&&s.hostKind!="input_import"&&s.hostKind!="input_prepare"&&s.hostKind!="video_start"&&s.hostKind!="video_stop"&&s.hostKind!="video_status"&&s.hostKind!="video_cancel")return fail(c,"invalid_host_work");
+    if((publishesArtifact(s.hostKind)||s.hostKind=="video_start")&&s.artifactCount>=8)return fail(c,"artifact_limit");
     JSValue encoded=JS_JSONStringify(c,argv[1],JS_UNDEFINED,JS_UNDEFINED);if(JS_IsException(encoded))return encoded;
     size_t length;const char* text=JS_ToCStringLen(c,&length,encoded);if(!text||length>8192){if(text)JS_FreeCString(c,text);JS_FreeValue(c,encoded);return fail(c,"invalid_path");}
     s.hostRequest="{\"id\":"+std::to_string(++s.hostId)+",\"kind\":"+controlQuote(s.hostKind)+",\"path\":"+std::string(text,length)+"}";
@@ -260,12 +261,12 @@ struct ScriptService {
       return {{},"{\"running\":"+std::string(owns?"true":"false")+",\"pending\":"+(owns&&hostWaiting?hostRequest:"null")+"}"};
     }
     if(method=="script.resolve") {
-      uint64_t id;if(!running||who!=owner||e!=epoch||!execution->active||execution->active->owner!=owner||!execution->reservation||!hostWaiting||a.size()!=3||!ExecutionService::number(a[0],id)||id!=hostId||(a[1]!="0"&&a[1]!="1")||a[2].size()>3072||a[2].size()%2)return {"stale_script",{}};
+      uint64_t id;if(!running||who!=owner||e!=epoch||!execution->active||execution->active->owner!=owner||!execution->reservation||!hostWaiting||a.size()!=3||!ExecutionService::number(a[0],id)||id!=hostId||(a[1]!="0"&&a[1]!="1")||a[2].size()>32768||a[2].size()%2)return {"stale_script",{}};
       std::string json;for(size_t i=0;i<a[2].size();i+=2){int hi=MemoryService::nibble(a[2][i]),lo=MemoryService::nibble(a[2][i+1]);if(hi<0||lo<0)return {"invalid_request",{}};json+=char(hi*16+lo);}
       budget=Clock::now()+std::chrono::milliseconds(25);
       JSValue value=JS_ParseJSON(context,json.data(),json.size(),"host-result");if(JS_IsException(value))return {"invalid_request",{}};
       auto returned=JS_Call(context,a[1]=="1"?hostResolve:hostReject,JS_UNDEFINED,1,&value);JS_FreeValue(context,value);
-      if(a[1]=="1"&&hostKind!="state_load"){if(artifactCount++)artifacts.insert(artifacts.size()-1,",");artifacts.insert(artifacts.size()-1,hostRequest);}
+      if(a[1]=="1"&&publishesArtifact(hostKind)){if(artifactCount++)artifacts.insert(artifacts.size()-1,",");artifacts.insert(artifacts.size()-1,hostRequest);}
       hostWaiting=false;JS_FreeValue(context,hostResolve);JS_FreeValue(context,hostReject);hostResolve=hostReject=JS_UNDEFINED;
       if(JS_IsException(returned)){error=exception();}JS_FreeValue(context,returned);return {{},"{\"resolved\":true}"};
     }
