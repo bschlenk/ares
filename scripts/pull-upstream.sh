@@ -56,7 +56,7 @@ else
           fi
           ;;
       esac
-    done < <(git diff --name-only --diff-filter=U -z)
+    done < <(git --no-optional-locks diff --name-only --diff-filter=U -z)
 
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
       git commit --no-edit
