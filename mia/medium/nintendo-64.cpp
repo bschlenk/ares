@@ -232,6 +232,18 @@ auto Nintendo64::analyze(std::vector<u8>& data) -> string {
           data[index + 2] = d1;
           data[index + 3] = d0;
         }
+        // Unknown/homebrew IPL3s cannot identify byte order by CIC checksum.
+        // The fallback restored the original bytes; canonicalize recognized
+        // cartridge-header orders before mounting program.rom as well.
+        u32 magic = u32(data[0]) << 24 | u32(data[1]) << 16 | u32(data[2]) << 8 | data[3];
+        if(magic == 0x37804012) {
+          for(size_t index = 0; index + 1 < data.size(); index += 2) std::swap(data[index], data[index + 1]);
+        } else if(magic == 0x40123780) {
+          for(size_t index = 0; index + 3 < data.size(); index += 4) {
+            std::swap(data[index], data[index + 3]);
+            std::swap(data[index + 1], data[index + 2]);
+          }
+        }
       }
     }
   }

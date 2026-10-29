@@ -2551,3 +2551,61 @@ addition: 86 current tools, with all 68 preserved reference signatures unchanged
 The targeted schema-parity checks passed; the generated diff changes only the
 new tool entry and current tool count. No related GitHub issue was found in this
 fork when preparing the draft PR.
+
+## 2026-10-29 — Managed save-state overhaul
+
+Implemented SAVE-STATES-PLAN through the native/service/main/renderer boundaries.
+The appended audit records all core groups, the 40-entry configured registry,
+portable serialization requirements, normalized mounted-media identity (including
+system/core variants and companions), extension/schema and profile storage root.
+Saturn's empty payload and Spectrum's omitted video/audio/keyboard state are
+truthfully unavailable. Unknown-IPL3 N64 byte-order fallback is now canonicalized.
+
+New managed checkpoints pin portable state plus pixels before I/O, publish three
+stable timestamp-named files atomically as a directory, verify integrity, preserve
+unlimited manual/promoted saves and retain ten autosaves. UI adds toolbar controls,
+scrolling screenshot browser, rename/promotion, Trash/reveal, root/date settings
+and timed resume invitations. Native monotonic eligibility plus main's serialized
+lifecycle gates save before switch/quit/close; failure Retry/Stay/Leave preserves the
+session. Existing N64 arbitrary-path state and MCP/script semantics remain intact.
+
+Validation: native host build and strict three-target JS build (Node 24.22.0)
+passed; focused suite **53/53, no skips**; existing N64 raw state/MCP loading test
+passed; new Electron lifecycle/visual fixture and existing settings/playback UI
+fixtures passed. Same-session tests initially missed nonportable coroutine stacks;
+reopen validation exposed this and managed saves now use synchronized portable
+serialization. N64 fixture verifies a captured register restored in a fresh host.
+Screenshots/logs: `artifacts/save-states/`. `npm run test:save-states` and acceptance
+registration added. Full acceptance/package/CI and private optical/companion-media
+round trips were not run; see SAVE-STATES-PLAN validation limits.
+
+### Follow-up full acceptance and private media
+
+Completed full lane `artifacts/acceptance/run-yRHvEw`: **24 gates, 238 fixture
+checks, all passed**, 261 seconds total (151 seconds for Node fixtures), including
+copied-package and packaged-agent UI. Fixed stale MCP test expectations for the
+existing demonstration_prepare/retry tools and selected the native picker explicitly
+in that fixture. A copied-runtime first-launch version probe timed out at five
+seconds, passed isolated, and now has a bounded fifteen-second startup allowance.
+
+Private Kirby managed checkpoint, profile/byte-order identity, 36-button power UI,
+MCP feedback and reference v153 interoperability passed. Private matrix capture
+passed both executors on unrestricted rerun after a restricted launch crashed.
+Mario cross-core checks passed for Super Mario Advance 4 (verified GBA BIOS),
+Super Mario Bros. Deluxe (GBC), and Super Mario World (SNES): visible captures,
+same-host and fresh-host work-RAM restoration, stable identity, unchanged source
+ROM/BIOS hashes. Private validation removed a redundant capture-time screen refresh
+and added stored native display aspect so double-width SNES thumbnails render
+correctly. PNG/state bytes are not resampled or reformatted for that presentation fix.
+
+After the final display-aspect change, the 239-test serial full rerun stopped at
+an existing watcher initial-change timeout (238 passed, one failed). The unchanged
+watcher fixture passed 2/2 in isolation outside the sandbox; the restricted attempt
+reported EMFILE. The final save-state Electron UI regression, including aspect
+ratio, and all three final Mario checks passed. **No all-green 239-test full lane
+is claimed.** See `artifacts/save-states/validation-summary.json` and retained logs.
+
+Confirmed build/helper behavior directly: build-macos-app.sh always rebuilds dist,
+including MCP, and packages it into the app. The installed helper targets the same
+bundle and delegates internally. Same-path rebuilds need process/MCP reconnects,
+not helper reinstall; frozen build_info(app:true) identifies mixed process builds.

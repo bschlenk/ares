@@ -169,3 +169,16 @@ activation keys. Other keys can reach the game from anywhere in the main window.
 Modal dialogs and layout editing block gameplay input. Clicking a dialog backdrop
 dismisses it and restores focus. Both playback toolbar and cursor hide after five
 seconds of pointer inactivity over the viewport.
+
+## Save-state preferences
+
+- `states.root`: absolute managed-library directory; defaults to
+  `<profile userData>/states`. Changes apply to browsing and future writes without
+  moving/deleting the previous collection. The picker chooses a directory.
+- `states.dateFormat`: display-only format, default `%b %e, %Y @ %I:%M %p`.
+  Presets fill the editable field; preview and unsupported-directive errors appear
+  inline. Supported directives: `%%` percent, `%Y` year, `%y` two-digit year,
+  `%m` month number, `%B`/`%b` English month/full abbreviation, `%d` padded day,
+  `%e` unpadded day, `%H` 24-hour, `%I` padded 12-hour, `%M` minute, `%S` second,
+  `%p` AM/PM, `%a` abbreviated weekday, `%z` numeric local offset. Labels use local
+  time; filenames, stored capture instants, identity and ordering are unaffected.

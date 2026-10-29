@@ -1,3 +1,4 @@
+import {installCheckpointControls} from './ui/checkpoints.js';
 import {installDemonstrationControls} from './ui/demonstration-controls.js';
 import {controlOwnsKey} from './ui/keyboard-target.js';
 import {updateWindowTitle} from './ui/window-title.js';
@@ -319,3 +320,5 @@ window.addEventListener('pagehide',installDemonstrationControls(window.ares,reco
   $('viewport').toggleAttribute('data-recording-controls',visible);
   $('video-controls').hidden=system==='Synthetic'&&!visible;
 },notify),{once:true});
+
+installCheckpointControls();

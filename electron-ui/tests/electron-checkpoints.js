@@ -1,0 +1,107 @@
+import {app,BrowserWindow,dialog,shell} from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {CheckpointLibrary} from '../dist/services/checkpoint-library.js';
+import {makeFixture} from '../fixture.cjs';
+const temporary=fs.mkdtempSync('/tmp/ares-checkpoint-ui-'),profile=path.join(temporary,'profile'),rom=path.join(temporary,'Fixture (USA).gb'),renamed=path.join(temporary,'Moved.gb');
+fs.mkdirSync(profile);fs.writeFileSync(rom,makeFixture());fs.writeFileSync(renamed,makeFixture());app.setPath('userData',profile);
+Object.assign(process.env,{ARES_PROFILE_DIR:profile,ARES_ROM:rom,ARES_AUTOTEST:'',ARES_DEFAULT_PLUGINS:'0',ARES_SILENT:'1',ARES_BACKGROUND_TEST:'1',ARES_HOST:process.env.ARES_HOST||path.resolve(import.meta.dirname,'../../build-electron-make/bin/ares-electron-host')});
+process.argv.push('--no-services');
+const {sessions}=await import('../dist/main.js');
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function until(check){for(let i=0;i<800;i++){try{const result=await check();if(result)return result}catch{}await sleep(20)}throw new Error('checkpoint UI timed out')}
+const deadline=setTimeout(()=>{console.error('checkpoint deadline');app.exit(1)},90000);
+let passed=false;
+app.on('will-quit',()=>{clearTimeout(deadline);if(passed){try{const folders=fs.readdirSync(path.join(profile,'states'));const metadata=fs.readdirSync(path.join(profile,'states',folders[0])).filter(n=>!n.startsWith('.')).map(n=>JSON.parse(fs.readFileSync(path.join(profile,'states',folders[0],n,`${n}.json`))));assert.equal(metadata.filter(m=>!m.permanent).length,3);console.log('CHECKPOINT_UI_PASS: toolbar/modal/settings/promotion/root/Stay/Retry/Leave/switch/resume/expiry/duplicate-close; exit autosave published')}catch(error){console.error(error);process.exitCode=1}}fs.rmSync(temporary,{recursive:true,force:true})});
+app.whenReady().then(async()=>{try{
+  const window=await until(()=>BrowserWindow.getAllWindows()[0]),js=code=>window.webContents.executeJavaScript(code);
+  await until(()=>js("window.stats?.().frames>3 && !document.querySelector('#video-save-state').disabled"));
+  await js("window.ares.preferences.set('emulation.pauseOnFocusLoss',false)");
+  const status=()=>js("window.ares.checkpoints({operation:'status'})");
+  let session=(await status()).session;
+  const call=(operation,extra={})=>js(`window.ares.checkpoints(${JSON.stringify({operation,session,...extra})})`);
+  const list=()=>call('list');
+  await call('save');await js("document.querySelector('#video-save-state').click()");
+  await until(async()=>(await list()).length===2);
+  assert.equal((await sessions.request('session.status')).result.paused,false);
+  await js("document.querySelector('#video-load-state').click()");await until(()=>js("document.querySelectorAll('.state-card').length===2"));
+  assert.equal((await sessions.request('session.status')).result.paused,false,'browser never pauses');
+  const entries=await list();await call('rename',{id:entries[0].id,name:'Test checkpoint'});assert.equal((await list())[0].id,entries[0].id);
+  await call('load',{id:entries[0].id});assert.equal((await sessions.request('session.status')).result.checkpoint_eligible,true);
+  const originalFocus=window.isFocused.bind(window);window.isFocused=()=>true;window.emit('focus');
+  await js("window.ares.preferences.set('emulation.pauseOnFocusLoss',true)");await call('load',{id:entries[0].id});
+  window.isFocused=()=>false;window.emit('blur');await until(async()=>(await sessions.request('session.status')).result.focus_paused);
+  window.isFocused=()=>true;window.emit('focus');await until(async()=>!(await sessions.request('session.status')).result.paused);
+  await js("window.ares.preferences.set('emulation.pauseOnFocusLoss',false)");window.isFocused=originalFocus;
+  const autos=path.join(profile,'states'),unavailable=path.join(temporary,'unavailable');fs.writeFileSync(unavailable,'not a directory');
+  await js(`window.ares.preferences.set('states.root',${JSON.stringify(unavailable)})`);
+  await assert.rejects(call('save'));
+  const originalDialog=dialog.showMessageBox;let decisions=[],attempts=0;
+  dialog.showMessageBox=async(_window,options)=>{assert.deepEqual(options.buttons,['Retry','Stay in game','Leave without saving']);attempts++;const response=decisions.shift();assert.notEqual(response,undefined,'unexpected save dialog');if(response===0){fs.unlinkSync(unavailable);fs.mkdirSync(unavailable)}return {response,checkboxChecked:false}};
+  const originalOpen=dialog.showOpenDialog;dialog.showOpenDialog=async()=>({canceled:false,filePaths:[renamed]});
+  decisions=[1];window.close();await until(()=>attempts===1);await sleep(150);assert.equal(window.isDestroyed(),false,'Stay cancels window closure');assert.equal((await status()).session,session);
+  decisions=[1];await js("window.ares.open({})");assert.equal((await status()).session,session,'Stay cancels switch');
+  // Use the original collection again, then fail once on a non-directory root.
+  decisions=[0];await js("window.ares.open({})");assert.equal(attempts,3,'Retry saves before replacing the session');
+  assert.notEqual((await status()).session,session);session=(await status()).session;
+  // The new root contains the retry autosave, and the moved identical ROM sees it.
+  await until(()=>js("!document.querySelector('#state-resume').hidden"));
+  assert.ok(await js("document.querySelector('#state-resume img').src.startsWith('data:image/png')"));
+  await js("[...document.querySelectorAll('#state-resume button')].find(b=>b.textContent==='Choose different').click()");
+  await until(()=>js("document.querySelector('#state-browser').open && document.querySelectorAll('.state-card').length===1"));
+  assert.equal(await js("document.querySelector('#state-resume').hidden"),true);
+  const current=(await list())[0];assert.equal(current.permanent,false);
+  await call('rename',{id:current.id,name:'Promote'});await call('rename',{id:current.id,name:''});assert.equal((await list())[0].permanent,true);
+  // Return to the original root: collection identity survives path/title changes.
+  await js(`window.ares.preferences.set('states.root',${JSON.stringify(autos)})`);assert.equal((await list()).length,2);
+  const originalEntries=await list();await call('load',{id:originalEntries[0].id});
+  const originalTrash=shell.trashItem;let trashed;
+  shell.trashItem=async file=>{assert.ok(file.startsWith(temporary));trashed=file;fs.rmSync(file,{recursive:true})};
+  await call('delete',{id:originalEntries[1].id});assert.ok(trashed);assert.equal((await list()).length,1);shell.trashItem=originalTrash;
+  const anotherFailure=path.join(temporary,'cannot-save');fs.writeFileSync(anotherFailure,'file');
+  await js(`window.ares.preferences.set('states.root',${JSON.stringify(anotherFailure)})`);decisions=[2];const leavingSession=session;
+  await js("window.ares.open({})");session=(await status()).session;assert.notEqual(session,leavingSession,'Leave without saving completes switch');
+  await until(async()=>(await status()).available);await js(`window.ares.preferences.set('states.root',${JSON.stringify(autos)})`);assert.equal((await list()).length,1,'Leave did not publish an autosave');
+  await call('load',{id:originalEntries[0].id});
+  // Exercise an actual scrolling grid without a fixed count/slot limit.
+  const fixtureLibrary=new CheckpointLibrary(autos,async()=>{}),fixtureGame=originalEntries[0].game;
+  const fixtureState=await fixtureLibrary.read(fixtureGame,originalEntries[0].id),fixtureFolder=await fixtureLibrary.revealPath(fixtureGame,originalEntries[0].id);
+  const fixtureImage=fs.readFileSync(path.join(fixtureFolder,`${originalEntries[0].id}.png`));
+  for(let i=0;i<14;i++)await fixtureLibrary.publish(fixtureGame,{state:fixtureState.state,screenshot:fixtureImage,capturedAt:new Date(Date.now()+i*1000),screenshotGeometry:{width:160,height:144,aspect:4/3},compatibility:fixtureState.metadata.compatibility},true);
+  await js("document.querySelector('#state-close').click();document.querySelector('#video-load-state').click()");await until(()=>js("document.querySelectorAll('.state-card').length===15"));
+  assert.equal(await js("document.querySelector('#state-grid').scrollHeight>document.querySelector('#state-grid').clientHeight"),true);
+  const displayedAspect=await js("(()=>{const r=document.querySelector('#state-grid .state-card img').getBoundingClientRect();return r.width/r.height})()");assert.ok(Math.abs(displayedAspect-4/3)<0.02,`preview honors stored display aspect rather than raw PNG dimensions: ${displayedAspect}`);
+
+  await js("document.querySelector('#status').hidden=true");
+  await sleep(150);
+  const evidence=path.resolve(import.meta.dirname,'../artifacts/save-states');fs.mkdirSync(evidence,{recursive:true});fs.writeFileSync(path.join(evidence,'browser.png'),(await window.webContents.capturePage()).toPNG());
+  await js("document.querySelector('#state-close').click()");
+  window.webContents.send('app-action','settings');await until(()=>js("document.querySelector('#settings-dialog').open"));
+  await js("const field=document.querySelector('[data-setting=\"states.dateFormat\"]');field.closest('details').open=true;const input=field.querySelector('input');input.value='%Q';input.dispatchEvent(new Event('input',{bubbles:true}))");
+  assert.equal(await js("document.querySelector('[data-setting=\"states.dateFormat\"] input').checkValidity()"),false);
+  assert.ok(await js("document.querySelector('[data-setting=\"states.dateFormat\"]').textContent.includes('Unsupported directive')"));
+  await js("const select=document.querySelector('[data-setting=\"states.dateFormat\"] select');select.selectedIndex=2;select.dispatchEvent(new Event('change',{bubbles:true}))");
+  await until(()=>js("document.querySelector('[data-setting=\"states.dateFormat\"] input').checkValidity()"));
+  await js("document.querySelector('[data-setting=\"states.dateFormat\"]').scrollIntoView({block:'center'})");await sleep(300);
+  fs.writeFileSync(path.join(evidence,'settings.png'),(await window.webContents.capturePage()).toPNG());
+  await js("document.querySelector('#close-settings').click()");
+  // Show the toolbar's hover presentation for visual QA in a hidden window.
+  await js("document.querySelector('#video-controls').style.opacity='1'");await sleep(200);
+  fs.writeFileSync(path.join(evidence,'toolbar.png'),(await window.webContents.capturePage()).toPNG());
+  await js("document.querySelector('#video-controls').style.removeProperty('opacity')");
+  // An orderly switch creates the first autosave in the original root.
+  await js("window.ares.open({})");session=(await status()).session;await until(async()=>(await status()).available);
+  await until(()=>js("!document.querySelector('#state-resume').hidden"));
+  await sleep(200);fs.writeFileSync(path.join(evidence,'resume.png'),(await window.webContents.capturePage()).toPNG());
+  await js("[...document.querySelectorAll('#state-resume button')].find(b=>b.textContent==='Resume').click()");await until(async()=>(await sessions.request('session.status')).result.checkpoint_eligible);
+  await js("window.ares.open({})");session=(await status()).session;await until(async()=>(await status()).available);
+  await until(()=>js("!document.querySelector('#state-resume').hidden"));const invitationStart=(await status()).loadedAt;
+  await until(()=>js("document.querySelector('#state-resume').hidden"));assert.ok(Date.now()-invitationStart>=9900,'old timers cannot shorten the new session invitation');
+  assert.equal((await sessions.request('session.status')).result.paused,false,'gameplay continues behind invitation');
+  await js("document.querySelector('#video-load-state').click()");await until(()=>js("document.querySelector('#state-browser').open"));
+  const remainingAutos=(await list()).filter(e=>!e.permanent);assert.equal(remainingAutos.length,2,'expired suggestion stays in the browser');
+  await call('load',{id:remainingAutos[0].id});
+  dialog.showMessageBox=originalDialog;dialog.showOpenDialog=originalOpen;
+  passed=true;window.close();app.quit();app.quit();
+}catch(error){console.error(error);clearTimeout(deadline);app.exit(1)}});

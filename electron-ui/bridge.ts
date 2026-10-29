@@ -28,6 +28,8 @@ export type NativeCommand =
   | { type: 'clear' }
   | { type: 'report'; report: RendererStats };
 export interface AresBridge {
+  checkpoints(request:{operation:'status'|'list'|'save'|'load'|'rename'|'delete'|'reveal';session?:string;id?:string;name?:string}):Promise<any>;
+  onCheckpointsChanged(callback:()=>void):()=>void;
   agentAction(action: 'copy' | 'install' | 'preview'): Promise<string>;
   workspace: WorkspaceBridge;
   onAction(callback: (action: 'settings' | 'open' | 'pause' | 'reset' | 'edit-workspace' | 'reset-workspace') => void): () => void;

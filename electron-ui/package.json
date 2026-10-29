@@ -44,7 +44,10 @@
     "test:matrix": "node scripts/build.js && node tests/kirby-matrix-live.cjs",
     "test:skeleton": "node scripts/build.js && electron tests/electron-kirby-skeleton.js",
     "test:feedback-cost": "node scripts/build.js && node tests/kirby-feedback-cost.cjs",
-    "test:playback-controls": "node scripts/build.js && node --test tests/focus-pause.test.js && electron tests/electron-playback-controls.js"
+    "test:playback-controls": "node scripts/build.js && node --test tests/focus-pause.test.js && electron tests/electron-playback-controls.js",
+    "test:save-states": "node scripts/build.js && node --test tests/checkpoint-library.test.js tests/checkpoint-native.test.js && electron tests/electron-checkpoints.js",
+    "test:save-states-private": "node scripts/build.js && node tests/checkpoint-private.js",
+    "test:save-states-cross-core": "node scripts/build.js && node tests/checkpoint-cross-core.js"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

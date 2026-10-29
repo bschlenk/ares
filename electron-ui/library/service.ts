@@ -1,3 +1,4 @@
+import {romDisplayTitle} from './title.js';
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
@@ -81,7 +82,7 @@ export class RomLibrary {
         const stem = child.name.slice(0, -(extension.length + 1));
         const id = createHash('sha256').update(file).digest('hex');
         next.set(id, { id, path: file, filename: path.relative(directory, file), stem, artworkName, crc, archiveMember,
-          title: artworkName.replace(/\s*[([][^)\]]*[)\]]/g, '').trim() || artworkName,
+          title: romDisplayTitle(artworkName),
           system: system.name, collection: system.collection });
       }
     };

@@ -95,6 +95,13 @@ export class SessionRouter {
     this.title = undefined; this.focusPause.attach(); this.client?.close(); this.client = undefined;
   }
   async request<M extends ServiceMethod>(method: M, identity?: SessionIdentity, params?: ServiceParams<M>, owner = 'ui'): Promise<SessionReply<ServiceResult<M>>> {
+    if (method === 'checkpoint.commit') {
+      // A toolbar/browser load is an explicit UI resume, so later focus loss
+      // must retain the user's focus-pause policy rather than automation ownership.
+      const reply = await this.focusPause.explicit(owner, () => this.dispatchRequest(method, identity, params, owner), reply => reply.ok);
+      if (reply.ok) await this.dispatchRequest('session.status', undefined, undefined, owner);
+      return reply;
+    }
     if (method === 'session.pause' || method === 'session.resume') {
       const reply = await this.focusPause.explicit(owner, () => this.dispatchRequest(method, identity, params, owner), reply => reply.ok);
       if (reply.ok) this.publishState(reply as SessionReply);
@@ -151,7 +158,7 @@ export class SessionRouter {
     if(method==='execution.status'&&reply.ok&&reply.result){const output=this.scripts.outputs.get((reply.result as {operation_id:number}).operation_id);if(output)(reply.result as any).script_output=output;Object.assign(reply.result,this.scripts.metadata((reply.result as any).operation_id));}
     if(reply.ok&&method==='n64.demo.read')for(const e of (reply.result as any).events)e.held=heldButtons(e.buttons);
     if(reply.ok&&method.startsWith('n64.demo.')&&reply.result)Object.assign(reply.result,this.inputClips.metadata((reply.result as any).job_id));
-    if(reply.ok&&method==='n64.state.loadCommit')this.scripts.ownedEpoch(owner,{session:reply.session,epoch:reply.epoch});
+    if(reply.ok&&(method==='n64.state.loadCommit'||method==='checkpoint.commit'))this.scripts.ownedEpoch(owner,{session:reply.session,epoch:reply.epoch});
     const cancelled = reply.result as { owner?: string; stop_reason?: string };
     if (child && reply.ok && (method === 'session.pause' || cancelled.owner === child && cancelled.stop_reason === 'cancelled')) this.batches.interrupt(owner, method === 'session.pause' ? 'paused' : 'cancelled');
     if (method.startsWith('session.')) mainCapabilities(reply);

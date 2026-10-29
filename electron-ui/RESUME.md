@@ -170,3 +170,30 @@ tools and CLI/TSX reload with checkout read denied (873 GB frames); Electron44.9
 bundled Node24.22.0, macOS arm64. Temporary bundle removed by the lane. Hosted CI
 was not run. Initial run-FpEKbA exposed the paused-reload identity issue; fixed and
 rerun fully, not claimed as a pass. See SETTINGS.md and plugins/README.md for APIs.
+
+## Save-state overhaul (2026-10-29)
+
+The managed save-state overhaul is implemented. Start with
+[SAVE-STATES-PLAN.md](SAVE-STATES-PLAN.md), including the appended technical audit,
+core matrix, identity mapping, schema and validation. Toolbar saves are permanent;
+Load opens an unpaused screenshot grid. Native portable snapshots pin state and
+pixels together. Main owns atomic checkpoint publication, names/promotion, Trash,
+retention and configurable storage. Native gameplay eligibility feeds guarded
+switch/quit autosaves, with Retry/Stay/Leave, and a timed resume invitation.
+
+Keep the existing arbitrary-path N64 state/MCP/script APIs unchanged. Persistent
+coroutine saves require synchronized serialization; unsynchronized snapshots
+contain process-local stacks. The actual machine configuration and loaded firmware
+are fingerprinted separately from game content and unrelated settings. Saturn and
+ZX Spectrum are truthfully unavailable; other core/media combinations have a
+source audit, with GB/N64 fixture round trips and explicit remaining limitations.
+See the latest EXECUTION-LOG entry for checks; do not infer full acceptance or
+private-media/optical equivalence from the focused tests.
+
+Follow-up validation: full acceptance passed 24 gates/238 tests; private Kirby,
+v153 reference interoperability and Mario GBA/GBC/SNES checkpoint round trips passed.
+Private checks fixed repeated-refresh pixel changes and added display-aspect
+metadata/rendering for SNES. Final save-state UI passes. A later 239-test full
+rerun stopped on an existing watcher initial-event timeout, with that unchanged
+fixture passing 2/2 in isolated unrestricted rerun. Do not claim a final all-green
+239-test lane. See EXECUTION-LOG and artifacts/save-states/validation-summary.json.

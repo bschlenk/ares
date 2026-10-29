@@ -387,3 +387,39 @@ header/current/end/task indices remain available under additive aliases. The
 software renderer name is implementation-specific; it is not labelled angrylion.
 The core debugger callback audit and non-stopping instrumentation investigation
 are recorded in MEMORY-SAMPLING-AUDIT.md.
+
+## Managed checkpoints
+
+`checkpoint.*` is a separate, bounded native transfer protocol used by the
+host-owned save-state library. It does not change `state.save/load/list/info/peek`
+or N64 scripting/arbitrary-path semantics. Native `checkpoint.info` reports actual
+availability, a normalized mounted-media identity and a machine/firmware content
+fingerprint. Portable synchronized serialization pins state bytes plus immutable
+RGBA pixels in one emulation-thread request; main streams the pin and encodes PNG
+using the existing worker. Managed capture preserves the prior pause flag. Raw
+unsynchronized coroutine snapshots contain process-local stacks and must never be
+used for persistent checkpoints.
+
+Uploads are owner/epoch checked, bounded and exclusive with other mutation APIs.
+Commit preflights the current portable header/version and size, then invokes the
+core's restore validation, rolling back on restore failure. Every touched restore
+starts a new epoch and invalidates input/capture/debugger history. Main additionally
+validates the checkpoint's state SHA256, game identity and actual machine/firmware
+fingerprint. Session status includes native `checkpoint_eligible`: ten monotonic
+seconds of unpaused gameplay or any successful state load, including script loads.
+
+`CheckpointLibrary` publishes `<timestamp>.state`, `<timestamp>.png`, and schema-1
+`<timestamp>.json` by directory rename from hidden staging, after file fsync. The
+metadata records SHA256/size, precise capture instant and original offset, game
+identity, permanent status/name and compatibility. Exclusive timestamp-directory
+reservation avoids overwrites. Metadata rename/promotion is atomic; Trash covers
+the whole checkpoint. Retention follows a successful autosave commit and logs
+Trash failures while preserving recovery data. Browse ignores incomplete staging
+and malformed entries, bounds reads, and sorts by metadata capture time.
+
+The full source audit and multi-media mapping are in
+[SAVE-STATES-PLAN.md](../SAVE-STATES-PLAN.md). Focused checks:
+`node --test tests/checkpoint-library.test.js tests/checkpoint-native.test.js` and
+`electron tests/electron-checkpoints.js` after building JS/native. The Electron
+fixture uses disposable profiles and original artificial media, and stubs Trash
+and save-failure decisions; it never uses an existing user session.

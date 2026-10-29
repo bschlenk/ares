@@ -124,7 +124,9 @@ copy(path.resolve(import.meta.dirname, '../../thirdparty/quickjs/LICENSE'), path
 const runtime = path.join(destination, 'Contents/MacOS/Ares')
 const nodeVersion = execFileSync(runtime, ['-p', 'process.versions.node'], {
   encoding: 'utf8',
-  timeout: 5000,
+  // First launch of a freshly copied/signed macOS runtime can outlast 5s.
+  // Keep the probe bounded; copied-package gates also check real CLI shutdown.
+  timeout: 15000,
   env: {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
