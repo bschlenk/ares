@@ -2,7 +2,7 @@ export const SCRIPT_NATIVE_METHODS = ['script.ack','script.pending','script.reso
 export interface ScriptRunParams { path?: string; source?: string; args: unknown; timeoutMs: number; maxFrames: number; statePaths?: string[]; outputPaths?: string[]; outputPath?: string; projectRoot?: string; fileBase?:string; videoPath?:string; videoSource?:'presented'|'framebuffer'; every?:number; boundary?:'vi'|'vi_origin'; push?:boolean }
 export interface ScriptServiceMap {
   'script.ack': {params:{operationId:number};result:{released:true}};
-  'script.pending': {params:undefined;result:{running:boolean;pending:{id:number;kind:'state_load'|'state_save'|'screenshot'|'input_export'|'input_import'|'input_prepare';path:string}|null}};
+  'script.pending': {params:undefined;result:{running:boolean;pending:{id:number;kind:'state_load'|'state_save'|'screenshot'|'input_export'|'input_import'|'input_prepare'|'video_start'|'video_stop'|'video_status'|'video_cancel';path:string}|null}};
   'script.resolve': {params:{id:number;ok:boolean;hex:string};result:{resolved:true}};
 
   'script.observerPrepare': ScriptServiceMap['script.prepare'];
@@ -21,7 +21,7 @@ export interface ScriptServiceMap {
 export function encodeScript(method:string,p:any):string|undefined {
   if(method==='script.ack')return p&&Object.keys(p).join(',')==='operationId'&&Number.isSafeInteger(p.operationId)&&p.operationId>0?` ${p.operationId}`:undefined;
   if(method==='script.pending')return p===undefined?'':undefined;
-  if(method==='script.resolve')return p&&Object.keys(p).sort().join(',')==='hex,id,ok'&&Number.isSafeInteger(p.id)&&p.id>0&&typeof p.ok==='boolean'&&typeof p.hex==='string'&&/^(?:[0-9a-f]{2}){1,1536}$/.test(p.hex)?` ${p.id} ${p.ok?1:0} ${p.hex}`:undefined;
+  if(method==='script.resolve')return p&&Object.keys(p).sort().join(',')==='hex,id,ok'&&Number.isSafeInteger(p.id)&&p.id>0&&typeof p.ok==='boolean'&&typeof p.hex==='string'&&/^(?:[0-9a-f]{2}){1,16384}$/.test(p.hex)?` ${p.id} ${p.ok?1:0} ${p.hex}`:undefined;
   if(method==='script.observerStop')return p===undefined?'':p&&Object.keys(p).join(',')==='observerId'&&Number.isSafeInteger(p.observerId)&&p.observerId>0?` ${p.observerId}`:undefined;
   if(method==='script.observerRead'&&p?.observerId!==undefined){const {observerId,...page}=p;if(!Number.isSafeInteger(observerId)||observerId<1)return;const encoded=encodeScript('script.read',page);return encoded===undefined?undefined:encoded+` ${observerId}`;}
   if(method==='script.observerStart'&&p&&(p.every!==undefined||p.boundary!==undefined||p.push!==undefined)){if(Object.keys(p).some(k=>!['timeoutMs','maxFrames','every','boundary','push'].includes(k))||p.boundary!==undefined&&!['vi','vi_origin'].includes(p.boundary)||p.push!==undefined&&typeof p.push!=='boolean'||!Number.isInteger(p.every??4)||(p.every??4)<1||(p.every??4)>120)return;const base=encodeScript('script.start',{timeoutMs:p.timeoutMs,maxFrames:p.maxFrames});return base===undefined?undefined:base+` ${p.every??4} ${p.push?1:0} ${p.boundary??'vi'}`;}

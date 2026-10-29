@@ -14,12 +14,14 @@ struct RecordingService {
   uint64_t maxFrames = 600, maxBytes = 128ull << 20, fps = 60, width = 0, height = 0;
   Clock::time_point deadline, pinDeadline;
   FrameSpool frames;
+  struct Segment {uint64_t epoch,start,end,first,count;};
+  std::vector<Segment> segments;
   void finish(const std::string& why) { if(active) { active = false; reason = why; } }
   void expire() { if(active && Clock::now() >= deadline) finish("seconds_limit"); if(pin && Clock::now() >= pinDeadline) pin = 0; }
-  void clear() { active = available = exact = scriptOwned = false; owner.clear(); reason.clear(); frames.clear(); pin = 0; width = height = epoch = startFrame = endFrame = 0; }
+  void clear() { active = available = exact = scriptOwned = false; owner.clear(); reason.clear(); frames.clear(); segments.clear(); pin = 0; width = height = epoch = startFrame = endFrame = 0; }
   void reset() { std::lock_guard lock(mutex); clear(); }
   void releaseOwner(const std::string& who) { std::lock_guard lock(mutex); if(owner == who) clear(); }
-  void rebase(const std::string& who,uint64_t e) {std::lock_guard lock(mutex);if(scriptOwned&&owner==who&&available){frames.open();width=height=startFrame=endFrame=0;epoch=e;}else clear();}
+  void rebase(const std::string& who,uint64_t e) {std::lock_guard lock(mutex);if(scriptOwned&&owner==who&&available){startFrame=endFrame=0;epoch=e;}else clear();}
   void capture(const uint8_t* rgba, uint32_t w, uint32_t h, uint64_t e, uint64_t f, const std::string& kind = "unavailable", bool boundary = false) {
     std::lock_guard lock(mutex); expire(); if(!active || exact!=boundary) return;
     if(exact && f<=endFrame)return;
@@ -29,21 +31,27 @@ struct RecordingService {
     if(width && (w != width || h != height)) { finish("dimensions_changed"); return; }
     uint64_t stride = (uint64_t(w) * 3 + 3) & ~3ull, size = stride * h;
     if(w > 4096 || h > 4096 || size > maxBytes || frames.count >= maxBytes / size) { finish("bytes_limit"); return; }
+    bool newSegment=segments.empty()||segments.back().epoch!=e;
+    if(newSegment&&segments.size()>=64){finish("segments_limit");return;}
     width = w; height = h; std::vector<uint8_t> bytes(size);
     for(uint32_t y = 0; y < h; ++y) for(uint32_t x = 0; x < w; ++x) {
       auto* in = rgba + (uint64_t(y) * w + x) * 4; auto* out = bytes.data() + (h - 1 - y) * stride + x * 3;
       out[0] = in[2]; out[1] = in[1]; out[2] = in[0];
     }
     if(!frames.append(std::move(bytes))) { finish("spool_backpressure"); return; }
-    if(frames.count == 1) startFrame = f; endFrame = f;
+    if(newSegment){startFrame=f;segments.push_back({e,f,f,frames.count-1,0});}
+    endFrame = f;segments.back().end=f;++segments.back().count;
     if(frames.count >= maxFrames) finish("frames_limit");
   }
   std::string status() {
+    std::string timeline="[";
+    for(auto& segment:segments){if(timeline.size()>1)timeline+=',';timeline+="{\"epoch\":"+std::to_string(segment.epoch)+",\"start_frame\":"+std::to_string(segment.start)+",\"end_frame\":"+std::to_string(segment.end)+",\"first_frame\":"+std::to_string(segment.first)+",\"frames\":"+std::to_string(segment.count)+"}";}
+    timeline+=']';
     return "{\"active\":" + std::string(active ? "true" : "false") + ",\"available\":" + (available ? "true" : "false")
       + ",\"frames\":" + std::to_string(frames.count) + ",\"fps\":" + std::to_string(fps) + ",\"width\":" + std::to_string(width) + ",\"height\":" + std::to_string(height)
       + ",\"epoch\":" + std::to_string(epoch) + ",\"start_frame\":" + std::to_string(startFrame) + ",\"end_frame\":" + std::to_string(endFrame)
       + ",\"frame_kind\":" + controlQuote(frameKind) + ",\"stop_reason\":" + controlQuote(reason) + ",\"format\":\"avi_raw_bgr24\",\"audio\":false,\"source\":" + controlQuote(exact?"framebuffer":"presented") + ",\"max_frames\":" + std::to_string(maxFrames)
-      + ",\"max_bytes\":" + std::to_string(maxBytes) + ",\"captured_bytes\":" + std::to_string((frames.count == 0) ? 0 : frames.count * frames.frameBytes) + "}";
+      + ",\"max_bytes\":" + std::to_string(maxBytes) + ",\"segments\":" + timeline + ",\"captured_bytes\":" + std::to_string((frames.count == 0) ? 0 : frames.count * frames.frameBytes) + "}";
   }
   ControlResult execute(const std::string& method, const std::vector<std::string>& args, const std::string& who, uint64_t e, uint64_t f, const std::string& kind = "unavailable") {
     std::lock_guard lock(mutex); expire();
@@ -64,7 +72,8 @@ struct RecordingService {
     if(method == "video.record.begin") {
       if(!args.empty()) return {"invalid_request", {}};
       if(pin) return {"busy", {}};
-      finish("requested"); if(!frames.seal()){reason="spool_write_failed";if(exact&&frames.count)endFrame=startFrame+frames.count-1;} if(frames.count == 0) return {"no_frames", {}};
+      finish("requested"); if(!frames.seal()){reason="spool_write_failed";while(!segments.empty()&&segments.back().first>=frames.count)segments.pop_back();
+        if(!segments.empty()){auto& last=segments.back();last.count=frames.count-last.first;if(exact)last.end=last.start+last.count-1;if(last.epoch==epoch)endFrame=last.end;}} if(frames.count == 0) return {"no_frames", {}};
       pin = nextId++; pinDeadline = Clock::now() + std::chrono::seconds(360);
       auto json = status(); json.pop_back(); return {{}, json + ",\"snapshot_id\":" + std::to_string(pin) + "}"};
     }
@@ -74,7 +83,7 @@ struct RecordingService {
       (method == "video.record.read" && (!ExecutionService::number(args[1], offset) || !ExecutionService::number(args[2], length) || !length || length > 16384)) ||
       (method == "video.record.release" && args[1] != "0" && args[1] != "1")) return {"invalid_request", {}};
     if(!pin || id != pin) return {"stale_snapshot", {}};
-    if(method == "video.record.release") { pin = 0; if(args[1] == "1") { available = false; frames.clear(); } return {{}, "{\"released\":true}"}; }
+    if(method == "video.record.release") { pin = 0; if(args[1] == "1") { available = false; frames.clear(); segments.clear(); } return {{}, "{\"released\":true}"}; }
     uint64_t frameBytes = frames.frameBytes, total = frames.count * frameBytes;
     if(offset >= total || length > total - offset) return {"out_of_bounds", {}};
     std::string hex; hex.reserve(length * 2); static const char digits[] = "0123456789abcdef";

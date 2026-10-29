@@ -253,7 +253,7 @@ struct Host : ares::Platform {
     char ch;
     while(std::cin.get(ch)) {
       if(ch != '\n') {
-        if(line.size() >= 4096) break;
+        if(line.size() >= 65536) break;
         line += ch; continue;
       }
       std::istringstream command(line);

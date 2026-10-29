@@ -80,7 +80,7 @@ async function bundleScript(p: ScriptRunParams, observe=false) {
   const bundled=output.outputFiles[0].text;
   if(/(^|[^.$\w])import\s*\(/.test(bundled))throw new ServiceError('script_dynamic_import_denied');
   const args=JSON.stringify(p.args);
-  const source=bootstrap+bundled+`\n${observe?'(()=>':'Promise.resolve().then(()=>'}__aresModule.default({args:${args},emu:Object.freeze({get frame(){return __info().frame},info:__info,loadState:path=>__host('state_load',path),saveState:path=>__host('state_save',path),screenshot:path=>__host('screenshot',path)}),mem,input,frames:__frames,cpu:Object.freeze({onExecute:(address,callback)=>{const id=__hook(address,r=>{Object.freeze(r.gpr);Object.freeze(r.cop0);Object.freeze(r.fpr);return callback(Object.freeze(r))});return ()=>__unhook(id)}}),log:(...v)=>__log(JSON.stringify(v))}));`;
+  const source=bootstrap+bundled+`\n${observe?'(()=>':'Promise.resolve().then(()=>'}__aresModule.default({args:${args},emu:Object.freeze({get frame(){return __info().frame},info:__info,loadState:path=>__host('state_load',path),saveState:path=>__host('state_save',path),screenshot:path=>__host('screenshot',path),video:Object.freeze({start:(options={})=>__host('video_start',JSON.stringify(options)),stop:path=>__host('video_stop',path),status:()=>__host('video_status',''),cancel:()=>__host('video_cancel','')})}),mem,input,frames:__frames,cpu:Object.freeze({onExecute:(address,callback)=>{const id=__hook(address,r=>{Object.freeze(r.gpr);Object.freeze(r.cop0);Object.freeze(r.fpr);return callback(Object.freeze(r))});return ()=>__unhook(id)}}),log:(...v)=>__log(JSON.stringify(v))}));`;
   if(Buffer.byteLength(source)>262144)throw new ServiceError('script_source_limit');
   return {source,hashes,sha256:createHash('sha256').update(source).digest('hex')};
 }
@@ -156,6 +156,7 @@ export class ScriptJobs {
       const r=await client.request('script.pending',client.identity,undefined,owner);
       if(!r.ok||!r.result)throw new ServiceError(r.error??'invalid_reply');return r.result;
     };
+    let explicitVideo=false;
     try {
       while(current()) {
         const completed=await client.request('execution.status',client.identity,{operationId:id},owner);
@@ -197,20 +198,33 @@ export class ScriptJobs {
           let ok=true,value:unknown;
           try {
             let preparation:any;if(work.kind==='input_prepare'){preparation=JSON.parse(work.path);if(!inputs.has(resolveFile(preparation.initialStatePath))||!outputs.has(resolveFile(preparation.outputDirectory)))throw new ServiceError('script_file_capability_denied');preparation={...preparation,initialStatePath:resolveFile(preparation.initialStatePath),outputDirectory:resolveFile(preparation.outputDirectory)};}
-            if(work.kind!=='input_prepare'&&(typeof work.path!=='string'||!((work.kind==='state_load'||work.kind==='input_import')?inputs:outputs).has(resolveFile(work.path))))throw new ServiceError('script_file_capability_denied');
+            const videoControl=['video_start','video_status','video_cancel'].includes(work.kind);
+            if(work.kind!=='input_prepare'&&!videoControl&&(typeof work.path!=='string'||!((work.kind==='state_load'||work.kind==='input_import')?inputs:outputs).has(resolveFile(work.path))))throw new ServiceError('script_file_capability_denied');
             const revalidate=async()=>{const state=await pending();if(!state.running||state.pending?.id!==work.id)throw new ServiceError('script_interrupted');};
             const {artifactGuard}=await import('./artifact-guard.js');
-            const reply=await artifactGuard.run(revalidate,()=>work.kind==='input_prepare'?invoke.request('artifact.inputRequest',client.identity,{maxFrames:3600,timeoutMs:300000,port:1,source:'human',prompt:'Please demonstrate the action.',...preparation},owner):work.kind==='input_export'?invoke.request('artifact.inputExport',client.identity,{path:resolveFile(work.path)},owner):work.kind==='input_import'?invoke.request('artifact.inputImport',client.identity,{path:resolveFile(work.path)},owner):work.kind==='state_load'?
+            let videoParams:any;
+            if(work.kind==='video_start'){
+              if(p.videoPath)throw new ServiceError('automatic_video_active');
+              const options=JSON.parse(work.path);if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['source','maxFrames','maxBytes','fps','timeoutMs'].includes(k)))throw new ServiceError('invalid_video_options');
+              videoParams={source:'framebuffer',maxFrames:36000,maxBytes:1073741824,fps:60,timeoutMs:p.timeoutMs,...options,discard:false};
+            }
+            if(work.kind==='video_stop'||work.kind==='video_cancel'){
+              if(p.videoPath)throw new ServiceError('automatic_video_active');
+              if(!explicitVideo)throw new ServiceError('no_script_recording');
+            }
+            const reply=await artifactGuard.run(revalidate,()=>work.kind==='video_start'?invoke.request('video.record.scriptStart',client.identity,videoParams,owner):work.kind==='video_status'?invoke.request('video.record.status',client.identity,undefined,owner):work.kind==='video_cancel'?invoke.request('video.record.cancel',client.identity,undefined,owner):work.kind==='video_stop'?invoke.request('artifact.videoStop',client.identity,{path:resolveFile(work.path),overwrite:false},owner):work.kind==='input_prepare'?invoke.request('artifact.inputRequest',client.identity,{maxFrames:3600,timeoutMs:300000,port:1,source:'human',prompt:'Please demonstrate the action.',...preparation},owner):work.kind==='input_export'?invoke.request('artifact.inputExport',client.identity,{path:resolveFile(work.path)},owner):work.kind==='input_import'?invoke.request('artifact.inputImport',client.identity,{path:resolveFile(work.path)},owner):work.kind==='state_load'?
               invoke.request('state.load',client.identity,{path:resolveFile(work.path),resume:false,keepOverrides:false},owner):work.kind==='state_save'?
               invoke.request('state.save',client.identity,{path:resolveFile(work.path),overwrite:false,metadata:true},owner):
               invoke.request('artifact.screenshot',client.identity,{path:resolveFile(work.path),inline:false,overwrite:false,source:'framebuffer',region:null,scale:1},owner));
             if(!reply.ok)throw new ServiceError(reply.error??'script_host_work_failed');
+            if(work.kind==='video_start')explicitVideo=true;
+            if(work.kind==='video_cancel'||work.kind==='video_stop'&&!(reply.result as any)?.cleanup_error)explicitVideo=false;
             if(work.kind==='state_load'||work.kind==='input_prepare') {
               const lineage=this.lineages.get(id);
               if(lineage&&lineage.session===reply.session&&!lineage.epochs.includes(reply.epoch))lineage.epochs.push(reply.epoch);
             }
             // Native replies carry the new epoch following an intentional load.
-            value={...(work.kind==='input_prepare'?{job_id:(reply.result as any)?.job_id,state:(reply.result as any)?.state}:{}),epoch:reply.epoch,committed:true,...(work.kind==='state_load'?{state_sha256:(reply.result as any)?.state_sha256}:{})};
+            value=work.kind.startsWith('video_')?reply.result:{...(work.kind==='input_prepare'?{job_id:(reply.result as any)?.job_id,state:(reply.result as any)?.state}:{}),epoch:reply.epoch,committed:true,...(work.kind==='state_load'?{state_sha256:(reply.result as any)?.state_sha256}:{})};
           } catch(error){if(!(error instanceof ServiceError))this.diagnose(error);ok=false;value=error instanceof Error?error.message:String(error);}
           const reply=await client.request('script.resolve',client.identity,{id:work.id,ok,hex:Buffer.from(JSON.stringify(value)).toString('hex')},owner);
           if(!reply.ok)throw new ServiceError(reply.error??'script_interrupted');
@@ -223,6 +237,6 @@ export class ScriptJobs {
       if(this.publications.get(id)?.state!=='committed')this.publications.set(id,{state:'failed',result_handle:handle,error:error instanceof Error?error.message:String(error)});
       if((p.outputPath||p.videoPath)&&generation===this.generation)this.outputs.set(id,{state:'failed',error:error instanceof Error?error.message:String(error)});
       await client.request('execution.cancel',client.identity,{operationId:id},owner).catch(()=>{});
-    }
+    }finally{if(explicitVideo&&current())await client.request('video.record.cancel',client.identity,undefined,owner).catch(()=>{});}
   }
 }
