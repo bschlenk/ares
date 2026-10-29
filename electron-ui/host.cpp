@@ -173,7 +173,8 @@ struct Host : ares::Platform {
     captures.forget(node.get());
     if(auto stream = node->cast<ares::Node::Audio::Stream>()) std::erase(streams, stream);
   }
-  auto video(ares::Node::Video::Screen screen, const u32* data, u32 pitch, u32 width, u32 height) -> void override {
+  auto video(ares::Node::Video::Screen screen, const u32* data, u32 pitch, u32 width, u32 height) -> void override { emitVideo(screen,data,pitch,width,height); }
+  void emitVideo(ares::Node::Video::Screen screen,const u32* data,u32 pitch,u32 width,u32 height,bool preview=false) {
     auto now = Clock::now();
     std::lock_guard lock(mutex);
     ++rateFrames;
@@ -199,11 +200,11 @@ struct Host : ares::Platform {
       if(screen->rotation() == 90 || screen->rotation() == 270) aspect = 1.0 / aspect;
     }
     put64(p + 40, aspect);
-    auto tag=screen?captures.tag(screen.get()):FrameService::Tag{service.epoch,service.execution.frame};
+    auto tag=preview?FrameService::Tag{}:screen?captures.tag(screen.get()):FrameService::Tag{service.epoch,service.execution.frame};
     put64(p+48,double(tag.epoch));put64(p+56,double(tag.frame));put64(p+64,double(tag.originCommit));
-    put32(p+72,tag.origin);put32(p+76,(tag.epoch?1u:0u)|(systemName=="Nintendo 64"?2u:0u)|(!screen?4u:systemName!="Nintendo 64"?8u:0u));
+    put32(p+72,tag.origin);put32(p+76,preview?0u:(tag.epoch?1u:0u)|(systemName=="Nintendo 64"?2u:0u)|(!screen?4u:systemName!="Nintendo 64"?8u:0u));
     uint32_t logicalHeight=tag.logicalHeight?tag.logicalHeight:height;
-    if(systemName=="Nintendo 64"){
+    if(systemName=="Nintendo 64"&&!preview){
       logicalHeight=height;
       #if defined(VULKAN)
       if(ares::Nintendo64::vulkan.enable)logicalHeight=height/std::max(1u,uint32_t(ares::Nintendo64::vulkan.outputUpscale));
@@ -211,7 +212,7 @@ struct Host : ares::Platform {
     }
     put32(p+80,tag.logicalWidth?tag.logicalWidth:width);put32(p+84,logicalHeight);put64(p+88,0);
     put32(p+96,0);put32(p+100,0);put32(p+104,0);put32(p+108,0);put32(p+112,0);put32(p+116,0);put64(p+120,0);
-    if(screen){
+    if(screen&&!preview){
       const auto g=screen->presentationGeometry();
       put32(p+96,g.canvasWidth);put32(p+100,g.canvasHeight);put32(p+104,g.cropX);put32(p+108,g.cropY);put32(p+112,g.rotation);
       const bool turns=g.rotation==90||g.rotation==270;
@@ -227,8 +228,20 @@ struct Host : ares::Platform {
         *p++ = color >> 16; *p++ = color >> 8; *p++ = color; *p++ = 255;
       }
     }
-    captures.observe(screen.get(), latest->data() + 128, width, height, sequence, screen ? 0 : service.epoch, screen ? 0 : service.execution.frame, latest,128);
+    if(!preview)captures.observe(screen.get(), latest->data() + 128, width, height, sequence, screen ? 0 : service.epoch, screen ? 0 : service.execution.frame, latest,128);
     captured = now; available = true; wake.notify_one();
+  }
+  // Present restored RAM pixels without running the core or feeding recording taps.
+  bool showPausedFramebuffer() {
+    if(!service.paused||systemName!="Nintendo 64"){if(std::getenv("ARES_DEBUG_PREVIEW"))std::cerr<<"preview skipped: paused="<<service.paused<<" system="<<systemName.data()<<"\n";return false;}
+    std::shared_ptr<const FrameService::Image> image;
+    auto snapshot=FrameService::framebuffer(image,service.epoch,service.execution.frame,false);
+    if(!snapshot.error.empty()||uint64_t(image->width)*image->height>1920*1080){if(std::getenv("ARES_DEBUG_PREVIEW"))std::cerr<<"preview unavailable: "<<snapshot.error<<"\n";uint32_t black=0xff000000u;emitVideo(ares::Nintendo64::vi.screen,&black,4,1,1,true);return false;}
+    std::vector<uint32_t> pixels(uint64_t(image->width)*image->height);
+    for(size_t n=0;n<pixels.size();++n){auto p=image->data()+n*4;pixels[n]=0xff000000u|uint32_t(p[0])<<16|uint32_t(p[1])<<8|p[2];}
+    emitVideo(ares::Nintendo64::vi.screen,pixels.data(),image->width*4,image->width,image->height,true);
+    if(std::getenv("ARES_DEBUG_PREVIEW"))std::cerr<<"preview queued: "<<image->width<<"x"<<image->height<<"\n";
+    return true;
   }
   void writeFrames() {
     std::shared_ptr<std::vector<uint8_t>> frame;
@@ -613,7 +626,7 @@ int main(int argc, char** argv) {
   host.service.beforeRequest = [&](const std::string& method, const std::string& owner) -> std::string {
     host.demonstration.tick(host.service.epoch,execution.frame);
     const bool demoScriptLifecycle = (owner==host.demonstration.owner||owner==host.demonstration.requester) && (method=="execution.status" || method=="execution.cancel" || method=="script.pending" || method=="script.read" || method=="script.ack" || method=="script.resolve");
-    if(host.demonstration.state=="armed"&&!demoScriptLifecycle&&method!="execution.release"&&method!="session.reset"&&!method.starts_with("n64.demo.")&&method!="session.status"&&method!="runtime.settings"&&!method.starts_with("n64.state.")&&!method.starts_with("memory.read"))return "demonstration_armed";
+    if(host.demonstration.state=="armed"&&!demoScriptLifecycle&&method!="execution.release"&&method!="session.reset"&&!method.starts_with("n64.demo.")&&method!="session.status"&&method!="runtime.settings"&&method!="video.record.status"&&!method.starts_with("n64.state.")&&!method.starts_with("memory.read"))return "demonstration_armed";
     if(host.demonstration.state=="replaying"&&method=="n64.input.set")return "busy";
     if(host.demonstration.state=="replaying"&&(owner=="ui"||owner==host.demonstration.owner)&&(method=="n64.input.release"||method=="session.pause"||method=="execution.cancel"))host.demonstration.finish("cancelled",execution.frame);
     if(host.demonstration.state=="recording"&&host.demonstration.source=="human"&&(method.starts_with("n64.input.")&&method!="n64.input.state"||method.starts_with("execution.run")||method=="execution.stepInstructions"||method.starts_with("script.start")))return "demonstration_human_only";
@@ -637,6 +650,7 @@ int main(int argc, char** argv) {
       if(!n64&&!synthetic)return ControlResult{"unavailable",{}};
       auto result=host.demonstration.execute(method,args,owner,host.service.epoch,execution.frame,host.contentHash.data(),host.service.session);
       if(result.error.empty()&&method=="n64.demo.request"){std::lock_guard lock(runtime.inputMutex);host.armedInputJob=host.demonstration.id;host.inputStart.arm(host.demonstration.port==1);host.demonstration.inputStartReady=host.inputStart.neutral;}
+      if(result.error.empty()&&method=="n64.demo.request")host.showPausedFramebuffer();
       if(result.error.empty()&&method=="n64.demo.handoff"){std::lock_guard lock(host.recording.mutex);if(host.recording.owner==owner)host.recording.owner=host.demonstration.owner;}
       return result;
     }
@@ -695,6 +709,7 @@ int main(int argc, char** argv) {
             + ",\"stopped\":" + (host.service.paused ? "true" : "false") + ",\"paused\":" + (host.service.paused ? "true" : "false") + ",\"running\":" + (host.service.paused ? "false" : "true") + ",\"input\":" + host.injectedInput.state() + "}";
         }
       }
+      if(result.error.empty()&&method=="n64.state.loadCommit")host.showPausedFramebuffer();
       return result;
     }
     if(method == "n64.state.begin" || method == "n64.state.read" || method == "n64.state.release") return host.stateSnapshot.execute(method, args, owner, host.service.epoch, execution.frame, n64, bool(execution.active) && !(scriptService.running && scriptService.hostWaiting && (scriptService.hostKind=="state_save"||scriptService.hostKind=="input_prepare") && scriptService.owner==owner), host.service.paused);
@@ -781,6 +796,7 @@ int main(int argc, char** argv) {
   scriptService.demonstration=[&](const std::string& method,const std::vector<std::string>& args){
     auto result=host.demonstration.execute(method,args,scriptService.owner,host.service.epoch,execution.frame,host.contentHash.data(),host.service.session);
     if(result.error.empty()&&method=="n64.demo.request"){std::lock_guard lock(runtime.inputMutex);host.armedInputJob=host.demonstration.id;host.inputStart.arm(host.demonstration.port==1);host.demonstration.inputStartReady=host.inputStart.neutral;}
+    if(result.error.empty()&&method=="n64.demo.request")host.showPausedFramebuffer();
     return result;
   };
   scriptService.regionRead=[&](const std::string& name,uint32_t offset,uint32_t length,std::vector<uint8_t>& bytes)->ControlResult {

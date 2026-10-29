@@ -23,6 +23,15 @@
         </button>
         <button id="video-fast-forward" aria-label="Hold to fast-forward" title="Hold to fast-forward" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="m5 5 9 7-9 7V5Zm9 0 9 7-9 7V5Z"/></svg></button>
         <button id="video-reset" aria-label="Reset game" title="Reset game"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10a6.5 6.5 0 1 0 .5 5M18 5v5h-5"/></svg></button>
+        <span id="recording-controls" role="group" aria-label="Recording controls" hidden>
+          <button id="video-record" aria-label="Start recording" title="Start recording" aria-describedby="recording-description" aria-pressed="false">
+            <svg class="record-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>
+            <svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><rect x="5" y="5" width="14" height="14" rx="3"/></svg>
+            <svg class="retry-icon" viewBox="0 0 24 24" aria-hidden="true" hidden fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9a7 7 0 1 0 0 6M19 4v5h-5"/></svg>
+          </button>
+          <button id="video-record-cancel" aria-label="Cancel recording" title="Cancel recording"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
+          <span id="recording-description" class="recording-description" role="status" aria-live="polite"></span>
+        </span>
       </div>
     </section>
   </div>

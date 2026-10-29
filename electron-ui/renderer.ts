@@ -1,3 +1,4 @@
+import {installDemonstrationControls} from './ui/demonstration-controls.js';
 import {controlOwnsKey} from './ui/keyboard-target.js';
 import {updateWindowTitle} from './ui/window-title.js';
 import {installFastForward} from './ui/fast-forward.js';
@@ -51,6 +52,7 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+let demonstrationActive=false;
 let system = 'Synthetic', aspect = 4 / 3;
 configureOverlays($('viewport'),canvas);
 let width = 0, height = 0, pending: FramePacket | null = null, port: MessagePort | undefined, paused = false;
@@ -205,7 +207,7 @@ function acceptSessionState(reply: SessionReply) {
   pauseButton.querySelector<SVGElement>('.pause-icon')!.toggleAttribute('hidden', paused);
   pauseButton.querySelector<SVGElement>('.play-icon')!.toggleAttribute('hidden', !paused);
   const loaded = !reply.result.synthetic;
-  $('video-controls').hidden = !loaded;
+  $('video-controls').hidden = !loaded&&!demonstrationActive;
   $('paused-indicator').hidden = !loaded || !(paused || reply.result.focus_paused);
   $('paused-indicator').textContent = reply.result.focus_paused ? 'Ⅱ Paused while unfocused' : 'Ⅱ Paused';
   if (previous && (previous.session !== reply.session || previous.epoch !== reply.epoch)) window.dispatchEvent(new Event('ares-session-reset'));
@@ -310,21 +312,9 @@ if (params.get('autotest') === '1') {
   }, Math.max(5, Math.min(3600, Number(params.get('duration')) || 12)) * 1000);
 }
 
-// A nonmodal prompt keeps the viewport and real keyboard/gamepad input available.
-const demonstrationBanner=document.createElement('aside');
-demonstrationBanner.id='demonstration-banner';demonstrationBanner.setAttribute('aria-live','polite');demonstrationBanner.hidden=true;
-const demonstrationText=document.createElement('span');demonstrationBanner.append(demonstrationText);
-for(const [label,method]of [['Start recording','n64.demo.start'],['Stop recording','n64.demo.stop'],['Cancel','n64.demo.cancel'],['Retry saving','artifact.inputRetry']] as const){
- const button=document.createElement('button');button.textContent=label;button.dataset.method=method;
- button.onclick=async()=>{button.blur();try{const s=await window.ares.session('session.status');if(s.ok){const r=await window.ares.session(method,{session:s.session,epoch:s.epoch});if(!r.ok)notify(r.error??'Demonstration failed');}}catch(e){notify(String(e));}};demonstrationBanner.append(button);
-}
-document.body.append(demonstrationBanner);
-let demonstrationPolling=false;
-setInterval(async()=>{
- if(demonstrationPolling)return;demonstrationPolling=true;
- try{const s=await window.ares.session('session.status');if(!s.ok)return;const r=await window.ares.session('n64.demo.status',{session:s.session,epoch:s.epoch});const d=r.result;
-  demonstrationBanner.hidden=!r.ok||!d||!(['armed','recording','replaying'].includes(d.state)||['failed','finalizing'].includes(d.publication??''));
-  if(d){demonstrationText.textContent=`${d.publication==='failed'?'Saving failed. Recording retained; retry saving':d.publication==='finalizing'?'Saving recording':d.state==='armed'?(d.input_start_ready?'Press a controller button or move the stick to start':'Release controls to enable input start'):d.state==='recording'?'Recording controller input':'Replaying controller input'}: ${d.prompt} (${d.duration_frames} frames, ${d.events} latches)`;
-   for(const b of demonstrationBanner.querySelectorAll('button'))b.hidden=b.dataset.method==='artifact.inputRetry'?d.publication!=='failed':b.dataset.method==='n64.demo.start'?d.state!=='armed':b.dataset.method==='n64.demo.stop'?d.state!=='recording':!['armed','recording','replaying'].includes(d.state);}
- }catch{demonstrationBanner.hidden=true;}finally{demonstrationPolling=false;}
-},250);
+const recordingControls=document.getElementById('recording-controls')!;
+window.addEventListener('pagehide',installDemonstrationControls(window.ares,recordingControls,visible=>{
+  demonstrationActive=visible;
+  $('viewport').toggleAttribute('data-recording-controls',visible);
+  $('video-controls').hidden=system==='Synthetic'&&!visible;
+},notify),{once:true});
