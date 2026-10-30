@@ -42,7 +42,8 @@ an emulated system or its renderer.
 
 Upstream PlayStation menu code mixes device operations, dialogs and GUI timers.
 The runtime expansion feature is retained, but disc-change and cartridge-switch
-menu actions still need an Electron-to-native action bridge. This merge does not
+menu actions still need an Electron-to-native action bridge, tracked in
+[issue #34](https://github.com/bschlenk/ares/issues/34). This merge does not
 claim that existing deferred desktop-menu behavior is now implemented. A future
 bridge should invoke runtime operations on the emulation thread, preserve the
 tray-open interval, and update mounted-media/checkpoint identities on disc
