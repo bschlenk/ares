@@ -84,3 +84,28 @@ test('N64 alternate byte order shares identity and managed states round-trip a f
   assert.equal(BigInt(unwrap(await little.client.request('n64.debug.registers')).gpr[8]),0x1122aabbn,'managed restore applies captured CPU registers in a fresh host');
   assert.ok(before.pc);assert.equal(little.client.identity.epoch,2);
 });
+for(const system of ['Game Boy','Game Boy Color','Nintendo 64'])test(`${system} checkpoints preserve live read-only observers and expose capture work time`,{timeout:15000},async t=>{
+  const {startScript}=await import('../dist/services/scripts.js');
+  let rom=makeFixture();const options={system};
+  if(system==='Nintendo 64'){
+    rom=Buffer.alloc(0x1000);rom.writeUInt32BE(0x80371240);rom.write('CAPTURE OBSERVER',0x20);rom[0x3e]=0x45;options.extension='z64';
+    const code=[0x3c08a440];
+    for(const [offset,value] of [[4,0x2000],[8,4],[24,525],[28,3093],[32,(3093<<16)|3093],[36,(108<<16)|116],[40,(34<<16)|38],[48,1024],[52,1024],[0,0x302]])code.push((0x3c090000|value>>>16)>>>0,(0x35290000|value&0xffff)>>>0,(0xad090000|offset)>>>0);
+    code.push(0x1000ffff,0);code.forEach((word,i)=>rom.writeUInt32BE(word,0x40+i*4));
+  }
+  const {client}=await native(t,rom,options);const identity={...client.identity};
+  const observer=await startScript(client,identity,{source:'export default({emu})=>({frame:emu.info().frame})',args:{},timeoutMs:10000,maxFrames:0,every:1},'observer-owner',()=>true,true);
+  const read=async()=>unwrap(await client.request('script.observerRead',identity,{observerId:observer.observer_id,offset:0,length:16384},'observer-owner'));
+  let before;for(let i=0;i<100;i++){before=await read();if(before.bytes)break;await sleep(10);}assert(before.bytes);
+  const begun=performance.now(),capture=unwrap(await client.request('checkpoint.capture',identity,undefined,'checkpoint-owner'));
+  assert(Number.isFinite(capture.capture_ms)&&capture.capture_ms>=0);assert(capture.capture_ms<=performance.now()-begun+1);
+  assert.equal(unwrap(await client.request('session.status')).paused,false);assert.equal(client.identity.epoch,identity.epoch);
+  // Restore/upload remains exclusive; read-only observers do not lose their jobs.
+  assert.equal((await client.request('checkpoint.upload',identity,{bytes:capture.stateBytes},'foreign')).error,'busy');
+  const bytes=unwrap(await client.request('checkpoint.read',identity,{id:capture.id,offset:0,length:32},'checkpoint-owner'));assert.equal(Buffer.from(bytes.hex,'hex')[4],1);
+  unwrap(await client.request('checkpoint.release',identity,{id:capture.id},'checkpoint-owner'));
+  assert.equal((await client.request('checkpoint.upload',identity,{bytes:capture.stateBytes},'foreign')).error,'busy');
+  let after;for(let i=0;i<100;i++){after=await read();if(after.frame>before.frame)break;await sleep(10);}assert.equal(after.error,'');assert.equal(after.active,true);assert(after.frame>before.frame);
+  unwrap(await client.request('script.observerStop',identity,{observerId:observer.observer_id},'observer-owner'));
+  console.log('CHECKPOINT_CAPTURE_WORK',system,JSON.stringify({capture_ms:capture.capture_ms,stateBytes:capture.stateBytes}));
+});

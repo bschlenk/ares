@@ -1,7 +1,7 @@
 export const CHECKPOINT_NATIVE_METHODS = ['checkpoint.info','checkpoint.capture','checkpoint.read','checkpoint.release','checkpoint.upload','checkpoint.write','checkpoint.commit','checkpoint.abort'] as const;
 export interface CheckpointNativeMap {
   'checkpoint.info': {params: undefined; result: {available: boolean; reason: string; hash: string; configuration: string}};
-  'checkpoint.capture': {params: undefined; result: {id: number; bytes: number; stateBytes: number; width: number; height: number; aspect?: number; capturedAt: number}};
+  'checkpoint.capture': {params: undefined; result: {id: number; bytes: number; stateBytes: number; width: number; height: number; aspect?: number; capture_ms?:number; capturedAt: number}};
   'checkpoint.read': {params: {id: number; offset: number; length: number}; result: {hex: string}};
   'checkpoint.release': {params: {id: number}; result: {released: true}};
   'checkpoint.upload': {params: {bytes: number}; result: {id: number}};
@@ -23,7 +23,7 @@ export function encodeCheckpoint(method: string, p: any): string | undefined {
 export function validCheckpointResult(method: string, p: any): boolean {
   if (!p) return false;
   if (method === 'checkpoint.info') return typeof p.available === 'boolean' && typeof p.reason === 'string' && typeof p.hash === 'string' && (p.hash === '' || /^[a-f0-9]{64}$/.test(p.hash)) && typeof p.configuration==='string' && (p.configuration===''||/^[a-f0-9]{64}$/.test(p.configuration));
-  if (method === 'checkpoint.capture') return int(p.id) && p.id > 0 && int(p.bytes) && int(p.stateBytes,64*1024*1024) && p.stateBytes > 533 && int(p.width,4096) && int(p.height,4096) && p.width > 0 && p.height > 0 && p.bytes === p.stateBytes+p.width*p.height*4 && (p.aspect===undefined||Number.isFinite(p.aspect)&&p.aspect>0&&p.aspect<=32) && Number.isFinite(p.capturedAt) && p.capturedAt > 0;
+  if (method === 'checkpoint.capture') return int(p.id) && p.id > 0 && int(p.bytes) && int(p.stateBytes,64*1024*1024) && p.stateBytes > 533 && int(p.width,4096) && int(p.height,4096) && p.width > 0 && p.height > 0 && p.bytes === p.stateBytes+p.width*p.height*4 && (p.aspect===undefined||Number.isFinite(p.aspect)&&p.aspect>0&&p.aspect<=32) && (p.capture_ms===undefined||Number.isFinite(p.capture_ms)&&p.capture_ms>=0) && Number.isFinite(p.capturedAt) && p.capturedAt > 0;
   if (method === 'checkpoint.upload') return int(p.id) && p.id > 0;
   if (method === 'checkpoint.read') return typeof p.hex === 'string' && /^(?:[a-f0-9]{2}){1,16384}$/.test(p.hex);
   if (method === 'checkpoint.write') return int(p.written,1800) && p.written > 0;

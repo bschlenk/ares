@@ -22,6 +22,7 @@ struct CheckpointService {
         return {{},"{\"id\":"+std::to_string(transfer->id)+"}"};
       }
       if(!args.empty()) return {"invalid_request",{}};
+      const auto started=Clock::now();
       auto instant=std::chrono::duration<double,std::milli>(std::chrono::system_clock::now().time_since_epoch()).count();
       // Portable saves must synchronize coroutine cores: unsynchronized bytes
       // contain process-local stacks and cannot be reopened in another host.
@@ -44,7 +45,7 @@ struct CheckpointService {
       }
       Transfer t{nextId++,owner,{state.data(),state.data()+state.size()},0,Clock::now()+std::chrono::seconds(30),false};
       t.bytes.insert(t.bytes.end(),image->data(),image->data()+image->size()); transfer=std::move(t);
-      return {{},"{\"id\":"+std::to_string(transfer->id)+",\"bytes\":"+std::to_string(transfer->bytes.size())+",\"stateBytes\":"+std::to_string(state.size())+",\"width\":"+std::to_string(image->width)+",\"height\":"+std::to_string(image->height)+",\"aspect\":"+std::to_string(aspect)+",\"capturedAt\":"+std::to_string(instant)+"}"};
+      return {{},"{\"id\":"+std::to_string(transfer->id)+",\"bytes\":"+std::to_string(transfer->bytes.size())+",\"stateBytes\":"+std::to_string(state.size())+",\"width\":"+std::to_string(image->width)+",\"height\":"+std::to_string(image->height)+",\"aspect\":"+std::to_string(aspect)+",\"capture_ms\":"+std::to_string(std::chrono::duration<double,std::milli>(Clock::now()-started).count())+",\"capturedAt\":"+std::to_string(instant)+"}"};
     }
     uint64_t id;
     if(args.empty() || !ExecutionService::number(args[0],id)) return {"invalid_request",{}};
