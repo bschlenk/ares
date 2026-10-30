@@ -16,6 +16,7 @@ struct PPU : Thread {
     auto load(Node::Object) -> void;
 
     struct Memory {
+      Node::Debugger::Memory displayState;
       Node::Debugger::Memory vram;
       Node::Debugger::Memory oam;
       Node::Debugger::Memory bgp;

@@ -97,9 +97,10 @@ API against actual controller reads. This is not an acceptance claim for every
 core/peripheral. Controller hot-plug topology changes require rediscovery in a
 new session; analog/peripheral injection needs a future shared contract.
 
-This slice does not add atomic PPU register snapshots, upgrade Electron, install
-Nano/a model backend, enlarge plugin durable storage or add journal/checkpoint
-transactions. Existing generic checkpoints and cartridge saves are unchanged.
+The follow-up [GB display-state format](GB-DISPLAY-STATE.md) adds atomic PPU
+observations through the same generic memory capture contract. This work does
+not upgrade Electron, install Nano/a model backend, enlarge plugin durable storage
+or add journal/checkpoint transactions. Existing generic checkpoints and cartridge saves are unchanged.
 A model's `availability()` result is not proof of a working inference backend.
 
 ## Validation (2026-10-29)
