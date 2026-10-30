@@ -15,9 +15,11 @@ The trusted MCP/CLI `build_info --app true` report distinguishes:
 These fields do not grant model or emulator permissions to a player script. A
 future Chrome bridge must implement real create/prompt/stream/abort/destroy,
 validate its backend with inference, and manage readiness, cancellation and
-reconnection. Provider registration is a trusted host concern. Downloaded Chrome
-models stay managed by Chrome. Durable plugin journaling and checkpoint metadata
-coordination remain separate work.
+reconnection. Electron handler registration requires trusted host code. Downloaded Chrome
+models stay managed by Chrome. The recommended ownership split is an optional
+external provider, generic permissioned Ares networking and plugin-owned model/game
+policy; see [the Nano feasibility assessment](NANO-FEASIBILITY.md). Paired recovery
+is documented separately in [RECOVERY.md](RECOVERY.md).
 
 The isolated `npm run test:local-ai` checks Electron's real renderer/utility
 process connection using a test-only provider that reports `unavailable` and
