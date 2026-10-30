@@ -1,3 +1,4 @@
+import {PluginNetwork} from './network.js'
 import {PairedRecovery,type RecoveryAccess} from '../services/paired-recovery.js'
 import {PluginJournals} from './journal.js'
 import { PLUGIN_REQUEST_LIMIT, PluginAdmissionError } from './admission.js'
@@ -36,6 +37,13 @@ interface Record extends PluginInfo {
   storageQueue: Promise<unknown>
 }
 export class PluginRegistry {
+  private networking=new PluginNetwork()
+  async network(token:string,request:import('./network-contracts.js').NetworkCall){
+    const info=this.authorize(token),manifest=info.manifest!
+    const websocket=typeof request?.operation==='string'&&request.operation.startsWith('socket')
+    if(!manifest.capabilities.includes(websocket?'network.websocket':'network.request') || !manifest.network)throw new ServiceError('plugin_capability_denied')
+    return this.networking.call('plugin-'+token,manifest.network.origins,request,()=>{this.authorize(token)})
+  }
   private journals=new PluginJournals()
   private paired?:PairedRecovery
   private recoveryContext?:()=>{client:SessionClient;identity:SessionIdentity;guard:()=>void}
@@ -689,6 +697,7 @@ export class PluginRegistry {
   }
   private revoke(r: Record, strict = false) {
     const owner = r.owner
+    if(owner)this.networking.releaseOwner(owner)
     if(owner)this.paired?.stop(owner)
     if (r.lease) this.settingsHost?.revoke(r.lease.token)
     r.lease = undefined

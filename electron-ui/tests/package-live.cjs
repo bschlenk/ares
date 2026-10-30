@@ -4,6 +4,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { spawn, execFileSync } = require('node:child_process')
 const { once } = require('node:events')
+const http = require('node:http')
+const {WebSocketServer} = require('ws')
 const { StdioPeer } = require('./stdio-peer.cjs')
 const { writeStateFixture } = require('./state-file-fixture.cjs')
 const { makeFixture } = require('../fixture.cjs')
@@ -13,6 +15,11 @@ async function run() {
       path.join(__dirname, '../artifacts/distribution/Ares.app'),
   )
   const temporary = fs.mkdtempSync('/tmp/ares-package-')
+  const backend=http.createServer((req,res)=>{res.setHeader('content-type','application/json');res.end('{"summary":"local backend summary"}')})
+  await new Promise(resolve=>backend.listen(0,'127.0.0.1',resolve));backend.unref()
+  const backendOrigin=`http://127.0.0.1:${backend.address().port}`,socketOrigin=backendOrigin.replace('http','ws')
+  const backendSockets=new WebSocketServer({server:backend})
+  backendSockets.on('connection',socket=>socket.on('message',(data,binary)=>socket.send(data,{binary})))
   const bundle = path.join(temporary, 'Ares.app')
   fs.cpSync(source, bundle, {
     recursive: true,
@@ -37,12 +44,13 @@ async function run() {
       apiVersion: 1,
       entry: 'dist/plugin.js',
       build: { entry: 'src/plugin.tsx', jsxFactory: 'h' },
-      capabilities: ['storage.journal','recovery.manage'],
+      capabilities: ['storage.journal','recovery.manage','network.request','network.websocket'],
+      network:{origins:[backendOrigin,socketOrigin]},
       contributes: { panels: [{ id: 'panel', title: 'Packaged plugin' }] },
     }),
   )
   const pluginSource = (version) =>
-    `function h(tag,props,...children){const element=document.createElement(tag);element.append(...children);return element}export function activate(ctx){ctx.ui.registerPanel('panel',({element})=>element.append(<p>Packaged version ${version}</p>));ctx.ui.openPanel('panel');let stop=ctx.scope.interval(async()=>{stop();await ctx.journal.append('events',{id:'version-${version}',schemaVersion:1,value:{version:${version}}});const recovery=await ctx.recovery.capture();await ctx.storage.set('stamp',{version:${version},session:ctx.session,recovery:recovery.point})},50)}`
+    `function h(tag,props,...children){const element=document.createElement(tag);element.append(...children);return element}export function activate(ctx){ctx.ui.registerPanel('panel',({element})=>element.append(<p>Packaged version ${version}</p>));ctx.ui.openPanel('panel');let stop=ctx.scope.interval(async()=>{stop();const summary=await (await ctx.network.fetch('${backendOrigin}/summary')).json();const socket=await ctx.network.connect('${socketOrigin}/events');await socket.send('version-${version}');const echo=(await socket.messages.getReader().read()).value;await socket.close();await ctx.journal.append('events',{id:'version-${version}',schemaVersion:1,value:{version:${version}}});const recovery=await ctx.recovery.capture();await ctx.storage.set('stamp',{version:${version},session:ctx.session,recovery:recovery.point,network:{summary:summary.summary,echo}})},50)}`
   fs.writeFileSync(path.join(plugin, 'src/plugin.tsx'), pluginSource(1))
   const env = {
     ...process.env,
@@ -247,6 +255,8 @@ async function run() {
     const firstStamp = await waitStamp(1)
     fs.writeFileSync(path.join(plugin, 'src/plugin.tsx'), pluginSource(2))
     const nextStamp = await waitStamp(2)
+    assert.deepEqual(firstStamp.network,{summary:'local backend summary',echo:'version-1'})
+    assert.deepEqual(nextStamp.network,{summary:'local backend summary',echo:'version-2'})
     assert.equal(firstStamp.recovery.journalSequence,1)
     assert.equal(nextStamp.recovery.journalSequence,2)
     assert.notEqual(firstStamp.recovery.id,nextStamp.recovery.id)
@@ -503,6 +513,7 @@ async function run() {
       protocol: 'real MCP stdio',
       pluginReload: 'packaged TSX 1→2, same session/epoch',
       pluginCLI: 'scaffold/build/list/add/enable/open/reload/command',
+      pluginNetwork: 'HTTP local summary + WebSocket echo, before and after hot reload',
       checkoutReadDeniedFor: ['native loader', 'MCP adapter', 'plugin CLI'],
     }
     fs.writeFileSync(path.resolve(__dirname, '../artifacts/copied-package-stderr.log'), diagnostics)
@@ -518,6 +529,8 @@ async function run() {
       child.kill('SIGKILL')
       await closed
     }
+    for(const socket of backendSockets.clients)socket.terminate()
+    backendSockets.close();backend.closeAllConnections();backend.close()
     fs.rmSync(temporary, { recursive: true, force: true })
   }
 }

@@ -70,6 +70,8 @@ function render() {
     }
     const detail = document.createElement('pre')
     detail.textContent = [
+      ...(p.manifest?.network ? ['Network access: '+p.manifest.network.origins.join(', ')] : []),
+      ...(p.candidate?.manifest.network ? ['Pending network access: '+p.candidate.manifest.network.origins.join(', ')] : []),
       p.error || errors.get(p.manifest?.id ?? '') || '',
       ...p.logs.slice(-8).map((log) => `${log.level}: ${log.message}`),
     ]

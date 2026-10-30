@@ -959,6 +959,7 @@ app
       'request',
       'storage',
       'settings',
+      'network',
       'log',
       'fail',
       'reload',
@@ -992,6 +993,8 @@ app
             return plugins.refresh()
           case 'request':
             return pluginBridgeResult(async() => {const result=await plugins.request(args[0],args[1],args[2]);if(args[1]==='script.observerStop'&&args[2]?.observerId)observerDeliveries.stop('plugin-'+args[0],args[2].observerId);return result;})
+          case 'network':
+            return pluginBridgeResult(() => plugins.network(args[0], args[1]))
           case 'settings':
             return pluginBridgeResult(() => plugins.settings(args[0], args[1]))
           case 'storage':

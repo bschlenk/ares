@@ -10,6 +10,8 @@ import type {
 } from '../services/contracts.js'
 export const PLUGIN_API_VERSION = 1
 export const CAPABILITIES = [
+  'network.request',
+  'network.websocket',
   'recovery.manage',
   'storage.journal',
   'session.read',
@@ -40,6 +42,7 @@ export interface PluginManifest {
     systems?: string[]
     games?: { profile: string; sha256: string; revision?: string }[]
   }
+  network?: { origins: string[] }
   capabilities: Capability[]
   contributes: {
     settings?: { id: string; title: string }[]
@@ -94,6 +97,7 @@ export interface PluginAction {
   name: string
 }
 export interface PluginBridge {
+  network(token:string,request:import('./network-contracts.js').NetworkCall):Promise<import('./network-contracts.js').NetworkReply | PluginBridgeFailure>;
   library(token: string, request: import('../library/contracts.js').LibraryRequest): Promise<unknown | PluginBridgeFailure>;
   clipboard(token:string,text:string):Promise<{copied:true;bytes:number}|PluginBridgeFailure>;
   demonstration(token:string,params:DemonstrationOptions):Promise<import('../services/demonstration-contracts.js').DemonstrationStatus|PluginBridgeFailure>;

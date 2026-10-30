@@ -623,3 +623,14 @@ plugin activation after an unclean session end. Normal close disarms it; there
 is no plugin restore/rewind method. See [recovery contract](../services/RECOVERY.md)
 for scheduling, failure behavior, quotas and actual progress-loss diagnostics.
 Keep this API out of model/player bindings.
+
+
+## Networking and local backends
+
+Declare `network.request` for HTTP(S) and `network.websocket` for WS(S), with exact
+permitted origins in `network.origins`. Use `ctx.network.fetch()` for ordinary or
+streamed responses and `ctx.network.connect()` for WebSocket messages. A plugin
+can fetch summaries or subscribe to updates from its own local backend; Ares
+supplies generic transport and scope cleanup. See [the networking contract](NETWORK.md)
+for manifest examples, limits, authentication and hot-reload behavior. Direct
+renderer networking remains disabled. These grants do not become model bindings.

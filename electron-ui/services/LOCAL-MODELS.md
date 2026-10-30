@@ -18,7 +18,9 @@ validate its backend with inference, and manage readiness, cancellation and
 reconnection. Electron handler registration requires trusted host code. Downloaded Chrome
 models stay managed by Chrome. The recommended ownership split is an optional
 external provider, generic permissioned Ares networking and plugin-owned model/game
-policy; see [the Nano feasibility assessment](NANO-FEASIBILITY.md). Paired recovery
+policy. [Plugin networking](../plugins/NETWORK.md) now supplies HTTP streaming and
+WebSockets for adapters to independent backends; it does not install or launch a
+model provider. See [the Nano feasibility assessment](NANO-FEASIBILITY.md). Paired recovery
 is documented separately in [RECOVERY.md](RECOVERY.md).
 
 The isolated `npm run test:local-ai` checks Electron's real renderer/utility

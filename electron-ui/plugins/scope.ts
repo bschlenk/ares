@@ -1,3 +1,4 @@
+import {createPluginNetworking} from './network-client.js'
 import { registerOverlay } from './overlays.js'
 import { PLUGIN_REQUEST_LIMIT, PluginAdmissionError, unwrapPluginBridge } from './admission.js'
 import { mountSettingsForm } from '../settings/form.js'
@@ -125,6 +126,7 @@ export class PluginScope {
       game: lease.game,
       profile: lease.profile,
       signal: this.abort.signal,
+      network:createPluginNetworking(p=>window.ares.plugins.network(this.token,p),this.abort.signal,add,writable),
       settings: {
         catalog: () => settingsRequest({ operation: 'catalog' }),
         set: (id, value) => settingsRequest({ operation: 'set', id, value }),

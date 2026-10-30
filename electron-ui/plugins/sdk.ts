@@ -51,6 +51,11 @@ export interface PluginContext {
     /** Native exclusive job; requires session.control, memory.read, memory.write and debug.read. */
     run(params: Omit<import('../services/script-contracts.js').ScriptRunParams, 'statePaths' | 'outputPaths' | 'outputPath' | 'projectRoot'>): Promise<SessionReply<import('../services/contracts.js').ExecutionOperation>>
   }
+  /** Host-brokered HTTP(S)/WS(S), restricted to manifest network.origins. Active scopes only. */
+  network: {
+    fetch(url:string,options?:import('./network-contracts.js').PluginFetchOptions):Promise<Response>
+    connect(url:string,options?:{protocols?:string[];signal?:AbortSignal}):Promise<import('./network-contracts.js').PluginSocket>
+  }
   services: {
     /** input.describe/state: session.read; input.set/release: session.control.
      * clock.waitStart/Read/Cancel: session.read, passive native elapsed frames.

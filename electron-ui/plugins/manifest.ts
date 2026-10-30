@@ -1,3 +1,4 @@
+import {networkOrigin, NETWORK_LIMITS} from './network-contracts.js'
 import {
   CAPABILITIES,
   type PluginManifest,
@@ -42,6 +43,7 @@ export function validateManifest(value: unknown): PluginManifest {
       'storageVersion',
       'activation',
       'capabilities',
+      'network',
       'contributes',
     ])
   )
@@ -94,6 +96,19 @@ export function validateManifest(value: unknown): PluginManifest {
     m.capabilities.some((v: any) => !CAPABILITIES.includes(v))
   )
     fail('capabilities')
+  let normalizedOrigins:string[]|undefined
+  const networking = m.capabilities.some((c:string)=>c==='network.request'||c==='network.websocket')
+  if(networking || m.network!==undefined){
+    if(!networking || !object(m.network,['origins']) || !Array.isArray(m.network.origins) || !m.network.origins.length || m.network.origins.length>NETWORK_LIMITS.origins)fail('network requires a networking capability and 1–32 exact origins')
+    let origins:string[]
+    try{origins=m.network.origins.map(networkOrigin)}catch{fail('network origins must be HTTP(S)/WS(S) origins without paths, credentials or wildcards')}
+    if(new Set(origins!).size!==origins!.length)fail('duplicate network origin')
+    for(const origin of origins!){
+      const capability=origin.startsWith('ws')?'network.websocket':'network.request'
+      if(!m.capabilities.includes(capability))fail('network origin requires '+capability)
+    }
+    normalizedOrigins=origins!
+  }
   if (!object(m.contributes, ['panels', 'commands', 'settings'])) fail('contributes')
   for (const [kind, max] of [
     ['panels', 8],
@@ -144,7 +159,7 @@ export function validateManifest(value: unknown): PluginManifest {
       )
         fail('game profile requires verified SHA-256')
   }
-  return JSON.parse(JSON.stringify(m))
+  return JSON.parse(JSON.stringify({...m,...(normalizedOrigins?{network:{origins:normalizedOrigins}}:{})}))
 }
 export function activation(
   manifest: PluginManifest,
