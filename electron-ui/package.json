@@ -50,16 +50,19 @@
     "test:save-states": "node scripts/build.js && node --test tests/checkpoint-library.test.js tests/checkpoint-native.test.js && electron tests/electron-checkpoints.js",
     "test:save-states-private": "node scripts/build.js && node tests/checkpoint-private.js",
     "test:save-states-cross-core": "node scripts/build.js && node tests/checkpoint-cross-core.js",
-    "test:paired-recovery": "node scripts/build.js && node --test --test-concurrency=1 tests/paired-recovery.test.js tests/paired-recovery-native.test.js tests/paired-recovery-electron.test.js"
+    "test:paired-recovery": "node scripts/build.js && node --test --test-concurrency=1 tests/paired-recovery.test.js tests/paired-recovery-native.test.js tests/paired-recovery-electron.test.js",
+    "test:network": "node scripts/build.js && node --test --test-concurrency=1 tests/plugin-network.test.js tests/plugin-network-electron.test.js"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
+    "@types/ws": "8.18.2",
     "electron": "45.1.0",
     "typescript": "^7.0.2"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.3.1",
     "esbuild": "0.28.2",
+    "ws": "8.22.0",
     "zod": "^4.6.7"
   },
   "type": "module",

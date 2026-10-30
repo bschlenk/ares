@@ -4,6 +4,10 @@ Assessment date: 2026-10-30. This is an architecture/source review, not a claim
 that real Nano inference has been demonstrated in Ares. No Chrome profile,
 installation, model download or running emulator was changed for this review.
 
+Follow-up: generic HTTP streaming and WebSockets are now implemented through
+[manifest-declared plugin networking](../plugins/NETWORK.md). This assessment
+remains a source review; no Nano bridge or real inference is supplied by Ares.
+
 ## Decision
 
 Pursue an optional, separately usable Chrome provider bridge. Keep model choice,
@@ -72,8 +76,9 @@ user's specific guides have not been supplied or individually evaluated.
 
 This split is a recommendation, not an implemented SDK contract. Ordinary Ares
 plugins currently have Node integration disabled and share an app page whose
-CSP has `connect-src 'none'`. There is no general socket/process-launch SDK. A
-plugin cannot simply fetch a local Nano wrapper or start Chrome by itself.
+CSP has `connect-src 'none'`. There is no arbitrary native-socket/process-launch SDK. A
+plugin must use the new brokered networking API to fetch a local Nano wrapper;
+it still cannot start Chrome by itself.
 Enabling unrestricted renderer networking or Node is unnecessary for this feature.
 
 For an initial spike, a dedicated Chrome page/profile and a local relay are
@@ -116,10 +121,11 @@ This review does not install or endorse a third-party wrapper as production code
 ## Network capability direction
 
 All Ares plugins already have a strict `manifest.json` with declared capabilities.
-There is currently no network capability or origin declaration. A reasonable
-extension is a generic `network.request` grant and a manifest list of permitted
-origins (scheme, host and port), with a host-brokered request/stream API. Those
-names and fields are proposals, not existing APIs. Show requested access in the
+The follow-up implementation adds `network.request` and `network.websocket`,
+with a manifest list of permitted origins (scheme, host and port) and host-brokered
+requests, streams and sockets. The exact API is documented in
+[NETWORK.md](../plugins/NETWORK.md), including the separate `network.websocket`
+grant. Show requested access in the
 plugin manager and make permission expansion visible on updates.
 
 The host should check the destination and redirects, avoid inheriting browser
