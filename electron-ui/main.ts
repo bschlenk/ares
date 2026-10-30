@@ -105,6 +105,8 @@ interface NativeSession {
   checkpoints?: Checkpoints
   checkpointReason?: string
   checkpointLoadedAt?: number
+  recoveryFailure?: string
+  checkpointHash?: string
   failure?: string
   lastPresentation?:import('./services/frame-contracts.js').FrameReference
   lastFrame?: NativeFrame
@@ -121,8 +123,10 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ])
+let recoveryStarting=false,recoveryTransition=false
 export const sessions = new SessionRouter((reply) => {
-  plugins.observe(reply)
+  if(recoveryStarting)return
+  if(!active?.recoveryFailure)plugins.observe(reply)
   if (window && !window.isDestroyed() && !window.webContents.isDestroyed())
     window.webContents.send('session-state', reply)
 }, (source,error)=>appLogs.write(source,'error',error))
@@ -136,6 +140,11 @@ export const plugins = new PluginRegistry(
       window.webContents.send('plugin-catalog', catalog)
   },
 )
+export const pairedRecovery=plugins.connectRecovery(path.join(app.getPath('userData'),'paired-recovery'),()=>{
+  if(!active||active.recoveryFailure||!sessions.identity||recoveryTransition)throw new ServiceError('recovery_session_changed');
+  const current=active,identity={...sessions.identity};
+  return {client:sessions,identity,guard:()=>{if(active!==current||recoveryTransition||sessions.identity?.session!==identity.session||sessions.identity.epoch!==identity.epoch)throw new ServiceError('recovery_session_changed');}};
+})
 const observerDeliveries=new ObserverDeliveries(owner=>{
   if(!owner.startsWith('plugin-'))return false;
   try{plugins.authorize(owner.slice(7));return true;}catch{return false;}
@@ -409,7 +418,7 @@ export const preferences = new SettingsStore(
     ...(serviceLaunchOverride() === undefined ? {} : { 'agent.enabled': serviceLaunchOverride() }),
   },
 )
-function appHealth(){return { instance: appLogs.instance, observed_at: new Date().toISOString(), native: { generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
+function appHealth(){return { instance: appLogs.instance, observed_at: new Date().toISOString(), native: { pid: active?.child.pid, recovery_failure: active?.recoveryFailure, generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
 const mainWatchdog=new MainWatchdog(appHealth,error=>appLogs.write('watchdog','error',error));
 function serviceLaunchOverride(): boolean | undefined {
   const switches = process.argv.filter(arg => arg === '--services' || arg === '--no-services')
@@ -565,7 +574,8 @@ async function autosaveBeforeStop(old:NativeSession) {
 async function stop() {
   const old = active
   if (!old) return
-  await autosaveBeforeStop(old)
+  recoveryTransition=true
+  try{await pairedRecovery.idle();await autosaveBeforeStop(old);if(old.checkpointHash)await pairedRecovery.disarmGame(old.checkpointHash)}finally{recoveryTransition=false}
   active = null
   plugins.disconnect()
   sessions.detach()
@@ -621,7 +631,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   await stop()
   const args = options.rom ? ['--rom', options.rom] : ['--synthetic']
   if (options.rom) args.push('--system', system)
-  if (options.agent) args.push('--paused')
+  if (options.rom||options.agent) args.push('--paused')
   if (startupSettings.entries.find(entry => entry.descriptor.id === 'debug.provenance')!.value) args.push('--debug-provenance')
   for (const media of options.media || []) args.push('--media', media)
   if (settingsFile) args.push('--settings', settingsFile)
@@ -682,18 +692,33 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   )
 
   session.checkpointLoadedAt=Date.now()
-  sessions.attach(client, gameTitle)
-  void client.request('checkpoint.info').then(reply=>{
-    if(active!==session||!reply.ok||!reply.result)return
-    session.checkpointLoadedAt=Date.now()
-    session.checkpointReason=reply.result.reason||'Save states unavailable'
-    const configuration={configuration_sha256:reply.result.configuration}
-    if(reply.result.available)session.checkpoints=new Checkpoints(sessions,{hash:reply.result.hash,system,title:gameTitle||system},()=>sessions.identity,()=>active===session,()=>configuration)
-    window?.webContents.send('checkpoint-changed')
-  }).catch(error=>status(String(error)))
+  recoveryStarting=true
+  const startup=(async()=>{
+    let restored:{restored:boolean;paused?:boolean}={restored:false};let startupError:unknown;
+    try{
+      const reply=await client.request('checkpoint.info');
+      if(active!==session||!reply.ok||!reply.result)throw new Error(reply.error||'checkpoint_unavailable');
+      session.checkpointHash=reply.result.hash;session.checkpointReason=reply.result.reason||'Save states unavailable';
+      if(reply.result.available){
+        const namespaces=plugins.recoveryNamespaces();
+        if(namespaces.length)restored=await pairedRecovery.restoreStartup(namespaces,client,{...client.identity});
+        else await pairedRecovery.disarmGame(reply.result.hash);
+      }
+    }catch(error){startupError=error;session.recoveryFailure=String(error);appLogs.write('paired-recovery','error',error,session.generation);status(String(error));}
+    finally{recoveryStarting=false;}
+    if(active!==session)return;
+    sessions.attach(client,gameTitle);
+    const reply=await client.request('checkpoint.info');
+    if(reply.ok&&reply.result?.available){const info=reply.result;session.checkpoints=new Checkpoints(sessions,{hash:info.hash,system,title:gameTitle||system},()=>sessions.identity,()=>active===session,()=>({configuration_sha256:info.configuration}));}
+    window?.webContents.send('checkpoint-changed');
+    if(!startupError&&!options.agent&&(!restored.restored||!restored.paused))await sessions.request('session.resume',client.identity);
+    void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss')===true,window?.isFocused()??false).catch(error=>appLogs.write('focus-pause','error',error));
+    await sessions.request('session.status');
+    if(startupError)throw startupError;
+  })();
   if (window && !window.isDestroyed()) window.setTitle(gameTitle ? `${gameTitle} — ares` : 'ares')
   void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window?.isFocused() ?? false).catch(error => appLogs.write('focus-pause', 'error', error))
-  void client.request('session.status').then(reply => {
+  void startup.then(()=>client.request('session.status')).then(reply => {
     removeConfiguration()
     if (reply.ok && active === session) {
       if (process.env.ARES_DEV_RELOAD === '1' && process.send) process.send({type:'ares-dev-session', options:{rom:options.rom, system:options.rom ? system : undefined, media:options.media, hd:options.hd, silent:options.silent}})
@@ -736,6 +761,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   })
   port?.postMessage({ reset: true, system })
   command('ack')
+  await startup
   if (options.agent) {
     const reply = await sessions.request('session.pause', client.identity, undefined, 'agent-launch');
     if (!reply.ok) throw new Error(reply.error)

@@ -10,6 +10,7 @@ import type {
 } from '../services/contracts.js'
 export const PLUGIN_API_VERSION = 1
 export const CAPABILITIES = [
+  'recovery.manage',
   'storage.journal',
   'session.read',
   'debug.read',
@@ -121,7 +122,7 @@ export interface PluginBridge {
   ): Promise<SessionReply<ServiceResult<M>> | PluginBridgeFailure>
   storage(
     token: string,
-    operation: 'get' | 'set' | 'delete' | 'journal.append' | 'journal.read',
+    operation: 'get' | 'set' | 'delete' | 'journal.append' | 'journal.read' | 'recovery.status' | 'recovery.capture' | 'recovery.start' | 'recovery.stop',
     key: string,
     value?: unknown,
   ): Promise<unknown>

@@ -67,6 +67,7 @@ struct Host : ares::Platform {
   std::vector<std::pair<std::string,std::shared_ptr<vfs::directory>>> mediaPaks;
   std::atomic<bool> takeoverRequested{false};
   DigitalInputService digitalInput;
+  uint64_t humanInputEvents=0;
   InputStartGate inputStart;
   uint64_t armedInputJob=0;
   ares::Node::System root;
@@ -80,6 +81,16 @@ struct Host : ares::Platform {
   std::shared_ptr<HID::Joypad> joypad;
   std::shared_ptr<HID::Keyboard> keyboard;
   std::shared_ptr<HID::Mouse> mouse;
+  bool humanInputActive() {
+    std::lock_guard lock(runtime.inputMutex);
+    if(keyboard)for(auto& button:keyboard->buttons())if(button.value())return true;
+    if(mouse)for(auto& button:mouse->buttons())if(button.value())return true;
+    if(joypad) {
+      for(auto& button:joypad->buttons())if(button.value())return true;
+      for(auto& axis:joypad->axes())if(std::abs(axis.value())>4096)return true;
+    }
+    return false;
+  }
   string systemName = "Game Boy";
   std::atomic<double> refreshRate{59.7275};
   ruby::Audio output;
@@ -725,6 +736,9 @@ int main(int argc, char** argv) {
   };
   host.service.n64Request = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
     if(method.starts_with("checkpoint.")) {
+      const bool pristine=host.service.paused&&execution.frame==0&&host.service.epoch==1&&!host.injectedInput.updates&&!host.digitalInput.updates&&!host.humanInputEvents&&!host.takeoverRequested.load();
+      if(method=="checkpoint.capture"&&args==std::vector<std::string>{"1"}&&(host.digitalInput.hasOverrides()||host.injectedInput.hasOverrides()||host.takeoverRequested.load()||host.humanInputActive()))return ControlResult{"input_active",{}};
+      if(method=="checkpoint.upload"&&args.size()==2&&!pristine)return ControlResult{"recovery_not_pristine",{}};
       const bool busy=bool(execution.active)||bool(execution.reservation)||host.stateLoader.upload.has_value()||scriptService.running||(!observers.empty()&&method!="checkpoint.capture");
       if(method!="checkpoint.commit") {
         // Serialization may run coroutine cores to a synchronization point.
@@ -741,6 +755,7 @@ int main(int argc, char** argv) {
       if(args.size()!=2 || !ExecutionService::number(args[0],id) || (args[1]!="0"&&args[1]!="1"))return ControlResult{"invalid_request",{}};
       if(!transfer || transfer->id!=id || Clock::now()>=transfer->expires)return ControlResult{"stale_upload",{}};
       if(transfer->owner!=owner || busy || nall::GDB::server.hasClient())return ControlResult{"busy",{}};
+      if(transfer->recovery&&!pristine)return ControlResult{"recovery_not_pristine",{}};
       if(!transfer->upload || transfer->written!=transfer->bytes.size())return ControlResult{"state_truncated",{}};
       auto current=host.root->serialize(true);auto& bytes=transfer->bytes;
       if(bytes.size()!=current.size() || bytes.size()<533 || std::memcmp(bytes.data(),current.data(),21))return ControlResult{"state_configuration_mismatch",{}};
@@ -1056,6 +1071,7 @@ int main(int argc, char** argv) {
     if(batchTakeover) execution.reservation.reset();
     bool loadTakeover = takeover && n64 && host.stateLoader.upload.has_value();
     if(loadTakeover) host.stateLoader.reset();
+    if(takeover)++host.humanInputEvents;
     if(takeover) host.service.clock.interrupt("host_input");
     bool digitalTakeover = takeover && host.digitalInput.takeover();
     bool inputTakeover = takeover && host.injectedInput.available && host.injectedInput.takeover();

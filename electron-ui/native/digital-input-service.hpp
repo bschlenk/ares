@@ -15,7 +15,7 @@ struct DigitalInputService {
     Clock::time_point deadline;
   };
   std::vector<Port> ports;
-  uint64_t epoch=0,frame=0,takeovers=0;
+  uint64_t epoch=0,frame=0,takeovers=0,updates=0;
   static std::string path(ares::Node::Object node) {
     std::string result=node->name().data();
     while((node=ares::Node::parent(node)))result=std::string(node->name().data())+"/"+result;
@@ -61,7 +61,7 @@ struct DigitalInputService {
       bool found=false;for(auto button:p.buttons)if(button->name()==name.c_str())found=true;
       if(!found)return {"invalid_button",{}};held.insert(name);
     }else if(args.size()!=4)return {"invalid_request",{}};
-    p.owner=owner;p.held=std::move(held);p.epoch=e;p.start=f;p.latched=UINT64_MAX;p.expires=f+frames;p.deadline=Clock::now()+std::chrono::milliseconds(ms);return {{},state()};
+    ++updates;p.owner=owner;p.held=std::move(held);p.epoch=e;p.start=f;p.latched=UINT64_MAX;p.expires=f+frames;p.deadline=Clock::now()+std::chrono::milliseconds(ms);return {{},state()};
   }
   bool apply(ares::Node::Input::Input node,uint64_t e,uint64_t f){
     service(e,f);for(auto& p:ports)if(!p.owner.empty())for(auto button:p.buttons)if(button==node){if(p.latched==UINT64_MAX)p.latched=f;button->setValue(p.held.count(button->name().data())?1:0);return true;}return false;

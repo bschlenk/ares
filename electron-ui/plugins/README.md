@@ -612,3 +612,14 @@ The opt-in `storage.journal` capability admits `ctx.journal.append/read`. See
 [the journal contract](JOURNAL.md) for stable retry IDs, sequence numbers, schema
 versions, durable publication and quotas. This trusted API does not add model
 script bindings or emulator save/load permissions.
+
+
+## Paired recovery
+
+With `storage.journal` and `recovery.manage`, trusted plugins can call
+`ctx.recovery.capture()`, `start({intervalMs})`, `stop()` and `status()`. Ares pairs
+a portable emulator checkpoint with the journal cutoff and restores them before
+plugin activation after an unclean session end. Normal close disarms it; there
+is no plugin restore/rewind method. See [recovery contract](../services/RECOVERY.md)
+for scheduling, failure behavior, quotas and actual progress-loss diagnostics.
+Keep this API out of model/player bindings.

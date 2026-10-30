@@ -4,7 +4,7 @@
 // pixel copy is pinned in the same emulation-thread operation, before file I/O.
 struct CheckpointService {
   using Clock = std::chrono::steady_clock;
-  struct Transfer { uint64_t id; std::string owner; std::vector<uint8_t> bytes; uint64_t written=0; Clock::time_point expires; bool upload=false; };
+  struct Transfer { uint64_t id; std::string owner; std::vector<uint8_t> bytes; uint64_t written=0; Clock::time_point expires; bool upload=false,recovery=false; };
   std::optional<Transfer> transfer;
   uint64_t nextId=1;
   std::string hash, configuration, reason;
@@ -17,11 +17,11 @@ struct CheckpointService {
       if(busy || transfer || nall::GDB::server.hasClient()) return {"busy",{}};
       if(method=="checkpoint.upload") {
         uint64_t size;
-        if(args.size()!=1 || !ExecutionService::number(args[0],size) || size<=533 || size>(64ull<<20)) return {"invalid_request",{}};
-        transfer=Transfer{nextId++,owner,std::vector<uint8_t>(size),0,Clock::now()+std::chrono::seconds(30),true};
+        if((args.size()!=1&&args.size()!=2) || (args.size()==2&&args[1]!="1") || !ExecutionService::number(args[0],size) || size<=533 || size>(64ull<<20)) return {"invalid_request",{}};
+        transfer=Transfer{nextId++,owner,std::vector<uint8_t>(size),0,Clock::now()+std::chrono::seconds(30),true,args.size()==2};
         return {{},"{\"id\":"+std::to_string(transfer->id)+"}"};
       }
-      if(!args.empty()) return {"invalid_request",{}};
+      if(!args.empty()&&args!=std::vector<std::string>{"1"}) return {"invalid_request",{}};
       const auto started=Clock::now();
       auto instant=std::chrono::duration<double,std::milli>(std::chrono::system_clock::now().time_since_epoch()).count();
       // Portable saves must synchronize coroutine cores: unsynchronized bytes
@@ -45,7 +45,7 @@ struct CheckpointService {
       }
       Transfer t{nextId++,owner,{state.data(),state.data()+state.size()},0,Clock::now()+std::chrono::seconds(30),false};
       t.bytes.insert(t.bytes.end(),image->data(),image->data()+image->size()); transfer=std::move(t);
-      return {{},"{\"id\":"+std::to_string(transfer->id)+",\"bytes\":"+std::to_string(transfer->bytes.size())+",\"stateBytes\":"+std::to_string(state.size())+",\"width\":"+std::to_string(image->width)+",\"height\":"+std::to_string(image->height)+",\"aspect\":"+std::to_string(aspect)+",\"capture_ms\":"+std::to_string(std::chrono::duration<double,std::milli>(Clock::now()-started).count())+",\"capturedAt\":"+std::to_string(instant)+"}"};
+      return {{},"{\"id\":"+std::to_string(transfer->id)+",\"bytes\":"+std::to_string(transfer->bytes.size())+",\"stateBytes\":"+std::to_string(state.size())+",\"width\":"+std::to_string(image->width)+",\"height\":"+std::to_string(image->height)+",\"aspect\":"+std::to_string(aspect)+",\"paused\":"+std::string(paused?"true":"false")+",\"start_frame\":"+std::to_string(frame)+",\"capture_ms\":"+std::to_string(std::chrono::duration<double,std::milli>(Clock::now()-started).count())+",\"capturedAt\":"+std::to_string(instant)+"}"};
     }
     uint64_t id;
     if(args.empty() || !ExecutionService::number(args[0],id)) return {"invalid_request",{}};

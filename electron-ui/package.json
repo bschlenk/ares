@@ -49,7 +49,8 @@
     "test:playback-controls": "node scripts/build.js && node --test tests/focus-pause.test.js && electron tests/electron-playback-controls.js",
     "test:save-states": "node scripts/build.js && node --test tests/checkpoint-library.test.js tests/checkpoint-native.test.js && electron tests/electron-checkpoints.js",
     "test:save-states-private": "node scripts/build.js && node tests/checkpoint-private.js",
-    "test:save-states-cross-core": "node scripts/build.js && node tests/checkpoint-cross-core.js"
+    "test:save-states-cross-core": "node scripts/build.js && node tests/checkpoint-cross-core.js",
+    "test:paired-recovery": "node scripts/build.js && node --test --test-concurrency=1 tests/paired-recovery.test.js tests/paired-recovery-native.test.js tests/paired-recovery-electron.test.js"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
