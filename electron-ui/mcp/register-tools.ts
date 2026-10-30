@@ -1,3 +1,4 @@
+import {registerCoreTools} from './core-tools.js';
 import { registerDemonstrationTools } from './demonstration-tools.js';
 import { buildInfo } from '../services/build-info.js';
 import { scriptStatus, waitForScript } from '../services/script-wait.js';
@@ -166,6 +167,7 @@ const failure = (error: unknown) => ({ ...output({ error: error instanceof Servi
   registerMachineTools(server, local, status);
   registerBatchTools(server, local, status);
   registerN64Tools(server, local, status, operation, rememberOperation);
+  registerCoreTools(server,local,status);
   registerInputTools(server, local, status, rememberOperation);
   registerTraceTools(server, local, status, rememberOperation, id => operationIdentities.get(id));
   registerDmaTools(server, local, status);

@@ -39,6 +39,7 @@
 #include "native/viewer-service.hpp"
 #include "native/memory-experiment.hpp"
 #include "native/input-service.hpp"
+#include "native/digital-input-service.hpp"
 #include "native/demonstration-service.hpp"
 #include "native/trace-service.hpp"
 #include "native/dma-service.hpp"
@@ -65,6 +66,7 @@ struct Host : ares::Platform {
   CheckpointService checkpoints;
   std::vector<std::pair<std::string,std::shared_ptr<vfs::directory>>> mediaPaks;
   std::atomic<bool> takeoverRequested{false};
+  DigitalInputService digitalInput;
   InputStartGate inputStart;
   uint64_t armedInputJob=0;
   ares::Node::System root;
@@ -176,7 +178,7 @@ struct Host : ares::Platform {
     }
   }
   auto input(ares::Node::Input::Input node) -> void override {
-    if(!injectedInput.apply(node, service.epoch, ares::Nintendo64::executionCoordinate.frame) && emulator) emulator->input(node);
+    if(!digitalInput.apply(node,service.epoch,service.execution.frame) && !injectedInput.apply(node, service.epoch, ares::Nintendo64::executionCoordinate.frame) && emulator) emulator->input(node);
     appliedInput = controls.load() >> 32;
   }
   auto detach(ares::Node::Object node) -> void override {
@@ -595,6 +597,8 @@ int main(int argc, char** argv) {
   host.service.statusFields = [&] {
     host.accountGameplay();
     MachineService::Object status;
+    const bool clockAvailable=execution.frameKind!="unavailable";
+    status.add("support",std::string("{\"input\":{\"available\":")+(!host.digitalInput.ports.empty()&&clockAvailable?"true":"false")+",\"reason\":"+controlQuote(!host.digitalInput.ports.empty()&&clockAvailable?"":"digital_input_or_frame_clock_unavailable")+",\"permission\":\"session.control\"},\"elapsed_frames\":{\"available\":"+(clockAvailable?"true":"false")+",\"reason\":"+controlQuote(clockAvailable?"":"frame_boundary_unavailable")+"},\"observers\":{\"available\":"+(clockAvailable?"true":"false")+",\"reason\":"+controlQuote(clockAvailable?"":"frame_boundary_unavailable")+",\"permission\":\"memory.read\"},\"n64\":{\"available\":"+(n64||synthetic?"true":"false")+",\"reason\":"+controlQuote(n64||synthetic?"":"unsupported_core")+"}}");
     status.add("checkpoint_eligible", host.loadedCheckpoint||host.gameplayMs>=10000 ? "true":"false");
     if(host.contentHash) {
       MachineService::Object game; game.add("sha256", controlQuote(host.contentHash.data()));
@@ -635,6 +639,12 @@ int main(int argc, char** argv) {
   DmaService dmaService; dmaService.available = n64;
   execution.cpuSupported = n64;
   host.injectedInput.available = n64||synthetic;
+  host.digitalInput.bind(host.root);
+  host.service.inputAvailable=[&]{return !host.digitalInput.ports.empty();};
+  host.service.inputRequest = [&](const auto& method,const auto& args,const auto& owner){
+    if(method=="input.set" && (host.injectedInput.hasOverrides() || execution.active || execution.reservation))return ControlResult{"busy",{}};
+    return host.digitalInput.execute(method,args,owner,host.service.epoch,execution.frame,execution.frameKind!="unavailable");
+  };
   host.demonstration.input=&host.injectedInput;host.demonstration.execution=&execution;host.demonstration.paused=&host.service.paused;
   ares::Nintendo64::executionCoordinate.inputLatch=[&](unsigned port,uint32_t data){auto value=host.demonstration.latch(port,data,host.service.epoch,ares::Nintendo64::executionCoordinate.frame);
     if(port==1){std::lock_guard lock(runtime.inputMutex);if(host.inputStart.holding){auto latest=host.inputStart.latched();if(host.joypad){for(unsigned i=0;i<4;++i)host.joypad->axes().input(i).setValue(latest.axes[i]);for(unsigned i=0;i<32;++i)host.joypad->buttons().input(i).setValue((latest.mask>>i)&1);}}}
@@ -645,16 +655,22 @@ int main(int argc, char** argv) {
     std::string candidates="[";
     if(n64)for(auto it=ares::Nintendo64::taskProvenance.scanouts.rbegin();it!=ares::Nintendo64::taskProvenance.scanouts.rend();++it)if(it->frame==frame&&it->originCommit==ares::Nintendo64::executionCoordinate.originCommit){for(auto id:it->candidates){if(candidates.back()!='[')candidates+=',';candidates+=std::to_string(id);}break;}
     candidates+=']';
-    return "{\"task_mapping\":\"candidate_only\",\"task_candidates\":"+candidates+",\"native_session\":"+controlQuote(host.service.session)+",\"epoch\":"+std::to_string(host.service.epoch)+",\"vi\":"+(execution.frameKind=="vi"||execution.frameKind=="synthetic-vi"?std::to_string(frame):"null")+",\"boundary\":"+controlQuote(!boundary?"safe_point":samplingOrigin?"vi_origin":execution.frameKind=="unavailable"?host.service.memoryTools.observedKind:execution.frameKind)+",\"origin\":"+(n64?std::to_string(uint32_t(ares::Nintendo64::vi.io.dramAddress)):"null")+",\"origin_commit\":"+(n64?std::to_string(ares::Nintendo64::executionCoordinate.originCommit):"null")+",\"video_sequence\":null,\"presentation\":null,\"provenance\":\"unmatched\"}";
+    return "{\"task_mapping\":\"candidate_only\",\"task_candidates\":"+candidates+",\"native_session\":"+controlQuote(host.service.session)+",\"epoch\":"+std::to_string(host.service.epoch)+",\"frame\":"+std::to_string(frame)+",\"frame_kind\":"+controlQuote(execution.frameKind)+",\"vi\":"+(execution.frameKind=="vi"||execution.frameKind=="synthetic-vi"?std::to_string(frame):"null")+",\"boundary\":"+controlQuote(!boundary?"safe_point":samplingOrigin?"vi_origin":execution.frameKind=="unavailable"?host.service.memoryTools.observedKind:execution.frameKind)+",\"origin\":"+(n64?std::to_string(uint32_t(ares::Nintendo64::vi.io.dramAddress)):"null")+",\"origin_commit\":"+(n64?std::to_string(ares::Nintendo64::executionCoordinate.originCommit):"null")+",\"video_sequence\":null,\"presentation\":null,\"provenance\":\"unmatched\"}";
   };
   const void* memoryScreen = nullptr;
   if(!n64 && !synthetic && memoryRoot) for(auto screen : memoryRoot->find<ares::Node::Video::Screen>()) { if(!memoryScreen) memoryScreen = screen.get(); }
   if(memoryScreen) host.service.memoryTools.observedKind = "primary-screen-frame";
+  std::function<void()> boundaryObserver;
   ares::Video::frameSubmittedObserver = [&](const void* screen) {
     if(screen == memoryScreen && memoryScreen) {
       auto& tools = host.service.memoryTools;
       tools.sync(host.service.epoch);
-      tools.boundary(host.service.epoch, ++tools.observedFrame);
+      ++execution.frame;execution.atBoundary=true;
+      tools.observedFrame=execution.frame;
+      tools.boundary(host.service.epoch, execution.frame);
+      host.digitalInput.service(host.service.epoch,execution.frame);
+      host.service.clock.service(host.service.epoch,execution.frame);
+      if(boundaryObserver)boundaryObserver();
     }
     auto& vi=ares::Nintendo64::vi.io;
     uint32_t logicalHeight=n64?uint32_t((uint64_t(vi.vend>vi.vstart?(uint32_t(vi.vend)-uint32_t(vi.vstart))>>1:0)*(uint32_t(vi.yscale)&0xfff))>>10):0;
@@ -681,7 +697,7 @@ int main(int argc, char** argv) {
   host.service.audioRequest = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
     return host.audioCapture.execute(method, args, owner, !host.streams.empty());
   };
-  host.service.onReleaseOwner = [&](const std::string& owner) { for(auto it=observers.begin();it!=observers.end();)if(it->second->owner==owner){it->second->finish("disconnected");it=observers.erase(it);}else ++it;observerPreparations.erase(owner); host.demonstration.releaseOwner(owner,execution.frame); host.injectedInput.releaseOwner(owner); profilerService.releaseOwner(owner); host.captures.releaseOwner(owner); host.audioCapture.releaseOwner(owner); host.recording.releaseOwner(owner); host.stateSnapshot.releaseOwner(owner); host.stateLoader.releaseOwner(owner); host.checkpoints.releaseOwner(owner); rspDebugService.releaseOwner(owner); rdpCaptureService.releaseOwner(owner); inspectionService.releaseOwner(owner); callService.releaseOwner(owner); viewerService.releaseOwner(owner); };
+  host.service.onReleaseOwner = [&](const std::string& owner) { for(auto it=observers.begin();it!=observers.end();)if(it->second->owner==owner){it->second->finish("disconnected");it=observers.erase(it);}else ++it;observerPreparations.erase(owner); host.demonstration.releaseOwner(owner,execution.frame); host.digitalInput.releaseOwner(owner);host.injectedInput.releaseOwner(owner); profilerService.releaseOwner(owner); host.captures.releaseOwner(owner); host.audioCapture.releaseOwner(owner); host.recording.releaseOwner(owner); host.stateSnapshot.releaseOwner(owner); host.stateLoader.releaseOwner(owner); host.checkpoints.releaseOwner(owner); rspDebugService.releaseOwner(owner); rdpCaptureService.releaseOwner(owner); inspectionService.releaseOwner(owner); callService.releaseOwner(owner); viewerService.releaseOwner(owner); };
   host.service.beforeRequest = [&](const std::string& method, const std::string& owner) -> std::string {
     host.accountGameplay();
     host.demonstration.tick(host.service.epoch,execution.frame);
@@ -724,7 +740,7 @@ int main(int argc, char** argv) {
       bool restored=true;
       if(!loaded){nall::serializer backup{current.data(),current.size()};restored=host.root->unserialize(backup)&&backup.size()==current.size();}
       transfer.reset();++host.service.epoch;host.service.memoryTools.sync(host.service.epoch);
-      host.injectedInput.releaseAll();host.injectedInput.operationRunning=false;host.injectedInput.epoch=host.service.epoch;
+      host.digitalInput.releaseAll();host.injectedInput.releaseAll();host.injectedInput.operationRunning=false;host.injectedInput.epoch=host.service.epoch;
       host.demonstration.tick(host.service.epoch,0);
       traceService.reset();profilerService.reset();rdpCaptureService.reset();inspectionService.reset();callService.reset();viewerService.reset();
       host.captures.reset(host.service.epoch);host.audioCapture.reset();host.recording.rebase(owner,host.service.epoch);host.stateSnapshot.reset();
@@ -768,7 +784,7 @@ int main(int argc, char** argv) {
       if(host.stateLoader.touched) {
         ++host.service.epoch; host.service.memoryTools.sync(host.service.epoch);
         host.demonstration.tick(host.service.epoch,0);
-        host.injectedInput.releaseAll(); host.injectedInput.operationRunning = false;
+        host.digitalInput.releaseAll();host.injectedInput.releaseAll(); host.injectedInput.operationRunning = false;
         traceService.reset(); profilerService.reset(); rdpCaptureService.reset(); inspectionService.reset(); callService.reset(); viewerService.reset(); host.captures.reset(host.service.epoch);
         host.audioCapture.reset(); host.recording.rebase(owner,host.service.epoch); host.stateSnapshot.reset(); host.checkpoints.transfer.reset();
         ares::Nintendo64::executionCoordinate.reset();
@@ -832,6 +848,7 @@ int main(int argc, char** argv) {
     if(method.starts_with("n64.profiler.")) return profilerService.execute(method, args, owner, bool(execution.active));
     if(method == "n64.dma.log") return dmaService.execute(args);
     if(method.starts_with("n64.trace.")) return traceService.execute(method, args, owner, host.service.epoch, host.service.paused, execution);
+    if(method.starts_with("n64.input.") && method!="n64.input.state" && method!="n64.input.release" && host.digitalInput.hasOverrides())return ControlResult{"busy",{}};
     if(method.starts_with("n64.input.")) return host.injectedInput.execute(method, args, owner, host.service.epoch, execution.frame, execution.active ? execution.active->owner : "");
     auto result = n64Service.execute(method, args, host.service.epoch, bool(execution.active) && !(scriptService.running&&scriptService.hostWaiting&&scriptService.hostKind=="input_prepare"&&scriptService.owner==owner&&method=="n64.memory.write"));
     if(n64) execution.executor = N64Service::executor();
@@ -843,8 +860,8 @@ int main(int argc, char** argv) {
     host.service.onResume = [&](bool keepOverrides, const std::string& owner) {
       host.stateLoader.reset(); rspDebugService.reset();
       if(!keepOverrides) {
-        if(owner == "ui") host.injectedInput.releaseAll();
-        else host.injectedInput.releaseOwner(owner);
+        if(owner == "ui") {host.digitalInput.releaseAll();host.injectedInput.releaseAll();}
+        else {host.digitalInput.releaseOwner(owner);host.injectedInput.releaseOwner(owner);}
       }
       debug.resume(); execution.executor = N64Service::executor();
     };
@@ -860,7 +877,7 @@ int main(int argc, char** argv) {
   }
   if(synthetic){execution.onStart=[&]{host.injectedInput.start(host.service.epoch,execution.frame);};execution.onFinish=[&](const std::string&){host.injectedInput.finish(host.service.epoch,execution.frame);};}
   execution.supported = synthetic || n64;
-  execution.frameKind = synthetic ? "synthetic-vi" : n64 ? "vi" : "unavailable";
+  execution.frameKind = synthetic ? "synthetic-vi" : n64 ? "vi" : memoryScreen ? "primary-screen-frame" : "unavailable";
   execution.executor = synthetic ? "synthetic" : n64 ? (ares::Nintendo64::Accuracy::CPU::Recompiler && ares::Nintendo64::cpu.recompiler.enabled ? "recompiler" : "interpreter") : "unavailable";
   ares::Nintendo64::executionCoordinate.reset();
   // Yield even during ordinary N64 play so UI control stays serviceable if VI is
@@ -916,7 +933,7 @@ int main(int argc, char** argv) {
     else {debug.executeObserver={};if(!scriptService.error.empty()&&debug.halted)debug.resume();}
     debug.updateActive();
   };
-  scriptService.cleanup=[&] {if(host.demonstration.state=="armed"&&host.demonstration.owner==scriptService.owner&&scriptService.error.empty())host.demonstration.detached=true;if(host.demonstration.state=="replaying"&&host.demonstration.owner==scriptService.owner)host.demonstration.finish(host.demonstration.cursor==host.demonstration.events.size()&&execution.frame-host.demonstration.start>=host.demonstration.duration?"complete":"cancelled",execution.frame);host.injectedInput.releaseOwner(scriptService.owner);};
+  scriptService.cleanup=[&] {if(host.demonstration.state=="armed"&&host.demonstration.owner==scriptService.owner&&scriptService.error.empty())host.demonstration.detached=true;if(host.demonstration.state=="replaying"&&host.demonstration.owner==scriptService.owner)host.demonstration.finish(host.demonstration.cursor==host.demonstration.events.size()&&execution.frame-host.demonstration.start>=host.demonstration.duration?"complete":"cancelled",execution.frame);host.digitalInput.releaseOwner(scriptService.owner);host.injectedInput.releaseOwner(scriptService.owner);};
   auto configureObserver=[&](ScriptService& job){
     job.execution=&execution;job.paused=&host.service.paused;
     job.read=scriptService.read;job.regionRead=scriptService.regionRead;
@@ -977,6 +994,7 @@ int main(int argc, char** argv) {
     }
     samplingOrigin=false;observerSpent+=Clock::now()-started;
   };
+  boundaryObserver=[&]{pumpObservers(false);};
   if(n64)ares::Nintendo64::executionCoordinate.originObserver=[&]{pumpObservers(true);};
   uint64_t previewEpoch = 0;
   auto previewDeadline = Clock::now();
@@ -990,11 +1008,12 @@ int main(int argc, char** argv) {
       execution.executor = N64Service::executor();
     }
     host.demonstration.tick(host.service.epoch,execution.frame);
-    if(n64||synthetic) host.injectedInput.service(host.service.epoch, execution.frame);
+    if(host.injectedInput.available) host.injectedInput.service(host.service.epoch, execution.frame);
+    host.digitalInput.service(host.service.epoch,execution.frame);
     rspDebugService.service(execution, host.service.paused);
     bool wasControlled = bool(execution.active);
     if(!host.service.dispatch(synthetic ? "Synthetic" : std::string(host.systemName.data()), synthetic, [&] {
-      host.injectedInput.releaseAll(); traceService.reset(); profilerService.reset();
+      host.digitalInput.releaseAll();host.injectedInput.releaseAll(); traceService.reset(); profilerService.reset();
       host.captures.reset(host.service.epoch + 1);
       host.audioCapture.reset();
       host.recording.reset();
@@ -1026,7 +1045,10 @@ int main(int argc, char** argv) {
     if(batchTakeover) execution.reservation.reset();
     bool loadTakeover = takeover && n64 && host.stateLoader.upload.has_value();
     if(loadTakeover) host.stateLoader.reset();
-    bool inputTakeover = takeover && n64 && host.injectedInput.takeover();
+    if(takeover) host.service.clock.interrupt("host_input");
+    bool digitalTakeover = takeover && host.digitalInput.takeover();
+    bool inputTakeover = takeover && host.injectedInput.available && host.injectedInput.takeover();
+    inputTakeover = inputTakeover || digitalTakeover;
     if((loadTakeover || batchTakeover || rspTakeover) && !inputTakeover) ++host.injectedInput.takeovers;
     if(loadTakeover || inputTakeover || batchTakeover || rspTakeover) {
       execution.complete("host_input", host.service.paused);
@@ -1060,7 +1082,8 @@ int main(int argc, char** argv) {
         pixels[y * (width + 8) + x] = 0xff000000u | ((x + tick) % 256 << 16) | ((y + tick) % 256 << 8) | (tick % 256);
       }
       host.video({}, pixels.data(), (width + 8) * 4, width, height); ++tick;
-    } else { host.root->run(); profilerService.afterRun(); if(n64) ares::Nintendo64::commandCapture.afterRun(); }
+    } else { execution.atBoundary=false;host.root->run(); profilerService.afterRun(); if(n64) ares::Nintendo64::commandCapture.afterRun(); }
+    if(!n64&&!synthetic)execution.atBoundary=false;
     if(execution.active) ++execution.active->slices;
     if(n64) {
       execution.frame = ares::Nintendo64::executionCoordinate.frame;
@@ -1076,7 +1099,7 @@ int main(int argc, char** argv) {
       if(synthetic){auto& image=host.captures.presented;if(image.packet)host.recording.capture(image.data(),image.width,image.height,host.service.epoch,execution.frame,execution.frameKind,true);}
       else if(n64){std::shared_ptr<const FrameService::Image> image;auto result=FrameService::framebuffer(image,host.service.epoch,execution.frame);if(result.error.empty())host.recording.capture(image->data(),image->width,image->height,host.service.epoch,execution.frame,execution.frameKind,true);else {std::lock_guard lock(host.recording.mutex);host.recording.finish("capture_unavailable");}}
     }
-    if(execution.atBoundary && execution.frame != frameBefore) host.service.memoryTools.boundary(host.service.epoch, execution.frame);
+    if((n64||synthetic) && execution.atBoundary && execution.frame != frameBefore) host.service.memoryTools.boundary(host.service.epoch, execution.frame);
     if(n64) {
       auto& debug = ares::Nintendo64::cpu.debugControl;
       execution.instructions = debug.instructionsRetired;

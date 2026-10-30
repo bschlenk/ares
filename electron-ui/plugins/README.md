@@ -597,3 +597,11 @@ Stop recording; publication to the selected directory is automatic. The job
 outlives the originating plugin scope, including the epoch change caused by its
 state load. `services.request('n64.demo.status')` requires `session.read`.
 Physical keyboard/gamepad play and replay still require human acceptance.
+
+## Cross-core input and timing
+
+See [the exact core control API](../services/CORE-CONTROL.md) for named digital
+ports, passive elapsed waits, current-session support and permission discovery.
+`session.control` admits `input.set`/`input.release`; `session.read` admits input
+description/state and elapsed waits. Existing read-only observers now also use
+the shared primary-screen frame event on non-N64 cores.

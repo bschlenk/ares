@@ -52,6 +52,11 @@ export interface PluginContext {
     run(params: Omit<import('../services/script-contracts.js').ScriptRunParams, 'statePaths' | 'outputPaths' | 'outputPath' | 'projectRoot'>): Promise<SessionReply<import('../services/contracts.js').ExecutionOperation>>
   }
   services: {
+    /** input.describe/state: session.read; input.set/release: session.control.
+     * clock.waitStart/Read/Cancel: session.read, passive native elapsed frames.
+     * Port IDs/names come from input.describe and are scoped to this session.
+     * Holds expire natively and are released when this plugin is disposed.
+     */
     request<M extends ServiceMethod>(
       method: M,
       params?: ServiceParams<M>,
@@ -68,7 +73,7 @@ export interface PluginContext {
     openPanel(id: string, size?: { width: number; height: number }): void
   }
   scope: {
-    /** Push frozen native VI samples; callbacks never reread boundary RAM. At most one callback is in flight. */
+    /** Push frozen native frame-boundary samples; callbacks never reread boundary RAM. At most one callback is in flight. */
     onFrame(params:FrameSubscriptionParams,callback:(sample:import('../services/observer-contracts.js').FrameSample)=>void|Promise<void>):Disposer;
     add(dispose: Disposer): Disposer
     listen(

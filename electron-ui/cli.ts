@@ -19,7 +19,7 @@ export async function main(argv = process.argv.slice(2)) {
   process.once('SIGINT', interrupt);
   try {
     const [command, tool, ...flags] = argv;
-    if(command==='call'&&!process.env.ARES_OWNER_LEASE&&['audio_capture','memory_snapshot','memory_sample','memory_query_start','video_start','memory_record_start','controller_set','script_observe','demonstration_request','demonstration_start','demonstration_replay'].includes(tool))throw new Error('This resource ends on CLI disconnect. Create an owner_lease and set ARES_OWNER_LEASE for start/run/stop commands.');
+    if(command==='call'&&!process.env.ARES_OWNER_LEASE&&['audio_capture','memory_snapshot','memory_sample','memory_query_start','video_start','memory_record_start','controller_set','input_set','script_observe','demonstration_request','demonstration_start','demonstration_replay'].includes(tool))throw new Error('This resource ends on CLI disconnect. Create an owner_lease and set ARES_OWNER_LEASE for start/run/stop commands.');
     if (command === 'tools' && !tool) {
       process.stdout.write(JSON.stringify(registry.list()) + '\n'); return;
     }

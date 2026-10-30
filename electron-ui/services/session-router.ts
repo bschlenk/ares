@@ -24,7 +24,22 @@ import { METHODS, PROTOCOL, encodeRequest, ServiceError, type SessionIdentity, t
 import type { NativeSessionClient } from './native-client.js';
 
 function mainCapabilities(reply: SessionReply<any>): void {
-  if (reply.ok && Array.isArray(reply.result?.capabilities)) for (const method of ['artifact.inputRequest','artifact.inputExport','artifact.inputImport','scripts.observe', 'scripts.run', 'artifact.memoryExport', 'experiment.batch', 'artifact.traceExport', 'artifact.rdpExport', 'artifact.dump', ...SCREENSHOT_METHODS, ...STATE_METHODS, 'artifact.audioSave', 'artifact.videoStop']) if (!reply.result.capabilities.includes(method)) reply.result.capabilities.push(method);
+  const status=reply.ok?reply.result:undefined;
+  if(!Array.isArray(status?.capabilities))return;
+  const dependencies:Partial<Record<ServiceMethod,ServiceMethod>>={
+    'artifact.inputRequest':'n64.demo.request','artifact.inputExport':'n64.demo.read','artifact.inputImport':'n64.demo.importBegin',
+    'scripts.observe':'script.observerStart','scripts.run':'script.start','artifact.memoryExport':'memory.capture.read',
+    'experiment.batch':'execution.runFrames','artifact.traceExport':'n64.trace.page','artifact.rdpExport':'n64.rdp.capturePage',
+    'artifact.dump':'n64.dump.begin','artifact.audioSave':'audio.read','artifact.videoStop':'video.record.status',
+  };
+  for(const method of ['artifact.inputRequest','artifact.inputExport','artifact.inputImport','scripts.observe','scripts.run','artifact.memoryExport','experiment.batch','artifact.traceExport','artifact.rdpExport','artifact.dump',...SCREENSHOT_METHODS,...STATE_METHODS,'artifact.audioSave','artifact.videoStop'] as ServiceMethod[]) {
+    const dependency=dependencies[method]??(method.startsWith('state.')?'n64.state.format':undefined);
+    if(Array.isArray(status.implemented_services)&&!status.implemented_services.includes(method))status.implemented_services.push(method);
+    if(status.unavailable_services && dependency && !status.capabilities.includes(dependency)) {
+      status.unavailable_services[method]=status.unavailable_services[dependency]??'dependency_unavailable';continue;
+    }
+    if(!status.capabilities.includes(method))status.capabilities.push(method);
+  }
 }
 
 /** Electron main owns this router, independently of renderer/plugin lifetimes. */
