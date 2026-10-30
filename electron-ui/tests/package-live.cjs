@@ -37,12 +37,12 @@ async function run() {
       apiVersion: 1,
       entry: 'dist/plugin.js',
       build: { entry: 'src/plugin.tsx', jsxFactory: 'h' },
-      capabilities: [],
+      capabilities: ['storage.journal'],
       contributes: { panels: [{ id: 'panel', title: 'Packaged plugin' }] },
     }),
   )
   const pluginSource = (version) =>
-    `function h(tag,props,...children){const element=document.createElement(tag);element.append(...children);return element}export function activate(ctx){ctx.ui.registerPanel('panel',({element})=>element.append(<p>Packaged version ${version}</p>));ctx.ui.openPanel('panel');let stop=ctx.scope.interval(async()=>{await ctx.storage.set('stamp',{version:${version},session:ctx.session});stop()},50)}`
+    `function h(tag,props,...children){const element=document.createElement(tag);element.append(...children);return element}export function activate(ctx){ctx.ui.registerPanel('panel',({element})=>element.append(<p>Packaged version ${version}</p>));ctx.ui.openPanel('panel');let stop=ctx.scope.interval(async()=>{await ctx.journal.append('events',{id:'version-${version}',schemaVersion:1,value:{version:${version}}});await ctx.storage.set('stamp',{version:${version},session:ctx.session});stop()},50)}`
   fs.writeFileSync(path.join(plugin, 'src/plugin.tsx'), pluginSource(1))
   const env = {
     ...process.env,
@@ -209,6 +209,17 @@ async function run() {
       await new Promise((r) => setTimeout(r, 20))
     }
     assert.equal(status.system, 'Game Boy', diagnostics)
+    assert.equal(status.support.input.available,true)
+    assert.equal(status.support.elapsed_frames.available,true)
+    assert.equal(status.frame_kind,'primary-screen-frame')
+    assert(status.capabilities.includes('input.set'))
+    const digital=(await peer.tool('input_describe')).ports.find(p=>p.buttons.includes('Select'))
+    assert(digital)
+    await peer.tool('resume')
+    assert.equal((await peer.tool('input_set',{port:digital.port,buttons:['A','Start'],lease_frames:2,lease_ms:2000})).isError,false)
+    assert.equal((await peer.tool('wait_frames',{frames:4,timeout_ms:2000})).reason,'frames_elapsed')
+    assert.equal((await peer.tool('input_state')).ports[digital.port-1].owner,null)
+
     const cli = (...args) =>
       pluginCommand(...args, '--connection', file, '--instance', info.instance)
     for (let i = 0; i < 100; i++) {
@@ -241,6 +252,9 @@ async function run() {
       firstStamp.session,
       'TSX replacement must keep the native session/epoch',
     )
+    const journal=JSON.parse(fs.readFileSync(path.join(temporary,'profile/plugins/test.packaged-v1.journal.json'),'utf8'))
+    assert.deepEqual(journal.records.map(r=>r.value.version),[1,2])
+
 
     cli('add', scaffold)
     cli('enable', 'local.packaged-agent')
@@ -311,9 +325,11 @@ async function run() {
       'unavailable',
     )
     assert.ok(
-      status.capabilities.includes('artifact.traceExport'),
-      'packaged main advertises artifact service',
+      status.implemented_services.includes('artifact.traceExport'),
+      'packaged main lists implemented artifact services',
     )
+    assert(!status.capabilities.includes('artifact.traceExport'),'N64 trace export is unavailable on GB')
+    for(const method of ['state.info','state.list','state.peek'])assert(status.capabilities.includes(method),'offline inspection is independent of the loaded core')
     const offlineFile = path.join(temporary, 'offline fixture.bs')
     writeStateFixture(offlineFile)
     assert.equal(
@@ -351,6 +367,9 @@ async function run() {
     assert.equal((await peer.tool('emu_status')).paused, pausedBeforeInspection)
     assert.equal((await peer.tool('pause')).paused, true)
     const regions = await peer.tool('memory_regions')
+    const ppu=regions.regions.find(r=>r.format==='ares.gb.ppu-display.v1')
+    assert(ppu&&ppu.readable&&!ppu.writable)
+    assert.equal(ppu.size,0xf700)
     const region = regions.regions.find(
       (r) => r.writable && r.readable && r.name.includes('RAM'),
     )
@@ -439,7 +458,7 @@ async function run() {
     const movieFile = path.join(temporary, 'packaged video.avi')
     const movie = await peer.tool('video_stop', { path: movieFile })
     assert.equal(movie.frames, 2)
-    assert.equal(movie.frame_kind, 'unavailable')
+    assert.equal(movie.frame_kind, 'primary-screen-frame')
     assert.equal(fs.readFileSync(movieFile).toString('ascii', 8, 12), 'AVI ')
     assert.equal((await peer.tool('resume')).paused, false)
     assert.equal((await closed)[0], 0, diagnostics)

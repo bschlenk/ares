@@ -111,3 +111,12 @@ A model's `availability()` result is not proof of a working inference backend.
 - Final latch-metadata refinement: 12 focused protocol/native/GB/NES/MCP/plugin-admission/schema/session checks passed, no skips.
 - Disposable actual Electron session and plugin lifecycle tests passed (`ELECTRON_SESSION_PASS`, `PLUGIN_UI_PASS`). The full suite also exercises native checkpoint round trips and N64 input/debug/runtime behavior.
 - No private ROM, save or credential was added. No live user instance was selected or controlled. Packaging/signing, every-core/peripheral acceptance and a real local model backend were not validated in this slice.
+
+Final copied-package validation (2026-10-30) explicitly selected
+`ARES_HOST=/absolute/path/to/build-electron-make/bin/ares-electron-host` before
+packaging. When multiple build directories exist, the packaging helper otherwise
+prefers its managed workbench build. The strengthened copied-package test passed
+with 870 generated GB frames: common input leases/waits, PPU format discovery,
+honest core capabilities, offline inspection, journal persistence across TSX
+reload, MCP and plugin CLI with checkout reads denied. Strict ad-hoc signature
+verification passed. No new user instance was launched or selected.
