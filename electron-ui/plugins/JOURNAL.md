@@ -52,6 +52,8 @@ error occurs after rename, `journal_durability_uncertain` means the record may
 already be committed; retry its stable ID to resolve it. Idempotent retries also
 sync the directory before acknowledgement. Corrupt, oversized, future-format and
 symlink files are rejected and preserved, never treated as an empty journal.
+Unpublished UUID staging files left by a killed process are removed at the next
+serialized namespace operation; committed and unrelated files are preserved.
 File format version 1 is independent of each record's `schemaVersion`.
 
 Quota errors are `journal_record_too_large` or `journal_quota_exceeded`;
