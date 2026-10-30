@@ -38,6 +38,14 @@ export class PluginJournals {
     queue.tail=job.catch(()=>{});
     return job.finally(()=>{if(--owned.pending===0&&this.queues.get(file)===owned)this.queues.delete(file);});
   }
+  private async cleanStaging(file:string){
+    const prefix=path.basename(file)+'.';
+    for(const name of await fs.readdir(path.dirname(file))){
+      if(!name.startsWith(prefix)||!/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(name.slice(prefix.length))||name.slice(prefix.length).length!==36)continue;
+      const candidate=path.join(path.dirname(file),name);
+      const stat=await fs.lstat(candidate);if(stat.isFile()&&!stat.isSymbolicLink())await fs.rm(candidate,{force:true});
+    }
+  }
   private async syncDirectory(file:string){const directory=await fs.open(path.dirname(file),'r');try{await directory.sync();}finally{await directory.close();}}
   private async load(file:string):Promise<{data:Data;bytes:number}>{
     let handle;
@@ -56,7 +64,7 @@ export class PluginJournals {
     finally{await handle?.close();}
   }
   private async run(file:string,stream:string,operation:string,p:any,guard:()=>void):Promise<JournalReceipt|JournalPage>{
-    guard();const {data,bytes}=await this.load(file);guard();
+    guard();await this.cleanStaging(file);const {data,bytes}=await this.load(file);guard();
     if(operation==='journal.read'){
       if(!p||Object.keys(p).sort().join(',')!=='afterSequence,limit'||!integer(p.afterSequence)||!integer(p.limit)||!p.limit||p.limit>64)throw new ServiceError('journal_invalid_request');
       const eligible=data.records.filter(r=>r.stream===stream&&r.sequence>p.afterSequence),records:JournalRecord[]=[];let pageBytes=0;

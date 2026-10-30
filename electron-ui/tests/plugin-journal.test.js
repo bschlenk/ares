@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {PluginJournals} from '../dist/plugins/journal.js';
 import {JOURNAL_LIMITS} from '../dist/plugins/journal-contracts.js';
 const record=(id,value={text:'remember this'})=>({id,schemaVersion:1,value});
@@ -14,7 +15,9 @@ test('journal persists ordered events/notes, paginates and makes retries idempot
     await append('notes',record('note-1'));await append('events',record('b'));
     const duplicate=await append('events',record('a',{a:1,b:2}));assert.equal(duplicate.sequence,1);assert.equal(duplicate.duplicate,true);
     await assert.rejects(append('events',record('a',{a:9})),/journal_id_conflict/);
+    const orphan=file+'.'+randomUUID();await fs.writeFile(orphan,'unpublished crash residue');
     const restarted=new PluginJournals();const first=await restarted.request(file,'events','journal.read',{afterSequence:0,limit:1},guard);
+    await assert.rejects(fs.stat(orphan),{code:'ENOENT'});
     assert.equal(first.records[0].id,'a');assert.equal(first.hasMore,true);assert.equal(first.nextSequence,4);
     const next=await restarted.request(file,'events','journal.read',{afterSequence:first.cursor,limit:64},guard);assert.deepEqual(next.records.map(r=>r.id),['b']);assert.equal(next.hasMore,false);
     assert.equal((await restarted.request(path.join(root,'plugin-v2.journal.json'),'events','journal.read',{afterSequence:0,limit:64},guard)).records.length,0);
