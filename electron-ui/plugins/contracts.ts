@@ -10,6 +10,7 @@ import type {
 } from '../services/contracts.js'
 export const PLUGIN_API_VERSION = 1
 export const CAPABILITIES = [
+  'storage.journal',
   'session.read',
   'debug.read',
   'session.control',
@@ -120,7 +121,7 @@ export interface PluginBridge {
   ): Promise<SessionReply<ServiceResult<M>> | PluginBridgeFailure>
   storage(
     token: string,
-    operation: 'get' | 'set' | 'delete',
+    operation: 'get' | 'set' | 'delete' | 'journal.append' | 'journal.read',
     key: string,
     value?: unknown,
   ): Promise<unknown>

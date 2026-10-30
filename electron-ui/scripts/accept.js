@@ -109,6 +109,7 @@ async function main() {
     ['electron-session', 'electron-session.js', []],
     ['electron-shutdown', 'electron-shutdown.js', []],
     ['electron-mcp', 'electron-mcp.js', []],
+    ['electron-journal', 'electron-journal.js', []],
     ['electron-plugins', 'electron-plugins.js', []],
     ['electron-reload', 'electron-reload.js', []],
     ['electron-plugin-tools', 'electron-plugin-tools.js', []],
