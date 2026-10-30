@@ -33,7 +33,7 @@ function mainCapabilities(reply: SessionReply<any>): void {
     'artifact.dump':'n64.dump.begin','artifact.audioSave':'audio.read','artifact.videoStop':'video.record.status',
   };
   for(const method of ['artifact.inputRequest','artifact.inputExport','artifact.inputImport','scripts.observe','scripts.run','artifact.memoryExport','experiment.batch','artifact.traceExport','artifact.rdpExport','artifact.dump',...SCREENSHOT_METHODS,...STATE_METHODS,'artifact.audioSave','artifact.videoStop'] as ServiceMethod[]) {
-    const dependency=dependencies[method]??(method.startsWith('state.')?'n64.state.format':undefined);
+    const dependency=dependencies[method]??(['state.save','state.load'].includes(method)?'n64.state.format':undefined);
     if(Array.isArray(status.implemented_services)&&!status.implemented_services.includes(method))status.implemented_services.push(method);
     if(status.unavailable_services && dependency && !status.capabilities.includes(dependency)) {
       status.unavailable_services[method]=status.unavailable_services[dependency]??'dependency_unavailable';continue;
