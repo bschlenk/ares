@@ -254,8 +254,10 @@ what a pass establishes. Optional private-media/manual checks remain separate.
 For a faulty enabled plugin, see [startup recovery](plugins/README.md#startup-recovery).
 
 
-The full default macOS arm64 build exposes **40 system variants** through the
-shared registry. Verified on 2026-10-17: generated GB and NES programs ran at
+The full default macOS arm64 build exposes **39 registry entries**; upstream
+consolidated Neo Geo MVS into the Arcade loader. Existing explicit MVS launch
+selections resolve to Arcade. All emulator cores remain included.
+Verified on 2026-10-17: generated GB and NES programs ran at
 59.7 and 60.1 fps; synthetic 640×480 and 1080p transport ran at approximately
 60 fps. Kirby 64 reached its file-selection screen with working keyboard input
 and native SDL audio enabled. The 41-second N64 UI check averaged 57.1 native fps

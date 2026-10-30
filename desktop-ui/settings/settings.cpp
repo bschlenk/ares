@@ -1,6 +1,22 @@
 #include "../desktop-ui.hpp"
 
 Settings settings;
+auto Settings::inputKey(string name, bool input) -> string {
+  name.replace(" ", ".").replace("[", "").replace("]", "")
+    .replace("(", input ? "." : "").replace(")", "")
+    .replace("*", "Star").replace("#", "Pound");
+  string key;
+  for(u32 index : range(name.size())) {
+    auto byte = (u8)name[index];
+    if(byte >= 0x80 || (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z')
+    || (byte >= '0' && byte <= '9') || (byte >= '+' && byte <= '.')) {
+      key.append((char)byte);
+    } else {
+      key.append("+", hex(byte, 2L));
+    }
+  }
+  return key;
+}
 
 auto Settings::process(bool load) -> void {
   #define bind(type, path, name) \
@@ -16,6 +32,7 @@ auto Settings::process(bool load) -> void {
   bind(boolean, "Video/ColorBleed", video.colorBleed);
   bind(boolean, "Video/ColorEmulation", video.colorEmulation);
   bind(boolean, "Video/InterframeBlending", video.interframeBlending);
+  bind(string,  "Video/Deinterlacing", video.deinterlacing);
   bind(boolean, "Video/Overscan", video.overscan);
   bind(boolean, "Video/PixelAccuracy", video.pixelAccuracy);
 
@@ -72,11 +89,16 @@ auto Settings::process(bool load) -> void {
   bind(boolean, "Nintendo64/DisableVideoInterfaceProcessing", nintendo64.disableVideoInterfaceProcessing);
   bind(boolean, "Nintendo64/WeaveDeinterlacing", nintendo64.weaveDeinterlacing);
 
+  bind(string, "PlayStation/ParallelPort", playstation.expansionDevice);
+
   bind(boolean, "GameBoyAdvance/Player", gameBoyAdvance.player);
 
   bind(boolean, "SuperFamicom/DeepBlackBoost", superFamicom.deepBlackBoost);
 
   bind(boolean, "MegaDrive/TMSS", megadrive.tmss);
+
+  bind(string, "NeoGeo/AESBIOS", neoGeo.aesBios);
+  bind(string, "NeoGeo/MVSBIOS", neoGeo.mvsBios);
 
   for(u32 index : range(9)) {
     string name = {"Recent/Game-", 1 + index};
@@ -115,11 +137,11 @@ auto Settings::process(bool load) -> void {
     for(auto& port : emulator->ports) {
       for(auto& device : port.devices) {
         if(!device.hasDirectMappings()) continue;
-        string portName = string{port.name}.replace(" ", ".").replace("[", "").replace("]", "").replace("(", "").replace(")", "").replace("*", "Star").replace("#", "Pound");
-        string deviceName = string{device.name}.replace(" ", ".").replace("[", "").replace("]", "").replace("(", "").replace(")", "").replace("*", "Star").replace("#", "Pound");
+        string portName = port.settingsKey ? port.settingsKey : Settings::inputKey(port.name);
+        string deviceName = Settings::inputKey(device.name);
         for(auto& input : device.inputs) {
           auto& mapping = input.configuredMapping();
-          string inputName = string{input.name}.replace(" ", ".").replace("[", "").replace("]", "").replace("(", ".").replace(")", "").replace("*", "Star").replace("#", "Pound");
+          string inputName = Settings::inputKey(input.name, true);
           string name = {base, "/Input/", portName, "/", deviceName, "/", inputName}, value;
           if(load == 0) for(auto& assignment : mapping.assignments) value.append(assignment, ";");
           if(load == 0) value.trimRight(";", 1L);
@@ -131,7 +153,7 @@ auto Settings::process(bool load) -> void {
           }
         }
         for(auto& pair : device.pairs) {
-          string pairName = string{pair.name}.replace(" ", ".").replace("[", "").replace("]", "").replace("(", ".").replace(")", "").replace("*", "Star").replace("#", "Pound");
+          string pairName = Settings::inputKey(pair.name, true);
           for(auto index : range(2)) {
             string suffix = index == 0 ? "Lo" : "Hi";
             auto& mapping = index == 0 ? pair.configuredMappingLo() : pair.configuredMappingHi();
@@ -150,6 +172,8 @@ auto Settings::process(bool load) -> void {
     }
   }
 
+  for(auto& emulator : emulators) emulator->processGameInputMappings(load);
+
   for(auto& emulator : emulators) {
     string base = string{emulator->name}.replace(" ", ""), name;
     base.replace("(", "").replace(")", "");
@@ -163,6 +187,7 @@ auto Settings::process(bool load) -> void {
       string portName = string{emulator->ports[index].name}
         .replace(" ", "").replace("[", "").replace("]", "").replace("(", "").replace(")", "")
         .replace("*", "Star").replace("#", "Pound").replace("/", "");
+      portName = Settings::inputKey(portName);
       name = {base, "/", portName};
       bind(string, name, emulator->configuration.peripherals[index]);
     }

@@ -1,13 +1,14 @@
 // Shared by firmware discovery and the existing loader's BML bindings.
 inline auto firmwareSettingPath(const string& system, const string& type, const string& region) -> string {
   string base = string{system}.replace(" ", "").replace("(", "").replace(")", "");
-  return string{base, "/Firmware/", type, ".", region}.replace(" ", "-");
+  return string{base, "/Firmware/", type, ".", region}.replace(" ", "-").replace("(", "").replace(")", "");
 }
 
 struct Settings : Markup::Node {
   using string = nall::string;
 
   auto process(bool load) -> void;
+  static auto inputKey(string name, bool input = false) -> string;
 
   string filePath;
 
@@ -18,6 +19,7 @@ struct Settings : Markup::Node {
     bool colorBleed = false;
     bool colorEmulation = true;
     bool interframeBlending = true;
+    string deinterlacing = "Weave";
     bool overscan = true;
     bool pixelAccuracy = false;
   } video;
@@ -99,6 +101,10 @@ struct Settings : Markup::Node {
     bool weaveDeinterlacing = true;
   } nintendo64;
 
+  struct PlayStation {
+    string expansionDevice = "None";
+  } playstation;
+
   struct GameBoyAdvance {
     bool player = false;
   } gameBoyAdvance;
@@ -110,6 +116,11 @@ struct Settings : Markup::Node {
   struct MegaDrive {
     bool tmss = false;
   } megadrive;
+
+  struct NeoGeo {
+    string aesBios = "neo-po.bin";
+    string mvsBios = "vs-bios.rom";
+  } neoGeo;
 };
 
 extern Settings settings;
