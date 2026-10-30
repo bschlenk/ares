@@ -33,12 +33,14 @@ frame identity in application payloads when those distinctions matter.
 Reads return `records`, `cursor`, `hasMore`, `nextSequence`, `bytes` and
 `quotaBytes`. Each record contains `sequence`, `stream`, `id`, `schemaVersion`
 and `value`. Read again with `afterSequence: page.cursor` while `hasMore` is true.
-There is no implicit retention, reset or deletion of journal records. Archive or
-migration policy needs an explicit follow-up rather than silently dropping notes.
+Records are retained physically. Paired recovery can exclude an abandoned suffix
+from the active read view; it never reuses sequence numbers. Archive or migration
+policy needs an explicit follow-up.
 
 ## Limits and publication
 
 - 4 MiB total per plugin and manifest `storageVersion`; 32,768 records.
+  Appends reserve 64 KiB of that quota for recovery metadata.
 - 16 KiB JSON value per record; JSON depth at most 32.
 - At most 64 records and 64 KiB record payload per read page.
 - At most 16 queued operations per namespace; overload is explicit.
@@ -66,22 +68,26 @@ artifacts, saves and the small settings store.
 
 ## Recovery boundary
 
-Acknowledged records survive plugin reload and process restart. This journal
-does not itself capture or restore emulator state. A future host-managed recovery
-broker must atomically associate a checkpoint with a committed journal sequence,
-recover only after technical failures, and report the age of the last committed
-recovery point. Existing GB checkpoints work, but capture serializes the core on
-the emulation thread and can briefly stall it; capture now temporarily suspends read-only frame callbacks during serialization
-and resumes them afterward, with skipped samples accounted for. Restores remain
-exclusive. No new save/load permission
-has been granted to the player.
+Acknowledged records survive plugin reload and process restart. The optional
+[paired recovery broker](../services/RECOVERY.md) associates a checkpoint with the
+journal's active view and sequence cutoff. It requires `recovery.manage` as well
+as `storage.journal`. The journal alone never captures or restores emulator state.
 
-Tests exercise restart reads, reordered duplicate payloads, pagination,
-concurrent sequence allocation, revocation before publication, injected rename
-failure, corruption/symlink/quota refusal, capability and namespace isolation,
-and a real Electron plugin writing over 16 KiB then reloading and rereading it.
+After recovery, reads expose the matching prefix and any subsequent new records.
+Abandoned records remain on disk but are excluded from reads, including notes
+written after that recovery point. `page.recovery` contains `pointId`,
+`journalSequence`, `targetSession` and ISO timestamp `at`. Sequence numbers keep
+increasing across recoveries; gaps are expected. Retrying an excluded record's
+ID/payload returns its old sequence with `duplicate:true, superseded:true` rather
+than making the abandoned event current again. Use a new ID for a new event.
+Records and exclusions both count toward the quota. Bounded recovery metadata
+(maximum 1,024 excluded ranges) uses the reserved 64 KiB; there is no silent
+pruning. A full store requires explicit future archival/migration support.
 
-Validation (2026-10-30): four focused host durability/admission tests and the
-actual disposable Electron journal test passed. Strict TypeScript/SDK generation
-passed. The complete sequential suite passed 251 tests with zero failures and
-one optional private-ROM skip.
+The plugin should rebuild model context from this recovered view after restart;
+the model receives neither recovery controls nor journal write permissions
+unless the trusted plugin deliberately provides its own restricted interface.
+
+Tests cover restart reads, retry identity, pagination, concurrency, revocation,
+injected publication failures, corruption/symlink/quota refusal, namespace/grant
+isolation, repeated paired recovery and real Electron reload/crash paths.

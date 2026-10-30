@@ -22,7 +22,7 @@ struct InputService {
   };
   std::array<Port, 4> pending{}, latched{};
   bool available = false, neutralDuringOperations = true, operationRunning = false;
-  uint64_t epoch = 0, frame = UINT64_MAX, takeovers = 0;
+  uint64_t epoch = 0, frame = UINT64_MAX, takeovers = 0, updates = 0;
 
   void latch() { latched = pending; }
   void releaseAll() { pending = {}; latched = {}; }
@@ -101,6 +101,7 @@ struct InputService {
     auto& p = pending[port - 1]; auto& l = latched[port - 1];
     if(owner != "ui" && ((p.overridden() && p.owner != owner) || (l.overridden() && l.owner != owner))) return {"busy", {}};
     if(frames && f > 9007199254740991ull - frames) return {"invalid_request", {}};
+    ++updates;
     p = {owner, buttons, x, y, e, frames ? f + frames : UINT64_MAX, milliseconds ? now + std::chrono::milliseconds(milliseconds) : Clock::time_point::max()};
     return {{}, state()};
   }

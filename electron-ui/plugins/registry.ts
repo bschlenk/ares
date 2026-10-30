@@ -1,3 +1,4 @@
+import {PairedRecovery,type RecoveryAccess} from '../services/paired-recovery.js'
 import {PluginJournals} from './journal.js'
 import { PLUGIN_REQUEST_LIMIT, PluginAdmissionError } from './admission.js'
 import type { PluginSettingsService } from '../settings/plugins.js'
@@ -36,6 +37,29 @@ interface Record extends PluginInfo {
 }
 export class PluginRegistry {
   private journals=new PluginJournals()
+  private paired?:PairedRecovery
+  private recoveryContext?:()=>{client:SessionClient;identity:SessionIdentity;guard:()=>void}
+  connectRecovery(root:string,context:()=>{client:SessionClient;identity:SessionIdentity;guard:()=>void}) {
+    if(this.paired)throw new Error('recovery_already_connected');this.recoveryContext=context;return this.paired=new PairedRecovery(root,this.journals);
+  }
+  recoveryNamespaces():RecoveryAccess[]{return this.startupDisabled?[]:this.records.filter(r=>r.enabled&&r.manifest?.capabilities.includes('recovery.manage')&&r.manifest.capabilities.includes('storage.journal')).map(r=>({pluginId:r.manifest!.id,storageVersion:r.manifest!.storageVersion??1,journalFile:path.join(this.dataRoot,`${r.manifest!.id}-v${r.manifest!.storageVersion??1}.journal.json`)}));}
+  private async recovery(token:string,operation:string,value:any){
+    const r=this.lease(token);if(!r.manifest!.capabilities.includes('recovery.manage')||!r.manifest!.capabilities.includes('storage.journal'))throw new ServiceError('plugin_capability_denied');
+    if(!this.paired||!this.recoveryContext)throw new ServiceError('recovery_unavailable');
+    if(operation!=='recovery.status'&&r.phase!=='active')throw new ServiceError('plugin_not_ready');
+    if(r.pending>=PLUGIN_REQUEST_LIMIT)throw new PluginAdmissionError(r.pending);
+    const ns=this.recoveryNamespaces().find(n=>n.pluginId===r.manifest!.id&&n.storageVersion===(r.manifest!.storageVersion??1));if(!ns)throw new ServiceError('recovery_unavailable');
+    const context=this.recoveryContext(),owner=r.owner!;
+    const capture=()=>this.paired!.capture(ns,context.client,context.identity,()=>{this.authorize(token);context.guard();});
+    ++r.pending;
+    try{
+      if(operation==='recovery.capture'){if(value!==undefined)throw new ServiceError('invalid_request');await capture();}
+      else if(operation==='recovery.start'){if(!value||Object.keys(value).join(',')!=='intervalMs')throw new ServiceError('invalid_request');this.paired.start(owner,value.intervalMs,capture);}
+      else if(operation==='recovery.stop'){if(value!==undefined)throw new ServiceError('invalid_request');this.paired.stop(owner);}
+      else if(operation!=='recovery.status'||value!==undefined)throw new ServiceError('invalid_request');
+      this.lease(token);const status=await context.client.request('session.status',context.identity);return this.paired.status(ns,owner,context.identity,status.result?.frame);
+    }finally{--r.pending;}
+  }
   private settingsHost?: PluginSettingsService
   connectSettings(host: PluginSettingsService) {
     if (this.settingsHost) throw new Error('settings_host_already_connected')
@@ -665,6 +689,7 @@ export class PluginRegistry {
   }
   private revoke(r: Record, strict = false) {
     const owner = r.owner
+    if(owner)this.paired?.stop(owner)
     if (r.lease) this.settingsHost?.revoke(r.lease.token)
     r.lease = undefined
     r.owner = undefined
@@ -984,13 +1009,14 @@ export class PluginRegistry {
     value?: unknown,
   ) {
     const r = this.lease(token)
-    if (r.phase !== 'active' && !['get','journal.read'].includes(operation))
+    if (r.phase !== 'active' && !['get','journal.read','recovery.status'].includes(operation))
       throw new ServiceError('plugin_not_ready')
     if (
       !/^[A-Za-z0-9._-]{1,64}$/.test(key) ||
       ['__proto__', 'constructor', 'prototype'].includes(key)
     )
       throw new Error('Invalid storage key')
+    if(operation.startsWith('recovery.'))return this.recovery(token,operation,value);
     if(operation.startsWith('journal.')) {
       if(!r.manifest!.capabilities.includes('storage.journal'))throw new ServiceError('plugin_capability_denied');
       const file=path.join(this.dataRoot,`${r.manifest!.id}-v${r.manifest!.storageVersion??1}.journal.json`);

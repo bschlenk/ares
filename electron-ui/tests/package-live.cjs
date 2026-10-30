@@ -37,12 +37,12 @@ async function run() {
       apiVersion: 1,
       entry: 'dist/plugin.js',
       build: { entry: 'src/plugin.tsx', jsxFactory: 'h' },
-      capabilities: ['storage.journal'],
+      capabilities: ['storage.journal','recovery.manage'],
       contributes: { panels: [{ id: 'panel', title: 'Packaged plugin' }] },
     }),
   )
   const pluginSource = (version) =>
-    `function h(tag,props,...children){const element=document.createElement(tag);element.append(...children);return element}export function activate(ctx){ctx.ui.registerPanel('panel',({element})=>element.append(<p>Packaged version ${version}</p>));ctx.ui.openPanel('panel');let stop=ctx.scope.interval(async()=>{await ctx.journal.append('events',{id:'version-${version}',schemaVersion:1,value:{version:${version}}});await ctx.storage.set('stamp',{version:${version},session:ctx.session});stop()},50)}`
+    `function h(tag,props,...children){const element=document.createElement(tag);element.append(...children);return element}export function activate(ctx){ctx.ui.registerPanel('panel',({element})=>element.append(<p>Packaged version ${version}</p>));ctx.ui.openPanel('panel');let stop=ctx.scope.interval(async()=>{stop();await ctx.journal.append('events',{id:'version-${version}',schemaVersion:1,value:{version:${version}}});const recovery=await ctx.recovery.capture();await ctx.storage.set('stamp',{version:${version},session:ctx.session,recovery:recovery.point})},50)}`
   fs.writeFileSync(path.join(plugin, 'src/plugin.tsx'), pluginSource(1))
   const env = {
     ...process.env,
@@ -247,6 +247,13 @@ async function run() {
     const firstStamp = await waitStamp(1)
     fs.writeFileSync(path.join(plugin, 'src/plugin.tsx'), pluginSource(2))
     const nextStamp = await waitStamp(2)
+    assert.equal(firstStamp.recovery.journalSequence,1)
+    assert.equal(nextStamp.recovery.journalSequence,2)
+    assert.notEqual(firstStamp.recovery.id,nextStamp.recovery.id)
+    const pairedFolder=path.join(temporary,'profile/paired-recovery/test.packaged-v1')
+    const pairedIndex=JSON.parse(fs.readFileSync(path.join(pairedFolder,'latest.json'),'utf8'))
+    assert.equal(pairedIndex.pointId,nextStamp.recovery.id)
+    assert.ok(fs.statSync(path.join(pairedFolder,pairedIndex.pointId,'state.bin')).size>533)
     assert.deepEqual(
       nextStamp.session,
       firstStamp.session,

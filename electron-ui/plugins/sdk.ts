@@ -83,7 +83,15 @@ export interface PluginContext {
     ): Disposer
     interval(callback: () => void, milliseconds: number): Disposer
   }
-  /** Trusted, durable journal; requires storage.journal. Never automatically exposed to model scripts. */
+  /** Trusted host recovery; requires recovery.manage and storage.journal. Never expose to model scripts. */
+  recovery: {
+    /** Trusted host snapshots; restoration is automatic only after an unclean session end. */
+    capture():Promise<import('./recovery-contracts.js').RecoveryStatus>
+    start(options:{intervalMs:number}):Promise<import('./recovery-contracts.js').RecoveryStatus>
+    stop():Promise<import('./recovery-contracts.js').RecoveryStatus>
+    status():Promise<import('./recovery-contracts.js').RecoveryStatus>
+  }
+  /** Durable application records; requires storage.journal. */
   journal: {
     append(stream:string,record:import('./journal-contracts.js').JournalAppend):Promise<import('./journal-contracts.js').JournalReceipt>
     read<T=unknown>(stream:string,options?:{afterSequence?:number;limit?:number}):Promise<import('./journal-contracts.js').JournalPage<T>>
