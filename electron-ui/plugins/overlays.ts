@@ -8,7 +8,11 @@ let viewport:HTMLElement|undefined,screen:HTMLCanvasElement|undefined;
 let logicalWidth=0,logicalHeight=0,sourceWidth=0,sourceHeight=0,frame:FrameReference|null=null;
 let videoGeometry:VideoGeometry|null=null;
 let size:OverlaySize={geometry:null,canvasToCss:null,canvasToPixels:null,width:0,height:0,pixelWidth:0,pixelHeight:0,dpr:1,logicalWidth:0,logicalHeight:0,sourceWidth:0,sourceHeight:0};
-export function framesMatch(a:FrameReference,b:FrameReference){return a.native_session===b.native_session&&a.epoch===b.epoch&&a.vi!==null&&a.vi===b.vi&&a.origin_commit===b.origin_commit;}
+export function framesMatch(a:FrameReference,b:FrameReference){
+  if(a.native_session!==b.native_session||a.epoch!==b.epoch)return false;
+  if(a.vi!==null||b.vi!==null)return a.vi!==null&&a.vi===b.vi&&a.origin_commit===b.origin_commit;
+  return a.frame!==undefined&&a.frame===b.frame&&a.frame_kind==='primary-screen-frame'&&b.frame_kind===a.frame_kind;
+}
 function display(layer:Layer){
   const matched=!!layer.sample&&!!frame&&framesMatch(layer.sample.frame,frame);
   layer.element.dataset.stale=String(!!layer.sample&&!matched);

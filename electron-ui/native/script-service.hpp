@@ -307,7 +307,7 @@ struct ScriptService {
     observerPush=a.size()>=4&&a[3]=="1";if(a.size()>=4&&a[3]!="0"&&a[3]!="1")return {"invalid_request",{}};
     if(execution->active)return {"busy",{}};
     if(!execution->reservation||execution->reservation->owner!=owner)return {"script_preparation_revoked",{}};
-    if(method=="script.observe"&&!execution->supported){execution->reservation.reset();return {"frame_boundary_unavailable",{}};}
+    if(method=="script.observe"&&execution->frameKind=="unavailable"){execution->reservation.reset();return {"frame_boundary_unavailable",{}};}
     auto now=Clock::now();deadline=now+std::chrono::milliseconds(milliseconds);budget=now+std::chrono::milliseconds(25);
     jobQueue={};readCalls=readBytes=readNs=0;frameLimit=limit;framesUsed=0;result.clear();error.clear();logs="[]";artifacts="[]";artifactCount=0;hostId=0;logBytes=0;destroy();
     runtime=JS_NewRuntime();if(!runtime){execution->reservation.reset();return {"script_oom",{}};}

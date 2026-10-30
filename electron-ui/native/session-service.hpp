@@ -11,6 +11,7 @@
 #include "execution-service.hpp"
 #include "memory-service.hpp"
 #include "memory-tools.hpp"
+#include "elapsed-clock.hpp"
 
 // Host-only protocol v1. Requests are bounded ASCII tokens; responses are JSON lines
 // on fd 3. Execution uses extracted fork semantics, without legacy transport.
@@ -22,6 +23,9 @@ struct SessionService {
   bool paused = false;
   bool previewReset = false;
   ExecutionService execution;
+  ElapsedClock clock;
+  std::function<bool()> inputAvailable;
+  std::function<ControlResult(const std::string&, const std::vector<std::string>&, const std::string&)> inputRequest;
   std::function<ControlResult(const std::string&, const std::vector<std::string>&, const std::string&)> n64Request;
   std::function<ControlResult(const std::string&, const std::vector<std::string>&, const std::string&)> videoRequest;
   std::function<ControlResult(const std::string&, const std::vector<std::string>&, const std::string&)> audioRequest;
@@ -69,6 +73,7 @@ struct SessionService {
   }
   // Called only between root->run() invocations, including while paused.
   bool dispatch(const std::string& system, bool synthetic, const std::function<void()>& reset, MemoryService& memory) {
+    clock.service(epoch,execution.frame);
     execution.service(paused);
     std::deque<std::string> pending;
     { std::lock_guard guard(lock); pending.swap(requests); }
@@ -93,7 +98,7 @@ struct SessionService {
       else if(identity != session) error = "stale_session";
       else if(revision != std::to_string(epoch)) error = "stale_epoch";
       else if(method.starts_with("session.") && !arguments.empty() && !((method == "session.resume" || method == "session.reset") && arguments.size() == 1 && (arguments[0] == "0" || arguments[0] == "1"))) error = "invalid_request";
-      else if(method != "session.status" && method != "session.pause" && method != "session.resume" && method != "session.reset" && !method.starts_with("memory.") && !method.starts_with("execution.") && !method.starts_with("checkpoint.") && !method.starts_with("n64.") && !method.starts_with("video.") && !method.starts_with("audio.") && !method.starts_with("script.") && method != "runtime.settings" && method != "runtime.configure" && method != "runtime.provenance") error = "unavailable";
+      else if(method != "session.status" && method != "session.pause" && method != "session.resume" && method != "session.reset" && !method.starts_with("input.") && !method.starts_with("clock.") && !method.starts_with("memory.") && !method.starts_with("execution.") && !method.starts_with("checkpoint.") && !method.starts_with("n64.") && !method.starts_with("video.") && !method.starts_with("audio.") && !method.starts_with("script.") && method != "runtime.settings" && method != "runtime.configure" && method != "runtime.provenance") error = "unavailable";
       if(error.empty() && method == "session.resume" && arguments == std::vector<std::string>{"1"} && !onResume) error = "unavailable";
       if(error.empty() && !execution.permitted(method, owner)) error = "busy";
       if(error.empty() && beforeRequest) error = beforeRequest(method, owner);
@@ -104,6 +109,13 @@ struct SessionService {
         memoryResult = runtimeRequest ? runtimeRequest(method, arguments) : ControlResult{"unavailable", {}};
         error = memoryResult.error;
       }
+      if(error.empty() && method.starts_with("input.")) {
+        memoryResult=inputRequest?inputRequest(method,arguments,owner):ControlResult{"unavailable",{}};error=memoryResult.error;
+      }
+      if(error.empty() && method.starts_with("clock.")) {
+        memoryResult=clock.execute(method,arguments,owner,epoch,execution.frame,execution.frameKind);error=memoryResult.error;
+        if(error.empty() && method=="clock.waitCancel" && inputRequest)inputRequest("input.release",{"0"},owner);
+      }
       if(error.empty() && method.starts_with("script.")) {
         memoryResult = scriptRequest ? scriptRequest(method, arguments, owner) : ControlResult{"unavailable", {}};
         error = memoryResult.error;
@@ -111,7 +123,7 @@ struct SessionService {
       if(error.empty() && method.starts_with("execution.")) {
         memoryResult = execution.execute(method, arguments, owner, epoch, paused);
         error = memoryResult.error;
-        if(error.empty() && method == "execution.release") { memoryTools.releaseOwner(owner); if(onReleaseOwner) onReleaseOwner(owner); }
+        if(error.empty() && method == "execution.release") { clock.releaseOwner(owner); memoryTools.releaseOwner(owner); if(onReleaseOwner) onReleaseOwner(owner); }
       }
       if(error.empty() && method.starts_with("audio.")) {
         memoryResult = audioRequest ? audioRequest(method, arguments, owner) : ControlResult{"unavailable", {}};
@@ -146,10 +158,24 @@ struct SessionService {
         if(c == '"' || c == '\\') escaped += '\\';
         if(c >= 32) escaped += c;
       }
+      const std::vector<std::string> methods = {"input.describe","input.set","input.release","input.state","clock.waitStart","clock.waitRead","clock.waitCancel","session.status","session.pause","session.resume","session.reset","memory.regions","memory.read","memory.readMany","memory.write","execution.runFrames","execution.runUntilFrame","execution.status","execution.cancel","execution.release","execution.stepInstructions","n64.debug.registers","n64.debug.lastStop","n64.debug.breakAdd","n64.debug.breakRemove","n64.debug.breakList","n64.debug.watchAdd","n64.debug.watchRemove","n64.debug.watchList","n64.debug.clear","n64.memory.read","n64.memory.readMany","n64.memory.write","n64.memory.writeMany","n64.input.set","n64.input.release","n64.input.state","n64.input.hostMode","n64.trace.start","n64.trace.page","n64.dma.log","n64.profiler.control","n64.profiler.clear","n64.profiler.top","n64.input.tap","video.begin","video.read","video.release","audio.capture","audio.status","audio.begin","audio.read","audio.release","video.record.scriptStart","video.record.cancel","video.record.start","video.record.status","video.record.begin","video.record.read","video.record.release","n64.state.format","n64.state.layout","n64.state.begin","n64.state.read","n64.state.release","n64.state.loadBegin","n64.state.loadPrepare","n64.state.loadWrite","n64.state.loadCommit","n64.state.loadAbort","checkpoint.info","checkpoint.capture","checkpoint.read","checkpoint.release","checkpoint.upload","checkpoint.write","checkpoint.commit","checkpoint.abort","execution.batchBegin","execution.batchCheck","n64.cpu.setRegisters","n64.cpu.disassemble","n64.rsp.registers","n64.rdp.state","n64.peripheral.registers","n64.rsp.lastTask","n64.rsp.debug","n64.rsp.break","n64.rsp.step","n64.rsp.run","n64.rsp.stop","n64.rdp.captureStart","n64.rdp.capturePage","n64.render.probe","n64.dump.begin","n64.dump.read","n64.dump.release","n64.cpu.stack","n64.cpu.call","n64.cpu.callRecover","n64.capture.control","n64.capture.rsp","n64.capture.rdp","n64.capture.matrices","n64.capture.transforms","runtime.settings","runtime.configure","runtime.provenance","memory.sample","memory.snapshot.capture","memory.recorder.start","memory.recorder.stop","memory.capture.status","memory.capture.read","memory.capture.page","memory.capture.release","memory.snapshot.compare","memory.capture.freeze","memory.query.start","memory.query.advance","memory.query.page","memory.query.release","memory.snapshot.changes","script.ack","script.pending","script.resolve","script.prepare","script.write","script.start","script.read","script.observerPrepare","script.observerWrite","script.observerStart","script.observerRead","script.observerStop","n64.demo.handoff","n64.demo.request","n64.demo.status","n64.demo.start","n64.demo.stop","n64.demo.cancel","n64.demo.read","n64.demo.importBegin","n64.demo.append","n64.demo.importCommit","n64.demo.replay"};
+      std::string implemented="[",usable="[",unavailable="{";
+      for(auto& name:methods) {
+        if(implemented.size()>1)implemented+=',';implemented+=controlQuote(name);
+        bool available=true;
+        if(name.starts_with("n64."))available=synthetic||system=="Nintendo 64";
+        if(name=="input.set")available=execution.frameKind!="unavailable"&&inputAvailable&&inputAvailable();
+        if(name=="execution.runFrames"||name=="execution.runUntilFrame"||name=="script.prepare"||name=="script.write"||name=="script.start")available=execution.supported;
+        if(name=="execution.stepInstructions")available=execution.cpuSupported;
+        if(name=="clock.waitStart"||name.starts_with("script.observer"))available=execution.frameKind!="unavailable";
+        if(available){if(usable.size()>1)usable+=',';usable+=controlQuote(name);}
+        else {if(unavailable.size()>1)unavailable+=',';unavailable+=controlQuote(name)+":"+controlQuote(name.starts_with("n64.")?"unsupported_core":name=="input.set"?"digital_input_or_frame_clock_unavailable":"frame_boundary_unavailable");}
+      }
+      implemented+=']';usable+=']';unavailable+='}';
       std::string reply = "{\"protocol\":1,\"id\":\"" + id + "\",\"session\":\"" + session + "\",\"epoch\":" + std::to_string(epoch);
       if(!error.empty()) reply += ",\"ok\":false,\"error\":\"" + error + "\"}";
       else if(!memoryResult.json.empty()) reply += ",\"ok\":true,\"result\":" + memoryResult.json + "}";
-      else reply += ",\"ok\":true,\"result\":{\"paused\":" + std::string(paused ? "true" : "false") + ",\"system\":\"" + escaped + "\",\"synthetic\":" + (synthetic ? "true" : "false") + "," + execution.coordinates() + (statusFields ? statusFields() : "") + ",\"capabilities\":[\"session.status\",\"session.pause\",\"session.resume\",\"session.reset\",\"memory.regions\",\"memory.read\",\"memory.readMany\",\"memory.write\",\"execution.runFrames\",\"execution.runUntilFrame\",\"execution.status\",\"execution.cancel\",\"execution.release\",\"execution.stepInstructions\",\"n64.debug.registers\",\"n64.debug.lastStop\",\"n64.debug.breakAdd\",\"n64.debug.breakRemove\",\"n64.debug.breakList\",\"n64.debug.watchAdd\",\"n64.debug.watchRemove\",\"n64.debug.watchList\",\"n64.debug.clear\",\"n64.memory.read\",\"n64.memory.readMany\",\"n64.memory.write\",\"n64.memory.writeMany\",\"n64.input.set\",\"n64.input.release\",\"n64.input.state\",\"n64.input.hostMode\",\"n64.trace.start\",\"n64.trace.page\",\"n64.dma.log\",\"n64.profiler.control\",\"n64.profiler.clear\",\"n64.profiler.top\",\"n64.input.tap\",\"video.begin\",\"video.read\",\"video.release\",\"audio.capture\",\"audio.status\",\"audio.begin\",\"audio.read\",\"audio.release\",\"video.record.scriptStart\",\"video.record.cancel\",\"video.record.start\",\"video.record.status\",\"video.record.begin\",\"video.record.read\",\"video.record.release\",\"n64.state.format\",\"n64.state.layout\",\"n64.state.begin\",\"n64.state.read\",\"n64.state.release\",\"n64.state.loadBegin\",\"n64.state.loadPrepare\",\"n64.state.loadWrite\",\"n64.state.loadCommit\",\"n64.state.loadAbort\",\"checkpoint.info\",\"checkpoint.capture\",\"checkpoint.read\",\"checkpoint.release\",\"checkpoint.upload\",\"checkpoint.write\",\"checkpoint.commit\",\"checkpoint.abort\",\"execution.batchBegin\",\"execution.batchCheck\",\"n64.cpu.setRegisters\",\"n64.cpu.disassemble\",\"n64.rsp.registers\",\"n64.rdp.state\",\"n64.peripheral.registers\",\"n64.rsp.lastTask\",\"n64.rsp.debug\",\"n64.rsp.break\",\"n64.rsp.step\",\"n64.rsp.run\",\"n64.rsp.stop\",\"n64.rdp.captureStart\",\"n64.rdp.capturePage\",\"n64.render.probe\",\"n64.dump.begin\",\"n64.dump.read\",\"n64.dump.release\",\"n64.cpu.stack\",\"n64.cpu.call\",\"n64.cpu.callRecover\",\"n64.capture.control\",\"n64.capture.rsp\",\"n64.capture.rdp\",\"n64.capture.matrices\",\"n64.capture.transforms\",\"runtime.settings\",\"runtime.configure\",\"runtime.provenance\",\"memory.sample\",\"memory.snapshot.capture\",\"memory.recorder.start\",\"memory.recorder.stop\",\"memory.capture.status\",\"memory.capture.read\",\"memory.capture.page\",\"memory.capture.release\",\"memory.snapshot.compare\",\"memory.capture.freeze\",\"memory.query.start\",\"memory.query.advance\",\"memory.query.page\",\"memory.query.release\",\"memory.snapshot.changes\",\"script.ack\",\"script.pending\",\"script.resolve\",\"script.prepare\",\"script.write\",\"script.start\",\"script.read\",\"script.observerPrepare\",\"script.observerWrite\",\"script.observerStart\",\"script.observerRead\",\"script.observerStop\",\"n64.demo.handoff\",\"n64.demo.request\",\"n64.demo.status\",\"n64.demo.start\",\"n64.demo.stop\",\"n64.demo.cancel\",\"n64.demo.read\",\"n64.demo.importBegin\",\"n64.demo.append\",\"n64.demo.importCommit\",\"n64.demo.replay\"]}}";
+      else reply += ",\"ok\":true,\"result\":{\"paused\":" + std::string(paused ? "true" : "false") + ",\"system\":\"" + escaped + "\",\"synthetic\":" + (synthetic ? "true" : "false") + "," + execution.coordinates() + (statusFields ? statusFields() : "") + ",\"implemented_services\":" + implemented + ",\"capabilities\":" + usable + ",\"unavailable_services\":" + unavailable + "}}";
       std::lock_guard guard(lock);
       if(replies.size() >= limit) return false; // bounded even if peer stops reading
       replies.push_back(reply + "\n"); ready.notify_one();

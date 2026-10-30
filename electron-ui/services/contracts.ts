@@ -1,3 +1,4 @@
+import {CORE_METHODS,encodeCore,validCore,type CoreServiceMap} from './core-contracts.js';
 import {CHECKPOINT_NATIVE_METHODS, encodeCheckpoint, validCheckpointResult, type CheckpointNativeMap} from './checkpoint-native-contracts.js';
 import { DEMONSTRATION_METHODS, INPUT_ARTIFACT_METHODS, encodeDemonstration, validDemonstration, type DemonstrationServiceMap } from './demonstration-contracts.js';
 import { SCRIPT_NATIVE_METHODS, encodeScript, validScriptRun, type ScriptServiceMap } from './script-contracts.js';
@@ -24,12 +25,13 @@ import { validMemoryVerification, type MemoryVerification, N64_METHODS, encodeN6
 /** Shared contract for Electron routing, the inspector and the future MCP adapter. */
 export const PROTOCOL = 1 as const;
 export const MAX_TRANSFER = 1024;
-export const NATIVE_METHODS = ['session.status', 'session.pause', 'session.resume', 'session.reset', 'memory.regions', 'memory.read', 'memory.readMany', 'memory.write', 'execution.runFrames', 'execution.runUntilFrame', 'execution.status', 'execution.cancel', 'execution.release', 'execution.stepInstructions', ...N64_METHODS, ...INPUT_METHODS.filter(m => m !== 'n64.input.tap'), ...TRACE_METHODS, 'n64.dma.log', ...PROFILER_METHODS, 'n64.input.tap', ...FRAME_METHODS, ...AUDIO_METHODS, ...RECORDING_METHODS, ...NATIVE_STATE_METHODS, ...CHECKPOINT_NATIVE_METHODS, ...NATIVE_BATCH_METHODS, ...MACHINE_METHODS, ...RSP_METHODS, ...RDP_CAPTURE_METHODS, ...INSPECTION_METHODS, ...CALL_METHODS, ...VIEWER_METHODS, ...RUNTIME_METHODS, ...MEMORY_TOOL_METHODS, ...SCRIPT_NATIVE_METHODS,...DEMONSTRATION_METHODS] as const;
+export const NATIVE_METHODS = [...CORE_METHODS,'session.status', 'session.pause', 'session.resume', 'session.reset', 'memory.regions', 'memory.read', 'memory.readMany', 'memory.write', 'execution.runFrames', 'execution.runUntilFrame', 'execution.status', 'execution.cancel', 'execution.release', 'execution.stepInstructions', ...N64_METHODS, ...INPUT_METHODS.filter(m => m !== 'n64.input.tap'), ...TRACE_METHODS, 'n64.dma.log', ...PROFILER_METHODS, 'n64.input.tap', ...FRAME_METHODS, ...AUDIO_METHODS, ...RECORDING_METHODS, ...NATIVE_STATE_METHODS, ...CHECKPOINT_NATIVE_METHODS, ...NATIVE_BATCH_METHODS, ...MACHINE_METHODS, ...RSP_METHODS, ...RDP_CAPTURE_METHODS, ...INSPECTION_METHODS, ...CALL_METHODS, ...VIEWER_METHODS, ...RUNTIME_METHODS, ...MEMORY_TOOL_METHODS, ...SCRIPT_NATIVE_METHODS,...DEMONSTRATION_METHODS] as const;
 export const METHODS = [...NATIVE_METHODS,...INPUT_ARTIFACT_METHODS, ...ARTIFACT_METHODS, 'artifact.rdpExport', 'artifact.dump', ...SCREENSHOT_METHODS, 'artifact.audioSave', 'artifact.videoStop', ...STATE_METHODS, 'experiment.batch', 'experiment.cancelBatch', 'scripts.run','scripts.observe'] as const;
 export type ServiceMethod = typeof METHODS[number];
 export type SessionMethod = Extract<ServiceMethod, `session.${string}`>;
 export interface SessionIdentity { session: string; epoch: number }
-export interface SessionStatus { checkpoint_eligible?: boolean; game?: {sha256:string;size:number;kind:'program.rom'} | null; paused: boolean; title?: string; manual_paused?: boolean; focus_paused?: boolean; system: string; synthetic: boolean; capabilities: ServiceMethod[]; frame?: number; frame_kind?: string; at_frame_boundary?: boolean; executor?: string; operation_id?: number | null; batch_id?: number | null }
+export interface SessionSupport {available:boolean;reason:string;permission?:string}
+export interface SessionStatus { implemented_services?:ServiceMethod[]; unavailable_services?:Partial<Record<ServiceMethod,string>>; plugin_grants?:string[]; support?:{input:SessionSupport;elapsed_frames:SessionSupport;observers:SessionSupport;n64:SessionSupport}; checkpoint_eligible?: boolean; game?: {sha256:string;size:number;kind:'program.rom'} | null; paused: boolean; title?: string; manual_paused?: boolean; focus_paused?: boolean; system: string; synthetic: boolean; capabilities: ServiceMethod[]; frame?: number; frame_kind?: string; at_frame_boundary?: boolean; executor?: string; operation_id?: number | null; batch_id?: number | null }
 export interface ExecutionOperation {
   rsp?: RspProgress;
   call?: CallProgress;
@@ -45,7 +47,7 @@ export interface MemoryRead { region: string; offset: number; length: number; he
 export interface MemoryRange { region: string; offset: number; length: number }
 export interface MemorySample { reads: MemoryRead[]; epoch: number; frame: number; frame_kind: string; sample_id: number; at_frame_boundary: boolean }
 export interface MemoryWritten { region: string; offset: number; written: number }
-export interface ServiceMap extends CheckpointNativeMap, DemonstrationServiceMap, ScriptServiceMap, MemoryToolsMap, RuntimeServiceMap, ViewerServiceMap, CallServiceMap, InspectionServiceMap, RdpCaptureServiceMap, RspServiceMap, MachineServiceMap, BatchServiceMap, StateServiceMap, RecordingServiceMap, AudioServiceMap, N64ServiceMap, InputServiceMap, TraceServiceMap, DmaServiceMap, ProfilerServiceMap, ArtifactServiceMap, FrameServiceMap, ScreenshotServiceMap {
+export interface ServiceMap extends CoreServiceMap, CheckpointNativeMap, DemonstrationServiceMap, ScriptServiceMap, MemoryToolsMap, RuntimeServiceMap, ViewerServiceMap, CallServiceMap, InspectionServiceMap, RdpCaptureServiceMap, RspServiceMap, MachineServiceMap, BatchServiceMap, StateServiceMap, RecordingServiceMap, AudioServiceMap, N64ServiceMap, InputServiceMap, TraceServiceMap, DmaServiceMap, ProfilerServiceMap, ArtifactServiceMap, FrameServiceMap, ScreenshotServiceMap {
   'execution.stepInstructions': { params: { count: number; timeoutMs: number }; result: ExecutionOperation };
   'session.status': { params: undefined; result: SessionStatus };
   'session.pause': { params: undefined; result: SessionStatus };
@@ -86,6 +88,7 @@ export function encodeRequest<M extends ServiceMethod>(id: string, identity: Ses
   if (!identity || typeof identity !== 'object' || !token(id) || !token(identity.session) || !integer(identity.epoch) || identity.epoch < 1 ||
       !METHODS.includes(method) || !token(owner)) throw new ServiceError('invalid_request');
   let suffix = '';
+  if (CORE_METHODS.includes(method as any)) { const encoded=encodeCore(method,params);if(encoded===undefined)throw new ServiceError('invalid_request');return `control 1 ${id} ${identity.session} ${identity.epoch} ${method}${encoded} owner=${owner}\n`; }
   if (method === 'artifact.memoryExport') {
     const p = params as any;
     if (!keys(p, ['handle','path','overwrite']) || !integer(p.handle) || !p.handle || typeof p.path !== 'string' || !p.path.length || p.path.length > 4096 || p.path.includes('\0') || typeof p.overwrite !== 'boolean') throw new ServiceError('invalid_request');
@@ -235,6 +238,7 @@ export function decodeReply<M extends ServiceMethod = 'session.status'>(line: st
     }
     if (method.startsWith('n64.input.') && method !== 'n64.input.tap') valid = validInput(s);
     if (method === 'n64.input.tap') { decodeReply(JSON.stringify(r), 'execution.status'); valid = s.kind === 'controller_tap'; }
+    if(CORE_METHODS.includes(method as any))valid=validCore(method,s);
     if (method.startsWith('session.')) valid = !!s && typeof s.paused === 'boolean' && typeof s.system === 'string' && typeof s.synthetic === 'boolean' && Array.isArray(s.capabilities) && s.capabilities.every((m: ServiceMethod) => METHODS.includes(m)) && (s.game == null || typeof s.game === 'object' && /^[a-f0-9]{64}$/.test(s.game.sha256) && integer(s.game.size) && s.game.kind === 'program.rom');
     if (method === 'script.resolve') valid = s?.resolved === true;
     if (method === 'script.pending') valid = typeof s?.running==='boolean' && (s.pending===null || integer(s.pending?.id) && ['state_load','state_save','screenshot','input_export','input_import','input_prepare','video_start','video_stop','video_status','video_cancel'].includes(s.pending.kind) && typeof s.pending.path==='string');

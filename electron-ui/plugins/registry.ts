@@ -846,7 +846,8 @@ export class PluginRegistry {
     if(method==='n64.capture.control'){if(!r.manifest!.capabilities.includes('debug.read'))throw new ServiceError('plugin_capability_denied');capability='session.control';}
     if (method === 'script.read') capability = 'session.control'
     if (['n64.demo.status','n64.demo.read'].includes(method))capability='session.read';
-    if (method === 'session.status') capability = 'session.read'
+    if (method === 'session.status' || method === 'input.describe' || method === 'input.state' || method.startsWith('clock.')) capability = 'session.read'
+    if (method === 'input.set' || method === 'input.release') capability = 'session.control'
     if (['memory.regions', 'memory.read',
               'memory.readMany', 'memory.sample', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes', 'n64.memory.readMany', 'n64.memory.read'].includes(method))
       capability = 'memory.read'
@@ -874,7 +875,7 @@ export class PluginRegistry {
     if (
       r.phase !== 'active' &&
       ![
-        'session.status',
+        'session.status', 'input.describe', 'input.state',
         'memory.regions',
         'memory.read',
               'memory.readMany', 'memory.sample', 'memory.snapshot.capture', 'memory.recorder.start', 'memory.recorder.stop', 'memory.capture.status', 'memory.capture.read', 'memory.capture.page', 'memory.capture.release', 'memory.snapshot.compare', 'memory.capture.freeze', 'memory.query.start', 'memory.query.advance', 'memory.query.page', 'memory.query.release', 'memory.snapshot.changes',
@@ -896,6 +897,7 @@ export class PluginRegistry {
         r.owner,
       )
       this.lease(token)
+      if(method==='session.status' && reply.result) (reply.result as SessionStatus).plugin_grants=[...r.manifest!.capabilities];
       return reply
     } finally {
       --r.pending

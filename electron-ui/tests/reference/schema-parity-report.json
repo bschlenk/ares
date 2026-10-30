@@ -144,7 +144,7 @@
     }
   ],
   "reference_count": 68,
-  "current_count": 111,
+  "current_count": 116,
   "missing": [],
   "added": [
     "app_health",
@@ -161,6 +161,10 @@
     "demonstration_start",
     "demonstration_status",
     "demonstration_stop",
+    "input_describe",
+    "input_release",
+    "input_set",
+    "input_state",
     "load_rom",
     "matrix_capture",
     "memory_capture_export",
@@ -189,7 +193,8 @@
     "script_result",
     "script_result_release",
     "script_results",
-    "ui_screenshot"
+    "ui_screenshot",
+    "wait_frames"
   ],
   "matching": 0,
   "differences": [

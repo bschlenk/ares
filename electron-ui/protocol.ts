@@ -36,6 +36,7 @@ export class FrameParser {
         if(extended&&(![48,56,64].every(offset=>Number.isSafeInteger(h.readDoubleLE(offset))&&h.readDoubleLE(offset)>=0)||!h.readUInt32LE(80)||!h.readUInt32LE(84)))throw new Error('Invalid AEF3 frame identity');
         const flags=extended?h.readUInt32LE(76):0;
         const reference=extended&&(flags&1)?{
+          frame:h.readDoubleLE(56),frame_kind:flags&4?'synthetic-vi':flags&8?'primary-screen-frame':'vi',
           native_session:'',epoch:h.readDoubleLE(48),vi:flags&8?null:h.readDoubleLE(56),
           boundary:flags&4?'synthetic-vi':flags&8?'primary-screen-frame':'vi',
           origin:flags&2?h.readUInt32LE(72):null,origin_commit:flags&2?h.readDoubleLE(64):null,

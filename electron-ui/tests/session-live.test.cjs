@@ -26,7 +26,7 @@ test('native safe-point control, stale identities and stalled video', { timeout:
   try {
     const status = await client.request('session.status');
     assert.equal(status.result.paused, false);
-    assert.deepEqual(status.result.capabilities, METHODS);
+    assert.deepEqual(status.result.implemented_services, METHODS);
     assert.equal(status.protocol, 1);
     assert.equal(status.result.system, 'Synthetic');
     // No canvas credits have ever been issued. Control must still complete.

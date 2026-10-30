@@ -1163,3 +1163,11 @@ recording tap, or claim a matched gameplay-frame/origin reference. Blank/invalid
 VI data shows a black preview instead of retaining an unrelated old scene. Normal
 renderer frame credits still apply, so the preview also survives a temporarily
 unavailable or reloading renderer.
+
+### Cross-core controller and passive waits
+
+`input_describe`, `input_state`, `input_set`, `input_release` and `wait_frames`
+share the native/plugin contract documented in [CORE-CONTROL](../services/CORE-CONTROL.md).
+Use `emu_status.support`, `capabilities` and `unavailable_services` for current-core
+support; `implemented_services` is the complete registry, not an availability claim.
+Legacy `controller_*` tools remain N64-only.
