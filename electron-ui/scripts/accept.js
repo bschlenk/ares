@@ -105,6 +105,7 @@ async function main() {
   if (!Number.isInteger(summary.fixtureTests) || summary.fixtureTests < 1) throw new Error('Missing fixture test count')
   await gate('native-smoke', process.execPath, ['smoke.cjs'])
   for (const [name, file, args] of [
+    ['electron-local-ai', 'electron-local-ai.js', []],
     ['electron-session', 'electron-session.js', []],
     ['electron-shutdown', 'electron-shutdown.js', []],
     ['electron-mcp', 'electron-mcp.js', []],

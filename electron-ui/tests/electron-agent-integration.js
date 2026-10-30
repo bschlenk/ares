@@ -36,6 +36,11 @@ app.whenReady().then(async () => {
     const metadata = serviceHost.metadataFile;
     client = new LocalServiceClient(serviceHost.metadataFile, serviceHost.instance);
     assert.equal((await client.request('session.status')).session, initial.session);
+    const diagnostics=await client.manage({operation:'build_info'});
+    assert.equal(diagnostics.runtime.electron,process.versions.electron);
+    assert.equal(diagnostics.local_models.local_ai_handler_supported,true);
+    assert.equal(diagnostics.local_models.usable,false);
+    assert.equal(diagnostics.local_models.reason,'provider_not_configured');
     await js("window.ares.agentAction('copy')");
     const configuration = JSON.parse(await clipboard.readText()).mcpServers.ares;
     assert.ok(!configuration.args.join(' ').includes('--instance-name'));
