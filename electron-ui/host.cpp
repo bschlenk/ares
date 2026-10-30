@@ -660,6 +660,7 @@ int main(int argc, char** argv) {
   const void* memoryScreen = nullptr;
   if(!n64 && !synthetic && memoryRoot) for(auto screen : memoryRoot->find<ares::Node::Video::Screen>()) { if(!memoryScreen) memoryScreen = screen.get(); }
   if(memoryScreen) host.service.memoryTools.observedKind = "primary-screen-frame";
+  bool capturingCheckpoint=false;
   std::function<void()> boundaryObserver;
   ares::Video::frameSubmittedObserver = [&](const void* screen) {
     if(screen == memoryScreen && memoryScreen) {
@@ -724,8 +725,18 @@ int main(int argc, char** argv) {
   };
   host.service.n64Request = [&](const std::string& method, const std::vector<std::string>& args, const std::string& owner) {
     if(method.starts_with("checkpoint.")) {
-      const bool busy=bool(execution.active)||bool(execution.reservation)||host.stateLoader.upload.has_value()||scriptService.running||!observers.empty();
-      if(method!="checkpoint.commit") return host.checkpoints.execute(method,args,owner,host.root,host.captures,host.service.epoch,execution.frame,n64,busy,host.service.paused);
+      const bool busy=bool(execution.active)||bool(execution.reservation)||host.stateLoader.upload.has_value()||scriptService.running||(!observers.empty()&&method!="checkpoint.capture");
+      if(method!="checkpoint.commit") {
+        // Serialization may run coroutine cores to a synchronization point.
+        // Read-only observers retain their jobs, but must not reenter QuickJS
+        // while that core operation is in progress. Later samples count skips.
+        struct SuspendObservers {
+          bool& flag; bool previous;
+          SuspendObservers(bool& flag,bool capture):flag(flag),previous(flag){flag=flag||capture;}
+          ~SuspendObservers(){flag=previous;}
+        } suspended(capturingCheckpoint,method=="checkpoint.capture");
+        return host.checkpoints.execute(method,args,owner,host.root,host.captures,host.service.epoch,execution.frame,n64,busy,host.service.paused);
+      }
       auto& transfer=host.checkpoints.transfer;uint64_t id;
       if(args.size()!=2 || !ExecutionService::number(args[0],id) || (args[1]!="0"&&args[1]!="1"))return ControlResult{"invalid_request",{}};
       if(!transfer || transfer->id!=id || Clock::now()>=transfer->expires)return ControlResult{"stale_upload",{}};
@@ -994,8 +1005,8 @@ int main(int argc, char** argv) {
     }
     samplingOrigin=false;observerSpent+=Clock::now()-started;
   };
-  boundaryObserver=[&]{pumpObservers(false);};
-  if(n64)ares::Nintendo64::executionCoordinate.originObserver=[&]{pumpObservers(true);};
+  boundaryObserver=[&]{if(!capturingCheckpoint)pumpObservers(false);};
+  if(n64)ares::Nintendo64::executionCoordinate.originObserver=[&]{if(!capturingCheckpoint)pumpObservers(true);};
   uint64_t previewEpoch = 0;
   auto previewDeadline = Clock::now();
   while(!host.quit) {

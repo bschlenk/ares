@@ -69,8 +69,9 @@ does not itself capture or restore emulator state. A future host-managed recover
 broker must atomically associate a checkpoint with a committed journal sequence,
 recover only after technical failures, and report the age of the last committed
 recovery point. Existing GB checkpoints work, but capture serializes the core on
-the emulation thread and can briefly stall it; current native admission rejects
-capture while read-only observers are registered. No new save/load permission
+the emulation thread and can briefly stall it; capture now temporarily suspends read-only frame callbacks during serialization
+and resumes them afterward, with skipped samples accounted for. Restores remain
+exclusive. No new save/load permission
 has been granted to the player.
 
 Tests exercise restart reads, reordered duplicate payloads, pagination,
