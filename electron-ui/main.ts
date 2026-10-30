@@ -30,6 +30,7 @@ import {
   MessageChannelMain,
   Menu,
   protocol,
+  session as browserSession,
   clipboard,
   shell,
   type MessagePortMain,
@@ -251,7 +252,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
   switch (params.operation) {
     case 'plugin_exports': return pluginExports.page(params)
     case 'script_result': return sessions.readScriptResult(params)
-    case 'build_info': return {...buildInfo(),native_sha256:await hashRom(hostPath),app_instance:appLogs.instance,app_root:appRoot,executable:process.execPath}
+    case 'build_info': return {...buildInfo(),runtime:{electron:process.versions.electron,chromium:process.versions.chrome,node:process.versions.node},local_models:{local_ai_handler_supported:typeof browserSession.defaultSession.registerLocalAIHandler==='function',provider:'none',usable:false,reason:'provider_not_configured'},native_sha256:await hashRom(hostPath),app_instance:appLogs.instance,app_root:appRoot,executable:process.execPath}
     case 'app_logs': return appLogs.read(params)
     case 'app_health': return appHealth()
     case 'app_status': return { ready: sessions.identity !== undefined, pid: process.pid }

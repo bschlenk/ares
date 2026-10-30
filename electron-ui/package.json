@@ -12,6 +12,7 @@
     "build:services": "node scripts/build.js",
     "test:session": "node scripts/build.js && node --test tests/session-live.test.cjs",
     "presmoke": "node scripts/build.js",
+    "test:local-ai": "node scripts/build.js && electron tests/electron-local-ai.js",
     "test:electron": "node scripts/build.js && electron tests/electron-session.js",
     "package:mac": "node scripts/build.js && node scripts/package-macos.js",
     "test:mcp": "node scripts/build.js && electron tests/electron-mcp.js",
@@ -51,7 +52,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
-    "electron": "44.9.0",
+    "electron": "45.1.0",
     "typescript": "^7.0.2"
   },
   "dependencies": {
