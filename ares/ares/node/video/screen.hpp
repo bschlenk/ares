@@ -33,8 +33,9 @@ struct Screen : Video {
   // Hosts call this synchronously from Platform::video while refresh owns _mutex.
   struct PresentationGeometry { u32 canvasWidth, canvasHeight, cropX, cropY, rotation; };
   auto presentationGeometry() const -> PresentationGeometry {
-    return {_canvasWidth, _canvasHeight, _viewportX, _viewportY, _rotation};
+    return {_canvasWidth, _canvasHeight, _presentationX, _presentationY, _rotation};
   }
+  auto deinterlace() const -> string { return _deinterlace; }
 
   auto resetPalette() -> void;
   auto resetSprites() -> void;
@@ -62,6 +63,7 @@ struct Screen : Video {
 
   auto setProgressive(bool progressiveDouble = false) -> void;
   auto setInterlace(bool interlaceField) -> void;
+  auto setDeinterlace(string deinterlace) -> void;
 
   auto attach(Node::Video::Sprite) -> void;
   auto detach(Node::Video::Sprite) -> void;
@@ -80,6 +82,7 @@ private:
   auto refreshPalette() -> void;
 
 protected:
+  u32 _presentationX = 0, _presentationY = 0;
   u32  _canvasWidth = 0;
   u32  _canvasHeight = 0;
   u32  _width = 0;
@@ -106,6 +109,7 @@ protected:
   std::unique_ptr<u32[]> _output;
   std::unique_ptr<u32[]> _rotate;
   std::unique_ptr<u32[]> _palette;
+  std::unique_ptr<u32[]> _deinterlaceHistory;
   std::vector<n1> _lineOverrideActive;
   std::vector<const u32*> _lineOverride;
   std::vector<Node::Video::Sprite> _sprites;
@@ -122,6 +126,8 @@ protected:
   bool _progressiveDouble = false;
   bool _interlace = false;
   bool _interlaceField = false;
+  string _deinterlace = "Weave";
+  bool _deinterlaceHistoryValid = false;
   u32  _viewportX = 0;
   u32  _viewportY = 0;
   u32  _viewportWidth = 0;

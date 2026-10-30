@@ -1,9 +1,9 @@
 # Frontend-native loaders and mapping/configuration support, without a GUI toolkit.
 add_executable(ares-electron-host host.cpp
   native/runtime/runtime.cpp
-  native/runtime/input/input.cpp
-  native/runtime/emulator/emulator.cpp
-  native/runtime/settings/settings.cpp)
+  ../desktop-ui/input/input.cpp
+  ../desktop-ui/emulator/emulator.cpp
+  ../desktop-ui/settings/settings.cpp)
 target_include_directories(ares-electron-host PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(ares-electron-host PRIVATE ares::ares ares::mia ares::ruby ares::nall)
 if(ARES_ENABLE_CHD)

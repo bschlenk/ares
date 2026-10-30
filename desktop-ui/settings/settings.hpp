@@ -1,0 +1,126 @@
+// Shared by firmware discovery and the existing loader's BML bindings.
+inline auto firmwareSettingPath(const string& system, const string& type, const string& region) -> string {
+  string base = string{system}.replace(" ", "").replace("(", "").replace(")", "");
+  return string{base, "/Firmware/", type, ".", region}.replace(" ", "-").replace("(", "").replace(")", "");
+}
+
+struct Settings : Markup::Node {
+  using string = nall::string;
+
+  auto process(bool load) -> void;
+  static auto inputKey(string name, bool input = false) -> string;
+
+  string filePath;
+
+  struct Video {
+    f64 luminance = 1.0;
+    f64 saturation = 1.0;
+    f64 gamma = 1.0;
+    bool colorBleed = false;
+    bool colorEmulation = true;
+    bool interframeBlending = true;
+    string deinterlacing = "Weave";
+    bool overscan = true;
+    bool pixelAccuracy = false;
+  } video;
+
+  struct Audio {
+    string device;
+    u32 frequency = 0;
+    u32 latency = 0;
+    bool exclusive = false;
+    bool blocking = true;
+    bool dynamic = false;
+    bool mute = false;
+
+    f64 volume = 0.4;
+    f64 balance = 0.0;
+  } audio;
+
+  struct Input {
+    string defocus = "Pause";
+    string digitalToAnalog = "Immediate";
+    u32 digitalToAnalogTime = 500;
+  } input;
+
+  struct Boot {
+    bool fast = true;
+    bool debugger = false;
+    bool awaitGDBClient = false;
+    string prefer = "NTSC-U";
+  } boot;
+
+  struct General {
+    bool showStatusBar = true;
+    bool rewind = false;
+    bool runAhead = false;
+    bool autoSaveMemory = true;
+    bool noFilePrompt = false;
+  } general;
+
+  struct Rewind {
+    u32 length = 80;
+    u32 frequency = 60;
+    bool mute = false;
+  } rewind;
+
+  struct Paths {
+    string home;
+    string firmware;
+    string saves;
+    string screenshots;
+    string debugging;
+    string arcadeRoms;
+    struct SuperFamicom {
+      string gameBoy;
+      string bsMemory;
+      string sufamiTurbo;
+    } superFamicom;
+  } paths;
+
+  struct Recent {
+    string game[9];
+  } recent;
+
+  struct Developer {
+    u32  debugServerPort = 9123;
+    bool debugServerEnabled = false; // if enabled, server starts with ares
+    bool debugServerUseIPv4 = false; // forces IPv4 over IPv6
+    bool homebrewMode = false;
+    bool deterministicEntropy = false;
+    bool forceInterpreter = false;
+  } developer;
+
+  struct Nintendo64 {
+    bool expansionPak = true;
+    u8 controllerPakBankCount = 1;
+    string controllerPakBankString = "32KiB (Default)";
+    string quality = "SD";
+    bool supersampling = false;
+    bool disableVideoInterfaceProcessing = false;
+    bool weaveDeinterlacing = true;
+  } nintendo64;
+
+  struct PlayStation {
+    string expansionDevice = "None";
+  } playstation;
+
+  struct GameBoyAdvance {
+    bool player = false;
+  } gameBoyAdvance;
+
+  struct SuperFamicom {
+    bool deepBlackBoost = false;
+  } superFamicom;
+
+  struct MegaDrive {
+    bool tmss = false;
+  } megadrive;
+
+  struct NeoGeo {
+    string aesBios = "neo-po.bin";
+    string mvsBios = "vs-bios.rom";
+  } neoGeo;
+};
+
+extern Settings settings;

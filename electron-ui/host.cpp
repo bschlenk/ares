@@ -23,7 +23,7 @@
 #include <fcntl.h>
 #include <io.h>
 #endif
-#include "native/runtime/runtime.hpp"
+#include <desktop-ui/desktop-ui.hpp>
 #include <n64/n64.hpp>
 #include <ares/frame-observer.hpp>
 #include <nall/gdb/server.hpp>
@@ -454,6 +454,10 @@ int main(int argc, char** argv) {
       auto bytes = probe->pak->read("program.rom"); bytes->seek(0x143);
       matches = {bytes->read() & 0x80 ? "Game Boy Color" : "Game Boy"};
     }
+    // Upstream consolidated the MVS frontend into Arcade; accept saved launch selections.
+#ifdef CORE_NG
+    if(selectedSystem == "Neo Geo MVS") selectedSystem = "Arcade";
+#endif
     if(!selectedSystem.empty()) matches = {selectedSystem.c_str()};
     // The registry, rather than a second hand-maintained whitelist, determines support.
     std::erase_if(matches, [](const auto& name) {
@@ -505,6 +509,10 @@ int main(int argc, char** argv) {
     auto configText=[&](const std::string& value){configurationHash.input(std::span<const uint8_t>{reinterpret_cast<const uint8_t*>(value.data()),value.size()});configurationHash.input(uint8_t(0));};
     configText("ares-checkpoint-configuration-v1");configText(host.root->attribute("configuration").data());
     if(emulator->system && emulator->system->pak) {
+      if(auto hash = emulator->system->pak->attribute("expansion-firmware-hash")) {
+        configText(emulator->system->pak->attribute("expansion-device").data());
+        configText(hash.data());
+      }
       auto files=emulator->system->pak->files();std::ranges::sort(files,{},[](auto& file){return std::string(file->name().data());});
       for(auto& file:files) {
         auto name=file->name();if(!name.endsWith(".rom")&&!name.endsWith(".bios")&&!name.endsWith(".bin"))continue;
