@@ -605,3 +605,10 @@ ports, passive elapsed waits, current-session support and permission discovery.
 `session.control` admits `input.set`/`input.release`; `session.read` admits input
 description/state and elapsed waits. Existing read-only observers now also use
 the shared primary-screen frame event on non-N64 cores.
+
+## Durable events and notes
+
+The opt-in `storage.journal` capability admits `ctx.journal.append/read`. See
+[the journal contract](JOURNAL.md) for stable retry IDs, sequence numbers, schema
+versions, durable publication and quotas. This trusted API does not add model
+script bindings or emulator save/load permissions.

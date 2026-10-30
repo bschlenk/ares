@@ -83,6 +83,11 @@ export interface PluginContext {
     ): Disposer
     interval(callback: () => void, milliseconds: number): Disposer
   }
+  /** Trusted, durable journal; requires storage.journal. Never automatically exposed to model scripts. */
+  journal: {
+    append(stream:string,record:import('./journal-contracts.js').JournalAppend):Promise<import('./journal-contracts.js').JournalReceipt>
+    read<T=unknown>(stream:string,options?:{afterSequence?:number;limit?:number}):Promise<import('./journal-contracts.js').JournalPage<T>>
+  }
   storage: {
     get<T = unknown>(key: string): Promise<T | undefined>
     set(key: string, value: unknown): Promise<void>

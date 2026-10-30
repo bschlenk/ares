@@ -1,0 +1,24 @@
+import {app,BrowserWindow} from 'electron';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+const temporary=fs.mkdtempSync('/tmp/ares-journal-ui-'),profile=path.join(temporary,'profile'),source=path.join(temporary,'plugin');fs.mkdirSync(source);
+fs.writeFileSync(path.join(source,'manifest.json'),JSON.stringify({id:'test.journal',name:'Journal fixture',version:'1.0.0',apiVersion:1,entry:'plugin.js',storageVersion:1,capabilities:['storage.journal'],contributes:{commands:[{id:'ready',title:'Journal ready'}]}}));
+fs.writeFileSync(path.join(source,'plugin.js'),"export function activate(ctx){window.journalCtx=ctx;ctx.ui.registerCommand('ready',()=>{});}");
+app.setPath('userData',profile);Object.assign(process.env,{ARES_PROFILE_DIR:profile,ARES_SAVE_DIR:path.join(profile,'saves'),ARES_PLUGIN_DIRS:source,ARES_DEFAULT_PLUGINS:'0',ARES_ROM:'',ARES_AUTOTEST:'',ARES_SILENT:'1',ARES_BACKGROUND_TEST:'1',ARES_SERVICE_DIR:path.join(temporary,'ipc')});
+const {plugins}=await import('../dist/main.js');const timer=setTimeout(()=>{console.error('journal UI deadline');app.exit(1);},20000);
+const until=async fn=>{for(let i=0;i<300;i++){try{const value=await fn();if(value)return value;}catch{}await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('journal UI timeout');};
+app.on('will-quit',()=>{clearTimeout(timer);fs.rmSync(temporary,{recursive:true,force:true});});
+app.whenReady().then(async()=>{
+  const window=await until(()=>BrowserWindow.getAllWindows()[0]),js=code=>window.webContents.executeJavaScript(code);
+  await plugins.enable('test.journal',true);await until(()=>js(`!!document.querySelector('[data-plugin-command="test.journal:ready"]')`));
+  const receipts=await js(`Promise.all(Array.from({length:4},(_,i)=>window.journalCtx.journal.append('events',{id:'event-'+i,schemaVersion:1,value:{note:'x'.repeat(8000),i}})))`);
+  assert.deepEqual(receipts.map(r=>r.sequence),[1,2,3,4]);assert(receipts.at(-1).bytes>16384);
+  await js('window.oldJournalCtx=window.journalCtx;true');const old=plugins.catalog().plugins.find(p=>p.manifest?.id==='test.journal').lease.token;
+  await plugins.reload('test.journal');await until(()=>js('window.journalCtx!==window.oldJournalCtx&&!window.journalCtx.signal.aborted'));
+  const restored=await js(`window.journalCtx.journal.read('events',{limit:64})`);assert.deepEqual(restored.records.map(r=>r.value.i),[0,1,2,3]);assert.equal(restored.nextSequence,5);
+  await assert.rejects(js(`window.oldJournalCtx.journal.append('events',{id:'late',schemaVersion:1,value:0})`),/stale_plugin_scope/);
+  await assert.rejects(plugins.storage(old,'journal.read','events',{afterSequence:0,limit:1}),/stale_plugin_scope/);
+  const duplicate=await js(`window.journalCtx.journal.append('events',{id:'event-0',schemaVersion:1,value:{i:0,note:'x'.repeat(8000)}})`);assert.equal(duplicate.sequence,1);assert.equal(duplicate.duplicate,true);
+  console.log('PLUGIN_JOURNAL_PASS');app.quit();
+}).catch(error=>{console.error(error);app.exit(1);});

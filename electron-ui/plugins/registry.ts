@@ -1,3 +1,4 @@
+import {PluginJournals} from './journal.js'
 import { PLUGIN_REQUEST_LIMIT, PluginAdmissionError } from './admission.js'
 import type { PluginSettingsService } from '../settings/plugins.js'
 import type { PluginSettingsRequest } from '../settings/contracts.js'
@@ -34,6 +35,7 @@ interface Record extends PluginInfo {
   storageQueue: Promise<unknown>
 }
 export class PluginRegistry {
+  private journals=new PluginJournals()
   private settingsHost?: PluginSettingsService
   connectSettings(host: PluginSettingsService) {
     if (this.settingsHost) throw new Error('settings_host_already_connected')
@@ -982,13 +984,18 @@ export class PluginRegistry {
     value?: unknown,
   ) {
     const r = this.lease(token)
-    if (r.phase !== 'active' && operation !== 'get')
+    if (r.phase !== 'active' && !['get','journal.read'].includes(operation))
       throw new ServiceError('plugin_not_ready')
     if (
       !/^[A-Za-z0-9._-]{1,64}$/.test(key) ||
       ['__proto__', 'constructor', 'prototype'].includes(key)
     )
       throw new Error('Invalid storage key')
+    if(operation.startsWith('journal.')) {
+      if(!r.manifest!.capabilities.includes('storage.journal'))throw new ServiceError('plugin_capability_denied');
+      const file=path.join(this.dataRoot,`${r.manifest!.id}-v${r.manifest!.storageVersion??1}.journal.json`);
+      return this.journals.request(file,key,operation,value,()=>{this.lease(token)});
+    }
     const file = path.join(
       this.dataRoot,
       `${r.manifest!.id}-v${r.manifest!.storageVersion ?? 1}.json`,

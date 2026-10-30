@@ -308,6 +308,10 @@ export class PluginScope {
           })
         },
       },
+      journal: {
+        append:async(stream,record)=>{writable();const result=await window.ares.plugins.storage(this.token,'journal.append',stream,record);alive();return result as import('./journal-contracts.js').JournalReceipt;},
+        read:async<T>(stream:string,options?:{afterSequence?:number;limit?:number})=>{alive();const result=await window.ares.plugins.storage(this.token,'journal.read',stream,{afterSequence:options?.afterSequence??0,limit:options?.limit??32});alive();return result as import('./journal-contracts.js').JournalPage<T>;},
+      },
       storage: {
         get: async <T>(key: string) => {
           alive()
