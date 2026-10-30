@@ -7,6 +7,10 @@ struct Memory : Debugger {
   auto readable() const -> bool { return bool(_read); }
   auto writable() const -> bool { return bool(_write); }
 
+  // Optional stable binary layout identifier for structured read-only views.
+  auto format() const -> string { return _format; }
+  auto setFormat(string format) -> void { _format = format; }
+
   auto size() const -> u32 { return _size; }
   auto read(u32 address) const -> n8 { if(_read) return _read(address); return 0; }
   auto write(u32 address, u8 data) const -> void { if(_write) return _write(address, data); }
@@ -24,6 +28,7 @@ struct Memory : Debugger {
   }
 
 protected:
+  string _format;
   u32 _size = 0;
   std::function<u8 (u32)> _read;
   std::function<void (u32, u8)> _write;

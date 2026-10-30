@@ -52,6 +52,7 @@ struct MemoryService {
       for(auto& r : regions) {
         if(json.back() != '[') json += ',';
         json += "{\"id\":" + controlQuote(r.id) + ",\"name\":" + controlQuote(r.node->name().data()) + ",\"size\":" + std::to_string(r.node->size()) + ",\"readable\":" + (r.supported && r.node->readable() ? "true" : "false") + ",\"writable\":" + (r.supported && r.writesAllowed && r.node->writable() ? "true" : "false") + ",\"addressing\":\"region-offset\"";
+        if(r.node->format()) json += ",\"format\":" + controlQuote(r.node->format().data());
         if(!r.supported) json += ",\"unavailableReason\":\"Requires N64 cache-aware service\"";
         else if(!r.writesAllowed) json += ",\"unavailableReason\":\"Writes require N64 memory service; host reads use raw physical storage\"";
         json += '}';
