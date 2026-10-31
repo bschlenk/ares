@@ -28,6 +28,9 @@ struct System {
 
   //serialization.cpp
   auto stateVersion() const -> string;
+  //v153 states saved before the arcade DIP switch refactor end with two
+  //retired Aleck64 dipSwitch bytes; loaders accept that legacy trailer.
+  static constexpr u32 LegacyStateTrailerSize = 2;
   auto inspectStateRdramLayout() -> std::pair<u64, u64>;
   auto serialize(bool synchronize = true) -> serializer;
   auto unserialize(serializer&) -> bool;

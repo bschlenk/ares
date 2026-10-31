@@ -69,7 +69,7 @@ struct StateLoader {
       if(snapshots.romHash != upload->romHash) return {"state_rom_mismatch", {}};
     }
     auto current = ares::Nintendo64::system.serialize();
-    if(bytes.size() != current.size()) return {"state_configuration_mismatch", {}};
+    if(bytes.size() != current.size() && bytes.size() != current.size() + System::LegacyStateTrailerSize) return {"state_configuration_mismatch", {}};
     nall::serializer state{bytes.data(), uint32_t(bytes.size())};
     touched = true;
     bool loaded = ares::Nintendo64::system.unserialize(state);

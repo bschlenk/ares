@@ -43,17 +43,24 @@ test('real N64 save/load restores registers, starts a new epoch and preflights f
     const short = path.join(dir, 'truncated.bs'); fs.writeFileSync(short, fs.readFileSync(file).subarray(0, 600));
     assert.equal((await peer.tool('state_load', { path: short })).error, 'state_configuration_mismatch');
     assert.deepEqual(unwrap(await native.request('n64.debug.registers')), current); assert.equal(native.identity.epoch, epoch);
+    // v153 states saved before the arcade DIP switch refactor end with two retired Aleck64 bytes.
+    const legacy = path.join(dir, 'legacy.bs'); fs.writeFileSync(legacy, Buffer.concat([fs.readFileSync(file), Buffer.alloc(2)]));
+    assert.equal((await peer.tool('state_load', { path: legacy })).epoch, epoch + 1);
+    assert.deepEqual(unwrap(await native.request('n64.debug.registers')), baseline);
+    fs.writeFileSync(legacy, Buffer.concat([fs.readFileSync(file), Buffer.alloc(3)]));
+    assert.equal((await peer.tool('state_load', { path: legacy })).error, 'state_configuration_mismatch');
+    await steps(native, 3); const afterLegacy = unwrap(await native.request('n64.debug.registers'));
     const incompatible = path.join(dir, 'unsupported.bs'), other = Buffer.from(fs.readFileSync(file)); other.write('v999', 5); fs.writeFileSync(incompatible, other);
     assert.equal((await peer.tool('state_load', { path: incompatible })).error, 'unsupported_version');
     assert.equal(unwrap(await native.request('session.status')).paused, true);
     const corrupt = path.join(dir, 'corrupt.bs'); fs.copyFileSync(file, corrupt); fs.copyFileSync(file + '.json', corrupt + '.json');
     const altered = fs.readFileSync(corrupt); altered[altered.length - 1] ^= 1; fs.writeFileSync(corrupt, altered);
     assert.equal((await peer.tool('state_load', { path: corrupt })).error, 'state_metadata_mismatch');
-    assert.deepEqual(unwrap(await native.request('n64.debug.registers')), current);
+    assert.deepEqual(unwrap(await native.request('n64.debug.registers')), afterLegacy);
     const meta = JSON.parse(fs.readFileSync(file + '.json')); meta.rom_sha256 = '0'.repeat(64); fs.writeFileSync(file + '.json', JSON.stringify(meta));
     assert.equal((await peer.tool('state_load', { path: file })).error, 'state_rom_mismatch');
     delete meta.rom_sha256; fs.writeFileSync(file + '.json', JSON.stringify(meta));
-    const second = await peer.tool('state_load', { path: file }); assert.equal(second.epoch, 3); assert.equal(second.input.ports[0].pending.overridden, false);
+    const second = await peer.tool('state_load', { path: file }); assert.equal(second.epoch, 4); assert.equal(second.input.ports[0].pending.overridden, false);
     unwrap(await client.request('session.status'));
     const transfer = unwrap(await client.request('n64.state.loadBegin'));
     assert.equal((await native.request('execution.runFrames', undefined, { count: 1, timeoutMs: 10 })).error, 'busy');
@@ -81,14 +88,14 @@ test('real N64 save/load restores registers, starts a new epoch and preflights f
     assert.equal(unwrap(await native.request('session.status')).paused, false);
     assert.equal((await client.request('n64.state.loadPrepare', undefined, { uploadId: humanTicket.upload_id, bytes: 600, offset: 0, size: 0, romHash: null })).error, 'stale_upload');
     child.stdin.write('key A 0\n'); unwrap(await native.request('session.pause'));
-    const resumed = await peer.tool('state_load', { path: file, resume: true }); assert.equal(resumed.running, true); assert.equal(resumed.epoch, 4);
+    const resumed = await peer.tool('state_load', { path: file, resume: true }); assert.equal(resumed.running, true); assert.equal(resumed.epoch, 5);
     await peer.tool('pause'); assert.equal(unwrap(await native.request('session.status')).paused, true);
     // Original generated state fixture: enable the serialized RDRAM identity
     // mapping (n1 immediately after the raw RAM bytes), without a product backdoor.
     const layout = unwrap(await native.request('n64.state.layout'));
     const initialized = fs.readFileSync(file); initialized[layout.offset + layout.size] = 1;
     const initializedFile = path.join(dir, 'initialized-fixture.bs'); fs.writeFileSync(initializedFile, initialized);
-    const initializedLoad = await peer.tool('state_load', { path: initializedFile }); assert.equal(initializedLoad.epoch, 5);
+    const initializedLoad = await peer.tool('state_load', { path: initializedFile }); assert.equal(initializedLoad.epoch, 6);
     const beforeExperiment = unwrap(await native.request('n64.debug.registers'));
     const many = await peer.tool('write_memory_many', { writes: [{ addr: '0x2000', hex: '1122', view: 'rdram' }, { addr: '0x2001', hex: 'AA', view: 'rdram' }] });
     assert.equal(many.error, undefined, JSON.stringify(many)); assert.deepEqual(many.immediate_verification.matches, [false, true]);
