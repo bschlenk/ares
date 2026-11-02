@@ -264,6 +264,11 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
     case 'script_result': return sessions.readScriptResult(params)
     case 'build_info': return {...buildInfo(),runtime:{electron:process.versions.electron,chromium:process.versions.chrome,node:process.versions.node},local_models:{local_ai_handler_supported:typeof browserSession.defaultSession.registerLocalAIHandler==='function',provider:'none',usable:false,reason:'provider_not_configured'},native_sha256:await hashRom(hostPath),app_instance:appLogs.instance,app_root:appRoot,executable:process.execPath}
     case 'app_logs': return appLogs.read(params)
+    case 'video_surfaces':
+      if(Object.keys(params).some(key=>key!=='operation'))throw new Error('invalid_request');
+      if(rendererRecovery.status().state!=='ready')return {supported:true,available:false,reason:'renderer_'+rendererRecovery.status().state,surfaces:[]};
+      if(active?.failure||!sessions.health().connected)return {supported:true,available:false,reason:'native_disconnected',surfaces:[]};
+      return {supported:true,available:true,source:'native-presented',surfaces:await window.webContents.executeJavaScript('window.videoSnapshot?.()??[]')};
     case 'renderer_status':
       if(Object.keys(params).some(key=>key!=='operation'))throw new Error('invalid_request');
       return rendererRecovery.status();
@@ -310,13 +315,23 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
         rect = await window.webContents.executeJavaScript(`(() => {const all=[...document.querySelectorAll('[data-plugin-panel]')];const e=all.find(e=>e.dataset.pluginPanel===${selector} && e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0);if(!e)return;const r=e.getBoundingClientRect();return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)}})()`)
         if (!rect) throw new Error('panel_not_open')
       }
-      const before=await window.webContents.executeJavaScript('window.overlaySnapshot?.()??null')
-      const image = await window.webContents.capturePage(rect)
-      const after=await window.webContents.executeJavaScript('window.overlaySnapshot?.()??null')
-      const frame_reference=before?.frame&&after?.frame&&JSON.stringify(before)===JSON.stringify(after)?after.frame:null
-      const overlay_geometry=frame_reference?{coordinate_space:'overlay_css',rect_coordinate_space:'window_css',...after.size,rect:after.rect,capture_rect:rect??null}:null
-      await fs.promises.writeFile(params.path, image.toPNG(), { flag: 'wx' })
-      return { frame_reference,overlay_geometry,frame_match:frame_reference?'renderer_submit':'unavailable_or_changed',path: params.path, source: params.panel === undefined ? 'window' : 'panel', panel: params.panel ?? null, ...image.getSize() }
+      const captureLease = await window.webContents.executeJavaScript('window.beginVideoCapture()') as string
+      try {
+        const before=await window.webContents.executeJavaScript('({overlay:window.overlaySnapshot?.()??null,surfaces:window.videoSnapshot?.()??[]})')
+        const image = await window.webContents.capturePage(rect)
+        const after=await window.webContents.executeJavaScript('({overlay:window.overlaySnapshot?.()??null,surfaces:window.videoSnapshot?.()??[]})')
+        const frame_reference=before.overlay?.frame&&after.overlay?.frame&&JSON.stringify(before.overlay)===JSON.stringify(after.overlay)?after.overlay.frame:null
+        const overlay_geometry=frame_reference?{coordinate_space:'overlay_css',rect_coordinate_space:'window_css',...after.overlay.size,rect:after.overlay.rect,capture_rect:rect??null}:null
+        const video_surfaces=after.surfaces.filter((surface:any)=>surface.visible&&(!rect||surface.rect.x<rect.x+rect.width&&surface.rect.x+surface.rect.width>rect.x&&surface.rect.y<rect.y+rect.height&&surface.rect.y+surface.rect.height>rect.y)).map((surface:any)=>{
+          const previous=before.surfaces.find((s:any)=>s.id===surface.id)
+          const stable=surface.frame&&JSON.stringify(previous)===JSON.stringify(surface)
+          return {...surface,frame:stable?surface.frame:null,frame_match:stable?'renderer_submit':'unavailable_or_changed',rect_coordinate_space:'window_css',capture_rect:rect??null}
+        })
+        await fs.promises.writeFile(params.path, image.toPNG(), { flag: 'wx' })
+        return { frame_reference,overlay_geometry,video_surfaces,frame_match:frame_reference?'renderer_submit':'unavailable_or_changed',path: params.path, source: params.panel === undefined ? 'window' : 'panel', panel: params.panel ?? null, ...image.getSize() }
+      } finally {
+        if(!window.webContents.isDestroyed())await window.webContents.executeJavaScript(`window.endVideoCapture(${JSON.stringify(captureLease)})`).catch(()=>{})
+      }
     }
     case 'list':
       return pluginCatalog(params.offset ?? 0, params.limit ?? 4)
@@ -735,7 +750,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     }
   }).catch(error => status(String(error)))
   child.on('error', (error) => { appLogs.write('native', 'error', error, session.generation); status(`Cannot start native host: ${error.message}`) })
-  child.on('close', (code, signal) => { appLogs.endNative(session.generation); appLogs.write('native', code ? 'error' : 'info', JSON.stringify({event:'exit',code,signal}), session.generation) })
+  child.on('close', (code, signal) => { if(active===session){session.failure='native_disconnected';port?.postMessage({reset:true,system:session.system,reason:'native_disconnected'});} appLogs.endNative(session.generation); appLogs.write('native', code ? 'error' : 'info', JSON.stringify({event:'exit',code,signal}), session.generation) })
   child.stdin.on('error', () => {}) // exit races are reported by close/error
   child.stderr.on('data', (data) => {
     appLogs.native(data, session.generation)
@@ -767,7 +782,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
       child.kill()
     }
   })
-  port?.postMessage({ reset: true, system })
+  port?.postMessage({ reset: true, system, identity })
   command('ack')
   await startup
   if (options.agent) {
@@ -888,16 +903,24 @@ app
       rendererRecovery.crashed(JSON.stringify(details));
       appLogs.write('renderer', 'error', JSON.stringify(details))
       observerDeliveries.clear()
-      plugins.detach()
+      plugins.detach('renderer_crashed')
       port?.close()
       port = null
     })
     window.webContents.on('did-start-loading', () => {
       rendererRecovery.loading();
       observerDeliveries.clear()
-      plugins.detach()
+      plugins.detach('renderer_loading')
       port?.close()
       port = null
+    })
+    ipcMain.handle('plugin.importDiagnostic', (event, value) => {
+      if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!value||
+        typeof value.id!=='string'||value.id.length>96||!plugins.catalog().plugins.some(p=>p.manifest?.id===value.id)||
+        !['started','complete','failed'].includes(value.phase)||!Number.isFinite(value.elapsedMs)||value.elapsedMs<0||
+        value.heapBytes!==null&&(!Number.isSafeInteger(value.heapBytes)||value.heapBytes<0))throw new Error('invalid_import_diagnostic');
+      const metric=app.getAppMetrics().find(p=>p.pid===window.webContents.getOSProcessId());
+      appLogs.write('plugin-import', value.phase==='failed'?'warn':'info', JSON.stringify({id:value.id,phase:value.phase,elapsed_ms:value.elapsedMs,js_heap_bytes:value.heapBytes,renderer_memory:metric?.memory??null}));
     })
     ipcMain.on('ready', (event) => {
       if (event.sender !== window.webContents) return
@@ -921,8 +944,8 @@ app
       port.start()
       window.webContents.postMessage('frames', null, [channel.port2])
       if (active) {
-        port.postMessage({ reset: true, system: active.system })
-        if (active.outstanding && active.lastFrame)
+        port.postMessage({ reset: true, system: active.system, identity:sessions.identity, ...(active.failure?{reason:'native_disconnected'}:{}) })
+        if (active.outstanding && active.lastFrame && !active.failure)
           port.postMessage({
             ...active.lastFrame,
             generation: active.generation,

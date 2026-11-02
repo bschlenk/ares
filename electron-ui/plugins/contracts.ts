@@ -10,6 +10,7 @@ import type {
 } from '../services/contracts.js'
 export const PLUGIN_API_VERSION = 1
 export const CAPABILITIES = [
+  'video.read',
   'network.request',
   'network.websocket',
   'recovery.manage',
@@ -69,6 +70,7 @@ export interface PluginCandidate {
   artifact: string
 }
 export interface PluginInfo {
+  unavailableReason?: string
   configuredEnabled?: boolean
   artifact?: string
   candidate?: PluginCandidate
@@ -85,6 +87,7 @@ export interface PluginInfo {
   logs: { level: string; message: string }[]
 }
 export interface PluginCatalog {
+  renderer?: {available: boolean; reason: string | null}
   startupDisabled?: boolean
   revision?: number
   apiVersion: 1
@@ -97,6 +100,7 @@ export interface PluginAction {
   name: string
 }
 export interface PluginBridge {
+  importDiagnostic(value:{id:string;phase:'started'|'complete'|'failed';elapsedMs:number;heapBytes:number|null}):Promise<void>;
   network(token:string,request:import('./network-contracts.js').NetworkCall):Promise<import('./network-contracts.js').NetworkReply | PluginBridgeFailure>;
   library(token: string, request: import('../library/contracts.js').LibraryRequest): Promise<unknown | PluginBridgeFailure>;
   clipboard(token:string,text:string):Promise<{copied:true;bytes:number}|PluginBridgeFailure>;

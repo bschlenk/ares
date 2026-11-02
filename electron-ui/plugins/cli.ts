@@ -83,6 +83,7 @@ async function main() {
     }
   }
   try {
+    if(operation==='video-status')return await client.manage({operation:'video_surfaces'});
     if(operation==='renderer-status')return await client.manage({operation:'renderer_status'});
     if(operation==='recover-renderer')return await client.manage({operation:'recover_renderer'});
     if (operation === 'logs') return await client.manage({ operation: 'logs', id: values[0], cursor: Number(options.cursor ?? 0), limit: Number(options.limit ?? 32), ...(options.generation ? {generation: options.generation} : {}) })

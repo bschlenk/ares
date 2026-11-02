@@ -1171,3 +1171,16 @@ share the native/plugin contract documented in [CORE-CONTROL](../services/CORE-C
 Use `emu_status.support`, `capabilities` and `unavailable_services` for current-core
 support; `implemented_services` is the complete registry, not an availability claim.
 Legacy `controller_*` tools remain N64-only.
+
+### Embedded video and renderer recovery
+
+`video_surfaces` returns embedded view health, dimensions, geometry and each
+view's current renderer-submit frame reference. It carries metadata, not a video
+stream. `ui_screenshot` includes visible embedded canvases and returns their
+individual references in `video_surfaces[]`; the top-level reference still
+belongs to the primary view. See [video contracts](../video/README.md).
+
+`renderer_status` inspects renderer lifecycle and `recover_renderer` recreates a
+crashed renderer while retaining the native game, with bounded timeout/retry and
+explicit identity verification. Neither operation is exposed to model scripts
+or the plugin SDK. See [recovery diagnostics](../services/RENDERER-RECOVERY.md).

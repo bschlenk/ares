@@ -11,7 +11,7 @@ export interface VideoFrame {
   nativeMs: number; queueMs: number; aspect: number; pixels: Uint8Array<ArrayBuffer>;
 }
 export interface FramePacket extends VideoFrame { generation: number; receivedMs: number }
-export type FrameMessage = { reset: true; system: string } | (FramePacket & { reset?: false });
+export type FrameMessage = { reset: true; system: string; identity?:SessionIdentity; reason?:string } | (FramePacket & { reset?: false });
 export interface StartOptions { rom?: string; system?: string; media?: string[]; hd?: boolean; silent?: boolean }
 export interface RendererStats {
   system: string; frames: number; receivedFrames: number; maxPending: number; skipped: number;

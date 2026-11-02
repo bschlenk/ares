@@ -634,3 +634,12 @@ can fetch summaries or subscribe to updates from its own local backend; Ares
 supplies generic transport and scope cleanup. See [the networking contract](NETWORK.md)
 for manifest examples, limits, authentication and hot-reload behavior. Direct
 renderer networking remains disabled. These grants do not become model bindings.
+
+## Embedded native video
+
+Declare `video.read` and use `ctx.video.mount(element, options)` inside
+a live panel for host-owned native video, independent view scaling, lifecycle
+cleanup and frame-matched overlays. See [the video surface contract](../video/README.md)
+and [example dashboard](../examples/native-video/plugin.js). Audio remains native;
+video grants add no game-control permissions. [Renderer recovery](../services/RENDERER-RECOVERY.md)
+retains a live native game and recreates plugin/video scopes after a crash.

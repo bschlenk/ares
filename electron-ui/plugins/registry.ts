@@ -95,6 +95,7 @@ export class PluginRegistry {
     game: GameIdentity | null
   }
   private renderer = false
+  private rendererReason = 'renderer_starting'
   private mutation = Promise.resolve()
   private configurationError?: string
   private watchers = new Map<
@@ -634,6 +635,7 @@ export class PluginRegistry {
   catalog(): PluginCatalog {
     return {
       apiVersion: 1,
+      renderer: {available:this.renderer, reason:this.renderer?null:this.rendererReason},
       startupDisabled: this.startupDisabled,
       revision: ++this.catalogRevision,
       plugins: this.records.map(
@@ -649,6 +651,7 @@ export class PluginRegistry {
           ...r
         }) => structuredClone({
           ...r,
+          ...(!this.renderer && r.enabled && r.state==='waiting' ? {unavailableReason:this.rendererReason} : {}),
           ...(this.startupDisabled ? {
             configuredEnabled: this.enabled.has(r.manifest?.id ?? ''),
           } : {}),
@@ -661,7 +664,8 @@ export class PluginRegistry {
     this.reconcile()
     return this.catalog()
   }
-  detach() {
+  detach(reason = 'renderer_unavailable') {
+    this.rendererReason = reason
     this.renderer = false
     this.revokeAll()
     this.reconcile()

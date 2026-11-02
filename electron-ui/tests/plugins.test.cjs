@@ -222,8 +222,10 @@ test('registry reports invalid builds and duplicate IDs; configuration and stora
   const token = registry.catalog().plugins[0].lease.token
   registry.finish(token)
   await registry.storage(token, 'set', 'persisted', { value: 7 })
-  registry.detach()
+  registry.detach('renderer_crashed')
   assert.equal(registry.catalog().plugins[0].state, 'waiting')
+  assert.equal(registry.catalog().plugins[0].unavailableReason,'renderer_crashed')
+  assert.deepEqual(registry.catalog().renderer,{available:false,reason:'renderer_crashed'})
   registry = create()
   await registry.initialize()
   registry.attach()

@@ -1,3 +1,4 @@
+import {mountVideo} from '../video/surfaces.js'
 import {createPluginNetworking} from './network-client.js'
 import { registerOverlay } from './overlays.js'
 import { PLUGIN_REQUEST_LIMIT, PluginAdmissionError, unwrapPluginBridge } from './admission.js'
@@ -40,6 +41,13 @@ export interface Dock {
   changed(): void
   error(error: unknown): void
 }
+interface ScopedMount {
+  disposers: Set<Disposer>;
+  visible: boolean;
+  element: HTMLElement;
+  instanceId: string;
+  visibility: Set<() => void>;
+}
 /** Owns every SDK effect; registrations and timers remain inert until publish. */
 export class PluginScope {
   readonly abort = new AbortController()
@@ -76,9 +84,10 @@ export class PluginScope {
           'plugin_not_ready: use a command for writes; activation/reload never replays mutations',
         ), {code: 'plugin_not_ready'})
     }
-    let currentMount: { disposers: Set<Disposer>; visible: boolean } | undefined
-    const add = (dispose: Disposer): Disposer => {
-      const owner = currentMount
+    let currentMount: ScopedMount | undefined
+    const mounts = new Set<ScopedMount>()
+    const add = (dispose: Disposer, mountOwner?: ScopedMount): Disposer => {
+      const owner = mountOwner ?? currentMount
       alive()
       let active = true
       const once = () => {
@@ -126,6 +135,16 @@ export class PluginScope {
       game: lease.game,
       profile: lease.profile,
       signal: this.abort.signal,
+      video: {mount: (element, options = {}) => {
+        alive();
+        if (!m.capabilities.includes('video.read')) throw new Error('capability_required: video.read');
+        const view = [...mounts].find(view => view.element.contains(element));
+        if (!view) throw new Error('video_requires_panel_mount');
+        const surface = mountVideo(element, options, m.id, view.instanceId, lease.identity, () => view.visible, fail);
+        view.visibility.add(surface.refresh);
+        const dispose = add(() => { view.visibility.delete(surface.refresh); surface.dispose(); }, view);
+        return {get status() { return surface.status; }, overlay: surface.overlay, setVisible: visible => {alive(); surface.setVisible(visible);}, dispose: () => {void dispose();}};
+      }},
       network:createPluginNetworking(p=>window.ares.plugins.network(this.token,p),this.abort.signal,add,writable),
       settings: {
         catalog: () => settingsRequest({ operation: 'catalog' }),
@@ -373,10 +392,10 @@ export class PluginScope {
           if (!contribution || this.panels.has(id)) throw new Error('Undeclared or duplicate panel: ' + id)
           const instances = new Set<{ visible: boolean }>()
           const install = effect(() => this.dock.registerPanel(id, contribution.title, context => {
-            const instance = { visible: true, disposers: new Set<Disposer>() }
+            const instance = { visible: true, disposers: new Set<Disposer>(), element: context.element, instanceId: context.instanceId, visibility: new Set<() => void>() }
             const abort = new AbortController(), visibility = new Set<Disposer>()
-            instances.add(instance)
-            const cancel = context.onVisibility(visible => { instance.visible = visible })
+            instances.add(instance); mounts.add(instance)
+            const cancel = context.onVisibility(visible => { instance.visible = visible; for (const notify of instance.visibility) notify(); })
             const previous = currentMount; currentMount = instance
             let cleanup: void | Disposer
             try {
@@ -392,7 +411,7 @@ export class PluginScope {
                 },
               })
             } catch (error) {
-              abort.abort(); instances.delete(instance); void cancel()
+              abort.abort(); instances.delete(instance); mounts.delete(instance); void cancel()
               for (const dispose of [...instance.disposers].reverse()) void dispose()
               for (const dispose of visibility) void dispose()
               throw error
@@ -400,7 +419,7 @@ export class PluginScope {
             let disposed = false
             return async () => {
               if (disposed) return
-              disposed = true; abort.abort(); instances.delete(instance)
+              disposed = true; abort.abort(); instances.delete(instance); mounts.delete(instance)
               const actions = [cancel, ...visibility, ...[...instance.disposers].reverse(), ...(cleanup ? [cleanup] : [])]
               const settled = await Promise.allSettled(actions.map(dispose => Promise.resolve().then(dispose)))
               const failed = settled.find(result => result.status === 'rejected')

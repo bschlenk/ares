@@ -6,6 +6,6 @@ test('renderer recovery reloads once, coalesces requests and preserves the nativ
 });
 test('renderer recovery reports native changes and bounded timeout without replay or state loading',async()=>{
  let identity={session:'old',epoch:1},reloads=0;const r=new RendererRecovery(()=>identity,()=>{reloads++},5);r.crashed('crash');const pending=r.recover();identity={session:'new',epoch:1};r.ready();assert.equal((await pending).reason,'native_session_changed');
- r.crashed('another crash');assert.equal((await r.recover()).reason,'timeout');assert.equal(reloads,2);assert.equal((await r.recover()).reason,'renderer_not_crashed');assert.equal(reloads,2);
+ r.crashed('another crash');assert.equal((await r.recover()).reason,'timeout');assert.equal(reloads,2);assert.equal(r.status().state,'failed');const retry=r.recover();r.ready();assert.equal((await retry).recovered,true);assert.equal(reloads,3);
  const absent=new RendererRecovery(()=>undefined,()=>assert.fail('must not reload an empty app'));absent.crashed('crash');assert.equal((await absent.recover()).reason,'native_session_unavailable');
 });

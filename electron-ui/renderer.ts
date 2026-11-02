@@ -1,3 +1,7 @@
+import {beginVideoCapture,endVideoCapture,captureHeld,onCaptureReleased} from './video/capture.js';
+import {VideoCanvas} from './video/canvas.js';
+import {videoSource} from './video/source.js';
+import {videoSnapshot} from './video/surfaces.js';
 import {installCheckpointControls} from './ui/checkpoints.js';
 import {installDemonstrationControls} from './ui/demonstration-controls.js';
 import {controlOwnsKey} from './ui/keyboard-target.js';
@@ -21,42 +25,13 @@ const $ = <K extends keyof Elements>(id: K): Elements[K] => {
   return element as Elements[K];
 };
 window.addEventListener('error', event => notify(event.message));
-const canvas = $('screen'), context = canvas.getContext('webgl2', { alpha: false, antialias: false, preserveDrawingBuffer: true });
-if (!context) throw new Error('WebGL2 is unavailable');
-const gl = context;
-function shader(type: number, source: string) {
-  const s = gl.createShader(type); if (!s) throw new Error('Cannot create shader'); gl.shaderSource(s, source); gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'Shader compilation failed');
-  return s;
-}
-const program = gl.createProgram();
-if (!program) throw new Error('Cannot create WebGL program');
-gl.attachShader(program, shader(gl.VERTEX_SHADER, `#version 300 es
-out vec2 uv;
-void main() {
-  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
-  uv = vec2(p.x, 1.0-p.y);
-  gl_Position = vec4(p*2.0-1.0, 0.0, 1.0);
-}`));
-gl.attachShader(program, shader(gl.FRAGMENT_SHADER, `#version 300 es
-precision highp float;
-in vec2 uv; out vec4 color;
-uniform sampler2D frame;
-void main() {
-  color = texture(frame, uv);
-}`));
-gl.linkProgram(program);
-if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'Program link failed');
-gl.useProgram(program);
-const texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, texture);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+const canvas = $('screen'), videoRenderer = new VideoCanvas(canvas), gl = videoRenderer.gl;
 let demonstrationActive=false;
 let system = 'Synthetic', aspect = 4 / 3;
 configureOverlays($('viewport'),canvas);
 let width = 0, height = 0, pending: FramePacket | null = null, port: MessagePort | undefined, paused = false;
+let repaint = false;
+onCaptureReleased(()=>{repaint=true;});
 let frames = 0, skipped = 0, last = 0, firstNative = 0, lastNative = 0, firstSequence = 0;
 let bridge: number[] = [], upload: number[] = [], inputTimes = new Map<number, number>(), inputAges: number[] = [], latestQueue = 0;
 let started = performance.now(), lastStats = started, latestReadback: number[] | null = null;
@@ -98,11 +73,12 @@ function resize() {
   draw();layoutOverlays();
 }
 function draw() {
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  videoRenderer.draw();
 }
 function watchDpr(){const media=matchMedia(`(resolution: ${devicePixelRatio}dppx)`);media.addEventListener('change',()=>{resize();watchDpr();},{once:true});}
 watchDpr();
-window.addEventListener('ares-session-reset',()=>{submitOverlayFrame(null);layoutOverlays(0,0,0,0,null);});
+function discardPending() { if (pending) port?.postMessage({ack:pending.sequence,generation:pending.generation,submitted:false}); pending=null; }
+window.addEventListener('ares-session-reset',()=>{discardPending();videoSource.reset('session_changed',sessionIdentity);videoRenderer.clear();submitOverlayFrame(null);layoutOverlays(0,0,0,0,null);});
 new ResizeObserver(resize).observe($('viewport'));
 window.addEventListener('message', event => {
   if (event.source !== window || event.data?.type !== 'ares-frames' || !event.ports[0]) return;
@@ -110,11 +86,13 @@ window.addEventListener('message', event => {
   port.onmessage = ({ data }: MessageEvent<import('./bridge.js').FrameMessage>) => {
     if (data.reset) {
       system = data.system;
+      videoRenderer.clear();
       document.getElementById('empty-state')!.hidden = system !== 'Synthetic';
       submitOverlayFrame(null);layoutOverlays(0,0,0,0,null);
-      pending = null; frames = skipped = last = firstNative = lastNative = firstSequence = receivedFrames = maxPending = 0;
+      discardPending(); frames = skipped = last = firstNative = lastNative = firstSequence = receivedFrames = maxPending = 0;
       bridge = []; upload = []; inputAges = []; inputTimes.clear(); started = performance.now();
-      lastMask = -1; syncSession(); window.dispatchEvent(new Event('ares-session-reset')); return;
+      lastMask = -1; syncSession(); window.dispatchEvent(new Event('ares-session-reset'));
+      videoSource.reset(data.reason ?? 'session_changed', data.identity); return;
     }
     receivedFrames++;
     if (pending) throw new Error('Frame credit invariant violated');
@@ -196,7 +174,7 @@ window.ares.systems().then(systems => {
 }).catch(error => { notify(error); });
 let sessionIdentity: SessionIdentity | undefined;
 function acceptSessionState(reply: SessionReply) {
-  if (!reply.ok || !reply.result) return;
+  if (!reply.ok || !reply.result) { if (reply.error?.includes('disconnected')) videoSource.reset('native_disconnected'); return; }
   updateWindowTitle(reply.result.title, reply.result.system);
   const previous = sessionIdentity;
   sessionIdentity = { session: reply.session, epoch: reply.epoch };
@@ -212,6 +190,8 @@ function acceptSessionState(reply: SessionReply) {
   $('paused-indicator').hidden = !loaded || !(paused || reply.result.focus_paused);
   $('paused-indicator').textContent = reply.result.focus_paused ? 'Ⅱ Paused while unfocused' : 'Ⅱ Paused';
   if (previous && (previous.session !== reply.session || previous.epoch !== reply.epoch)) window.dispatchEvent(new Event('ares-session-reset'));
+  videoSource.session(sessionIdentity);
+  videoSource.setPaused(Boolean(reply.result.paused || reply.result.focus_paused));
 }
 window.ares.onSessionState(acceptSessionState);
 async function sessionRequest<M extends SessionMethod>(method: M, params?: ServiceParams<M>) {
@@ -270,15 +250,23 @@ function stats(): RendererStats {
 }
 function tick() {
   pollInput();
-  if (pending) {
-    const frame = pending; pending = null;
+  videoSource.checkStale();
+  if (pending || repaint && videoSource.latest) {
+    const hadCredit = !!pending, frame = pending ?? videoSource.latest!; pending = null; repaint = false;
+    if (sessionIdentity && frame.frameReference && (frame.frameReference.native_session !== sessionIdentity.session || frame.frameReference.epoch !== sessionIdentity.epoch)) {
+      if(hadCredit)port!.postMessage({ack:frame.sequence,generation:frame.generation,submitted:false}); requestAnimationFrame(tick); return;
+    }
+    if(hadCredit)videoSource.submit(frame);
+    if (captureHeld()) {
+      if(hadCredit)port!.postMessage({ack:frame.sequence,generation:frame.generation,submitted:false}); requestAnimationFrame(tick); return;
+    }
     const changedAspect = aspect !== frame.aspect; aspect = frame.aspect;
     const before = performance.now();
     if (frame.width !== width || frame.height !== height) {
       width = frame.width; height = frame.height;
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, frame.pixels);
+      videoRenderer.upload(frame);
       resize();
-    } else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, frame.pixels);
+    } else videoRenderer.upload(frame);
     if (changedAspect) resize();
     draw();
     layoutOverlays(frame.logicalWidth??frame.width,frame.logicalHeight??frame.height,frame.width,frame.height,frame.geometry??null);
@@ -295,11 +283,13 @@ function tick() {
     if (last) skipped += Math.max(0, frame.sequence - last - 1);
     else { firstNative = frame.nativeMs; firstSequence = frame.sequence; }
     last = frame.sequence; lastNative = frame.nativeMs; frames++;
-    port!.postMessage({ ack: frame.sequence, generation: frame.generation,submitted:true });
+    if(hadCredit)port!.postMessage({ ack: frame.sequence, generation: frame.generation,submitted:true });
   }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
+window.beginVideoCapture=beginVideoCapture;window.endVideoCapture=endVideoCapture;
+window.videoSnapshot=videoSnapshot;
 window.overlayFrame=overlayFrame;window.overlaySnapshot=overlaySnapshot;
 window.stats = stats;
 window.sendInput = sendInput;

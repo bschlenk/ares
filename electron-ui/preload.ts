@@ -48,6 +48,7 @@ const api: AresBridge = {
     },
   },
   plugins: {
+    importDiagnostic:value=>ipcRenderer.invoke('plugin.importDiagnostic',value),
     network:(token,request)=>ipcRenderer.invoke('plugin.network',token,request),
     library: (token, request) => ipcRenderer.invoke('plugin.library', token, request),
     clipboard:(token,text)=>ipcRenderer.invoke('plugin.clipboard',token,text,takeExportGesture()),

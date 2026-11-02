@@ -4,7 +4,7 @@ export interface FrameReference {
   task_candidates?:number[];task_mapping?:'candidate_only';
   app_instance?:string;native_session:string; epoch:number; vi:number|null; boundary:string;
   origin:number|null; origin_commit:number|null; video_sequence:number|null;
-  presentation:{window:string;sequence:number;stage?:'renderer_submit'}|null; provenance:'unmatched'|'matched';
+  presentation:{window:string;surface?:string;sequence:number;stage?:'renderer_submit'}|null; provenance:'unmatched'|'matched';
 }
 export const FRAME_METHODS = ['video.begin', 'video.read', 'video.release'] as const;
 export type FrameSource = 'presented' | 'framebuffer';

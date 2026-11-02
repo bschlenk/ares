@@ -1,6 +1,9 @@
 import type { AresBridge, RendererStats } from './bridge.js';
 declare global {
   interface Window {
+    beginVideoCapture:typeof import('./video/capture.js').beginVideoCapture;
+    endVideoCapture:typeof import('./video/capture.js').endVideoCapture;
+    videoSnapshot:typeof import('./video/surfaces.js').videoSnapshot;
     overlaySnapshot:typeof import('./plugins/overlays.js').overlaySnapshot;
     overlayFrame:()=>import('./services/frame-contracts.js').FrameReference|null;
     ares: AresBridge;

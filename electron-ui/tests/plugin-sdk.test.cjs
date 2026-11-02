@@ -21,7 +21,17 @@ export async function exercise(ctx: PluginContext) {
   const stopObserver=await ctx.scripts.observe({path:'scripts/observe.ts', args:{}, timeoutMs:1000, maxFrames:0}, value=>console.log(value));
   ctx.scope.add(stopObserver);
   const saved = await ctx.storage.get<{count:number}>('state');
-  ctx.ui.registerPanel('typed', panel => panel.onVisibility(visible => console.log(visible, saved?.count)));
+  ctx.ui.registerPanel('typed', panel => {
+    const video=ctx.video.mount(panel.element,{fit:'cover',filtering:'nearest',integerScale:true});
+    console.log(video.status.frame?.native_session);
+    video.overlay.onResize(size=>console.log(size.canvasToPixels));
+    video.setVisible(true);
+    // @ts-expect-error surface status is read-only
+    video.status.state='live';
+    // @ts-expect-error video grants do not accept control options
+    ctx.video.mount(panel.element,{audio:true});
+    return ()=>video.dispose();
+  });
   ctx.scope.listen(document.body, 'click', () => console.log(ctx.signal.aborted));
   // @ts-expect-error unknown service method
   await ctx.services.request('missing.method');

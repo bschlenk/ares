@@ -1,0 +1,12 @@
+{
+  "id": "ares.examples.native-video",
+  "name": "Native video dashboard",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "entry": "plugin.js",
+  "capabilities": ["video.read"],
+  "contributes": {
+    "panels": [{"id": "dashboard", "title": "Native video dashboard"}],
+    "commands": [{"id": "open", "title": "Open native video dashboard"}]
+  }
+}

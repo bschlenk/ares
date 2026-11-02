@@ -53,7 +53,7 @@ function render() {
         .catch(showError)
     label.append(
       check,
-      `${p.manifest?.name ?? p.source}: ${p.reload ?? p.state}`,
+      `${p.manifest?.name ?? p.source}: ${p.unavailableReason ?? p.reload ?? p.state}`,
     )
     row.className = 'plugin-card'
     row.title = p.source
@@ -118,10 +118,18 @@ function host(id: string): Dock {
   }
 }
 async function load(info: PluginInfo): Promise<PluginModule> {
-  const module = await bounded(
+  const started=performance.now();
+  const diagnostic=(phase:'started'|'complete'|'failed')=>{
+    const heap=(performance as Performance & {memory?:{usedJSHeapSize:number}}).memory?.usedJSHeapSize;
+    void bridge.importDiagnostic({id:info.manifest!.id,phase,elapsedMs:performance.now()-started,heapBytes:heap??null}).catch(()=>{});
+  };
+  diagnostic('started');
+  let module:PluginModule;
+  try { module = await bounded(
     import(info.lease!.baseURL + info.manifest!.entry) as Promise<PluginModule>,
     'Plugin import',
-  )
+  );diagnostic('complete');
+  }catch(error){diagnostic('failed');throw error;}
   if (typeof module.activate !== 'function')
     throw new Error('Entry must export activate(context)')
   if (

@@ -35,6 +35,8 @@ export interface PluginContext {
   readonly game: GameIdentity | null
   readonly profile: string | null
   readonly signal: AbortSignal
+  /** Host-owned native video. Mount inside a live panel DOM, including from a React effect. */
+  video: {mount(element: HTMLElement, options?: import('../video/contracts.js').VideoOptions): import('../video/contracts.js').VideoSurface}
   settings: PreferencesBridge & {
     /** Local field IDs become plugin:<plugin ID>:<section>:<field>. Activation stages metadata only. */
     registerSection(id: string, descriptors: PluginSettingDescriptor[]): Promise<Disposer>
@@ -138,3 +140,5 @@ export type {TextExport,FrameExport,ExportStatus,RecordingExport} from '../servi
 export type {FixedMatrix,RspMatrixState,MatrixPage,DrawVertex} from '../services/matrix-contracts.js';
 
 export type {CapturedTransform,TransformPage,TransformState} from '../services/transform-contracts.js';
+
+export type {VideoOptions, VideoSurface, VideoSurfaceStatus} from '../video/contracts.js';
