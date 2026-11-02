@@ -91,7 +91,8 @@ window.addEventListener('message', event => {
       submitOverlayFrame(null);layoutOverlays(0,0,0,0,null);
       discardPending(); frames = skipped = last = firstNative = lastNative = firstSequence = receivedFrames = maxPending = 0;
       bridge = []; upload = []; inputAges = []; inputTimes.clear(); started = performance.now();
-      lastMask = -1; syncSession(); window.dispatchEvent(new Event('ares-session-reset'));
+      // Native status is pushed after startup has attached its service client.
+      sessionIdentity = undefined; lastMask = -1; window.dispatchEvent(new Event('ares-session-reset'));
       videoSource.reset(data.reason ?? 'session_changed', data.identity); return;
     }
     receivedFrames++;

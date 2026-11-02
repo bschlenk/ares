@@ -686,6 +686,8 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     child.once('close', (code, signal) => {
       removeConfiguration()
       if (active === session) {
+        port?.postMessage({reset:true,system:session.system,reason:'native_disconnected'});
+        if(window&&!window.isDestroyed()&&!window.webContents.isDestroyed())window.webContents.send('session-state',{protocol:1,id:'native-disconnected',...(sessions.identity??identity),ok:false,error:'native_host_disconnected'});
         active = null
         plugins.disconnect()
         sessions.detach()
@@ -750,7 +752,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     }
   }).catch(error => status(String(error)))
   child.on('error', (error) => { appLogs.write('native', 'error', error, session.generation); status(`Cannot start native host: ${error.message}`) })
-  child.on('close', (code, signal) => { if(active===session){session.failure='native_disconnected';port?.postMessage({reset:true,system:session.system,reason:'native_disconnected'});} appLogs.endNative(session.generation); appLogs.write('native', code ? 'error' : 'info', JSON.stringify({event:'exit',code,signal}), session.generation) })
+  child.on('close', (code, signal) => { appLogs.endNative(session.generation); appLogs.write('native', code ? 'error' : 'info', JSON.stringify({event:'exit',code,signal}), session.generation) })
   child.stdin.on('error', () => {}) // exit races are reported by close/error
   child.stderr.on('data', (data) => {
     appLogs.native(data, session.generation)
@@ -1064,7 +1066,15 @@ app
           throw new Error('invalid_sender')
         if (!['session.status', 'memory.regions'].includes(method) && !identity)
           throw new Error('invalid_request')
-        return sessions.request(method, identity, params)
+        const requestedIdentity=identity??sessions.identity;
+        try{return await sessions.request(method, identity, params)}catch(error){
+          // A known session can disappear while a background read is in flight.
+          // Preserve its real identity and service error without an IPC rejection.
+          // Native failures remain in health/logs; no request is replayed.
+          if(error instanceof ServiceError&&error.code==='native_host_disconnected'&&requestedIdentity)
+            return {protocol:1,id:'native-disconnected',...requestedIdentity,ok:false,error:error.code};
+          throw error;
+        }
       },
     )
     ipcMain.handle('agent.action', async (event, action: unknown) => {

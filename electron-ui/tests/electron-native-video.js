@@ -6,6 +6,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {LocalServiceClient} from '../dist/services/local-endpoint.js';
 import {makeFixture,makeNesFixture} from '../fixture.cjs';
+const sessionErrors=[];const originalStderr=process.stderr.write.bind(process.stderr);process.stderr.write=(chunk,...args)=>{const text=String(chunk);if(text.includes("Error occurred in handler for 'session'"))sessionErrors.push(text);return originalStderr(chunk,...args);};
 const run=promisify(execFile),temporary=fs.mkdtempSync('/tmp/ares-native-video-'),profile=path.join(temporary,'profile'),source=path.join(temporary,'plugin');
 fs.mkdirSync(source);
 const denied=path.join(temporary,'denied');fs.mkdirSync(denied);
@@ -36,6 +37,7 @@ app.whenReady().then(async()=>{try{
  await cli('open','test.denied','proof');await until(()=>js('window.deniedVideo'),'permission refusal');assert.equal(await js('window.deniedVideo'),'capability_required: video.read');await plugins.enable('test.denied',false);
  await cli('open','test.video','dashboard');await until(live,'two native views');
  await until(async()=>{const s=await js('window.testSurfaces[0].status');return s.sourceWidth===160&&s.frame.frame>200},'GB pixels after boot');
+ assert.equal(sessionErrors.length,0,'background startup must not reject session IPC');
  const before=await sessions.request('session.status');const count=await js('window.testSurfaces[0].status.submitted');
  await sleep(1200);const after=await sessions.request('session.status'),rendered=await js('window.testSurfaces[0].status.submitted');
  assert.equal(after.epoch,before.epoch);assert.equal(after.result.paused,false);assert(after.result.frame-before.result.frame>40);assert(rendered-count>35,`full-rate video (${rendered-count} submissions/1.2s)`);

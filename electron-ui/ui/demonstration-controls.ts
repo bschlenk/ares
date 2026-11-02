@@ -1,3 +1,4 @@
+import type {SessionIdentity} from '../services/contracts.js';
 import type {AresBridge} from '../bridge.js';
 import type {DemonstrationStatus} from '../services/demonstration-contracts.js';
 
@@ -7,7 +8,8 @@ export function installDemonstrationControls(bridge:AresBridge, controls:HTMLEle
   const record=controls.querySelector<HTMLButtonElement>('#video-record')!;
   const cancel=controls.querySelector<HTMLButtonElement>('#video-record-cancel')!;
   const description=controls.querySelector<HTMLElement>('#recording-description')!;
-  let previous:DemonstrationStatus|undefined, polling=false, acting=false;
+  let previous:DemonstrationStatus|undefined, polling=false, acting=false, disposed=false;
+  let identity:SessionIdentity|undefined;
   const update=(status?:DemonstrationStatus)=>{
     const failed=status?.publication==='failed', saving=status?.publication==='finalizing';
     const active=!!status&&(['armed','recording','replaying'].includes(status.state)||failed||saving);
@@ -31,14 +33,17 @@ export function installDemonstrationControls(bridge:AresBridge, controls:HTMLEle
     previous=status;
   };
   const refresh=async()=>{
-    if(polling||acting)return;polling=true;
+    if(polling||acting||disposed)return;
+    const current=identity;if(!current){update();return;}
+    polling=true;
     try{
-      const session=await bridge.session('session.status');if(!session.ok){update();return;}
-      const reply=await bridge.session('n64.demo.status',{session:session.session,epoch:session.epoch});
+      const reply=await bridge.session('n64.demo.status',current);
+      if(disposed||identity!==current)return;
+      if(!reply.ok&&reply.error==='native_host_disconnected')identity=undefined;
       const status=reply.ok?reply.result:undefined;
       if(previous&&status?.job_id===previous.job_id&&previous.publication!=='committed'&&status.publication==='committed')notify('Recording saved.');
       update(status);
-    }catch{update();}finally{polling=false;}
+    }catch{if(!disposed&&identity===current){identity=undefined;update();}}finally{polling=false;}
   };
   const action=async(button:HTMLButtonElement)=>{
     if(acting)return;acting=true;record.disabled=cancel.disabled=true;button.blur();
@@ -51,6 +56,14 @@ export function installDemonstrationControls(bridge:AresBridge, controls:HTMLEle
     finally{acting=false;await refresh();}
   };
   record.onclick=()=>{void action(record);};cancel.onclick=()=>{void action(cancel);};
+  // Main publishes status only after startup/recovery has attached the native
+  // client. Polling before that point produces a misleading IPC rejection.
+  bridge.onSessionState(reply=>{
+    if(disposed)return;
+    const next=reply.ok&&reply.result?{session:reply.session,epoch:reply.epoch}:undefined;
+    if(!next||next.session!==identity?.session||next.epoch!==identity?.epoch)identity=next;
+    if(!identity)update();
+  });
   const timer=setInterval(()=>{void refresh();},250);void refresh();
-  return ()=>{clearInterval(timer);record.onclick=cancel.onclick=null;};
+  return ()=>{disposed=true;identity=undefined;clearInterval(timer);record.onclick=cancel.onclick=null;};
 }
