@@ -11,6 +11,7 @@ struct CPU : SM83, Thread {
     auto interrupt(string_view) -> void;
 
     struct Memory {
+      Node::Debugger::Memory execution;
       Node::Debugger::Memory wram;
       Node::Debugger::Memory hram;
     } memory;
