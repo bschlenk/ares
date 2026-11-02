@@ -83,10 +83,12 @@ async function main() {
     }
   }
   try {
-    if (operation === 'logs') return client.manage({ operation: 'logs', id: values[0], cursor: Number(options.cursor ?? 0), limit: Number(options.limit ?? 32), ...(options.generation ? {generation: options.generation} : {}) })
+    if(operation==='renderer-status')return await client.manage({operation:'renderer_status'});
+    if(operation==='recover-renderer')return await client.manage({operation:'recover_renderer'});
+    if (operation === 'logs') return await client.manage({ operation: 'logs', id: values[0], cursor: Number(options.cursor ?? 0), limit: Number(options.limit ?? 32), ...(options.generation ? {generation: options.generation} : {}) })
     if (operation === 'screenshot') {
       if (!options.output) throw new Error('screenshot requires --output <new.png>')
-      return client.manage({operation:'screenshot',path:path.resolve(options.output),...(options.panel ? {panel:options.panel} : {})})
+      return await client.manage({operation:'screenshot',path:path.resolve(options.output),...(options.panel ? {panel:options.panel} : {})})
     }
     if (operation === 'list') return { plugins: await list() }
     if (operation === 'reset-startup')

@@ -1,3 +1,4 @@
+import {RendererRecovery} from './services/renderer-recovery.js';
 import {romDisplayTitle} from './library/title.js';
 import {zipEntries} from './library/zip.js';
 import {systems as librarySystems} from './library/systems.js';
@@ -263,6 +264,12 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
     case 'script_result': return sessions.readScriptResult(params)
     case 'build_info': return {...buildInfo(),runtime:{electron:process.versions.electron,chromium:process.versions.chrome,node:process.versions.node},local_models:{local_ai_handler_supported:typeof browserSession.defaultSession.registerLocalAIHandler==='function',provider:'none',usable:false,reason:'provider_not_configured'},native_sha256:await hashRom(hostPath),app_instance:appLogs.instance,app_root:appRoot,executable:process.execPath}
     case 'app_logs': return appLogs.read(params)
+    case 'renderer_status':
+      if(Object.keys(params).some(key=>key!=='operation'))throw new Error('invalid_request');
+      return rendererRecovery.status();
+    case 'recover_renderer':
+      if(Object.keys(params).some(key=>key!=='operation'))throw new Error('invalid_request');
+      return await rendererRecovery.recover();
     case 'app_health': return appHealth()
     case 'app_status': return { ready: sessions.identity !== undefined, pid: process.pid }
     case 'load_rom': {
@@ -359,6 +366,7 @@ const probe = (args: string[]): Promise<string> =>
     })
   })
 let window: BrowserWindow
+const rendererRecovery=new RendererRecovery(()=>sessions.identity,()=>{if(!window||window.isDestroyed()||window.webContents.isDestroyed())throw new Error('renderer_window_unavailable');window.webContents.reloadIgnoringCache();});
 if (!app.isPackaged && process.env.ARES_DEV_RELOAD === '1') {
   process.on('message', message => {
     if ((message as {type?:string} | null)?.type === 'ares-dev-quit') { app.quit(); return }
@@ -418,7 +426,7 @@ export const preferences = new SettingsStore(
     ...(serviceLaunchOverride() === undefined ? {} : { 'agent.enabled': serviceLaunchOverride() }),
   },
 )
-function appHealth(){return { instance: appLogs.instance, observed_at: new Date().toISOString(), native: { pid: active?.child.pid, recovery_failure: active?.recoveryFailure, generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
+function appHealth(){return { instance: appLogs.instance, observed_at: new Date().toISOString(), renderer:rendererRecovery.status(), native: { pid: active?.child.pid, recovery_failure: active?.recoveryFailure, generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
 const mainWatchdog=new MainWatchdog(appHealth,error=>appLogs.write('watchdog','error',error));
 function serviceLaunchOverride(): boolean | undefined {
   const switches = process.argv.filter(arg => arg === '--services' || arg === '--no-services')
@@ -877,6 +885,7 @@ app
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     window.webContents.on('will-navigate', (event) => event.preventDefault())
     window.webContents.on('render-process-gone', (_event, details) => {
+      rendererRecovery.crashed(JSON.stringify(details));
       appLogs.write('renderer', 'error', JSON.stringify(details))
       observerDeliveries.clear()
       plugins.detach()
@@ -884,6 +893,7 @@ app
       port = null
     })
     window.webContents.on('did-start-loading', () => {
+      rendererRecovery.loading();
       observerDeliveries.clear()
       plugins.detach()
       port?.close()
@@ -891,6 +901,7 @@ app
     })
     ipcMain.on('ready', (event) => {
       if (event.sender !== window.webContents) return
+      rendererRecovery.ready();
       port?.close()
       const channel = new MessageChannelMain()
       port = channel.port1
