@@ -100,7 +100,7 @@ auto Pak::load(string name, string extension, string location) -> bool {
   if(!pak) return false;
   if(!location) location = this->location;
   if(auto load = pak->write(name)) {
-    auto memory = file::read(saveLocation(location, name, extension));
+    auto memory = readPersistent(saveLocation(location, name, extension));
     if(!memory.empty()) {
       if(!load->size()) load->resize(memory.size());
       load->write({memory.data(), memory.size()});
@@ -115,12 +115,7 @@ auto Pak::save(string name, string extension, string location) -> bool {
   if(!pak) return false;
   if(!location) location = this->location;
   if(auto save = pak->read(name)) {
-    auto saveFilePath = saveLocation(location, name, extension);
-    directory::create(Location::dir(saveFilePath));
-    if(auto fp = file::open(saveLocation(location, name, extension), file::mode::write)) {
-      fp.write({save->data(), save->size()});
-      return true;
-    }
+    return writePersistent(saveLocation(location, name, extension), {save->data(), save->size()});
   }
   return true;
 }
@@ -167,6 +162,70 @@ auto Pak::saveLocation(string location, string name, string extension) -> string
     saveLocation = {mia::homeLocation(), "Saves/", this->name(), ".", extension, "/", name};
   }
   //try to ensure the directory exists ...
-  directory::create(Location::path(saveLocation));
+  if(!storageHooks.read && !storageHooks.write) directory::create(Location::path(saveLocation));
   return saveLocation;
+}
+
+// Read/write PCM in memory: no codec may reopen an unlocked persistence path.
+auto Pak::loadPersistentWave(const string& location, bool initialize) -> bool {
+  auto bytes = readPersistent(location);
+  if(bytes.empty() && !initialize) return false;
+  u32 frequency = 44100, bits = 16, channels = 1;
+  size_t start = 0, length = 0;
+  auto little = [&](size_t offset, size_t size) -> u64 {
+    if(offset + size > bytes.size()) throw std::runtime_error("invalid_persistent_wave");
+    u64 value = 0; for(size_t n = 0; n < size; ++n) value |= u64(bytes[offset+n]) << (n*8); return value;
+  };
+  if(!bytes.empty()) {
+    if(bytes.size() < 44 || memcmp(bytes.data(), "RIFF", 4) || memcmp(bytes.data()+8, "WAVE", 4)) throw std::runtime_error("invalid_persistent_wave");
+    bool format = false;
+    for(size_t offset = 12; offset + 8 <= bytes.size();) {
+      size_t size = little(offset+4,4), payload = offset+8;
+      if(size > bytes.size()-payload) throw std::runtime_error("invalid_persistent_wave");
+      if(!memcmp(bytes.data()+offset,"fmt ",4)) {
+        if(size < 16 || little(payload,2) != 1) throw std::runtime_error("invalid_persistent_wave");
+        channels = little(payload+2,2); frequency = little(payload+4,4); bits = little(payload+14,2); format = true;
+      }
+      if(!memcmp(bytes.data()+offset,"data",4)) { start = payload; length = size; }
+      offset = payload + size + (size & 1);
+    }
+    if(!format || !frequency || !channels || channels > 2 || !bits || bits > 32 || bits % 8 || !start) throw std::runtime_error("invalid_persistent_wave");
+  }
+  const size_t stride = bits/8 * channels;
+  std::vector<u8> output;
+  for(size_t offset = start; offset < start + length; offset += stride) {
+    if(offset + stride > start + length) throw std::runtime_error("invalid_persistent_wave");
+    auto sample = little(offset,bits/8);
+    if(bits > 8) sample ^= u64(1) << (bits-1);
+    sample = sample * 65535 / ((u64(1) << bits)-1);
+    for(unsigned n = 0; n < 8; ++n) output.push_back(sample >> (n*8));
+  }
+  if(!pak) pak = std::make_shared<vfs::directory>();
+  if(auto previous = pak->read("program.tape")) pak->remove(previous);
+  pak->append("program.tape",output);
+  pak->setAttribute("range",65535);
+  pak->setAttribute("frequency",frequency);
+  pak->setAttribute("length",output.size()/8);
+  pak->setAttribute("tape",true);
+  pak->setAttribute("writable",true);
+  pak->setAttribute("modified",false);
+  return true;
+}
+
+auto Pak::savePersistentWave(const string& location) -> bool {
+  if(storageHooks.preparing) return writePersistent(location,{});
+  auto input = pak->read("program.tape");
+  if(!input) return false;
+  auto frequency = pak->attribute("frequency").natural();
+  auto range = pak->attribute("range").natural();
+  if(!frequency || !range || input->size()/8 > (0xffffffffull-36)/2) return false;
+  std::vector<u8> bytes;
+  auto text = [&](const char* value) { for(size_t n=0;n<4;++n) bytes.push_back(value[n]); };
+  auto little = [&](u64 value, unsigned size) { for(unsigned n=0;n<size;++n) bytes.push_back(value >> (n*8)); };
+  auto size = input->size()/8*2;
+  text("RIFF"); little(36+size,4); text("WAVE"); text("fmt "); little(16,4); little(1,2); little(1,2);
+  little(frequency,4); little(frequency*2,4); little(2,2); little(16,2); text("data"); little(size,4);
+  input->seek(0);
+  for(size_t n=0;n<size/2;++n) { auto sample=input->readl(8); little((sample*65535/range)^0x8000,2); }
+  return writePersistent(location,bytes);
 }

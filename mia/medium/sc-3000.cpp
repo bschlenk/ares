@@ -18,8 +18,9 @@ auto SC3000::load(string location) -> LoadResult {
 }
 
 auto SC3000::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   if(pak && pak->attribute("tape").boolean()) {
-    if(!pak->attribute("modified").boolean()) return true;
+    if(!storageHooks.preparing && !pak->attribute("modified").boolean()) return true;
 
     if(file::exists(location) && location.iendsWith(".wav")) {
       return saveWav(location);
@@ -34,6 +35,14 @@ auto SC3000::save(string location) -> bool {
 }
 
 auto SC3000::loadTape(string location) -> LoadResult {
+  if(storageHooks.read && location.iendsWith(".wav")) {
+    this->location = location;
+    loadPersistentWave(location,true);
+    pak->setAttribute("title", Medium::name(location));
+    pak->setAttribute("region", "NTSC");
+    return successful;
+  }
+
   if(!inode::exists(location)) return romNotFound;
   if(location.iendsWith(".bit")) return loadBit(location);
 
@@ -155,10 +164,12 @@ auto SC3000::loadBit(string location) -> LoadResult {
   }
   pak->append("program.tape", output);
 
+  if(storageHooks.read) loadPersistentWave(saveLocation(location, "program.tape", ".wav"));
   return successful;
 }
 
 auto SC3000::saveWav(string location) -> bool {
+  if(storageHooks.write) return savePersistentWave(location);
   std::vector<u16> data;
   auto fd = pak->read("program.tape");
   if(!fd) return false;

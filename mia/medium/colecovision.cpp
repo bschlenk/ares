@@ -31,6 +31,7 @@ auto ColecoVision::load(string location) -> LoadResult {
 }
 
 auto ColecoVision::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   return true;

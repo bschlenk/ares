@@ -33,6 +33,7 @@ auto MyVision::load(string location) -> LoadResult {
 }
 
 auto MyVision::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   return true;

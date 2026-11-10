@@ -24,6 +24,8 @@ import { presentationSettings, nativeRuntimeSettings, agentSettings } from './se
 import { profileRoot, profileSaves } from './profile.js'
 import {personalContext, managementRoot, type AppContext} from './sessions/context.js'
 import {KernelLock} from './sessions/locks.js'
+import {StorageCoordinator, personalStorageDirectory, type StorageReservation, type StorageInventory} from './sessions/storage.js'
+import {publishJson} from './sessions/files.js'
 import {SessionRepository} from './sessions/repository.js'
 import { PluginRegistry } from './plugins/registry.js'
 import {
@@ -102,7 +104,9 @@ export const appContext: AppContext = (() => {
 const sessionRepository = appContext.kind === 'named' ? new SessionRepository(appContext.personalRoot) : undefined
 sessionRepository?.advertise(appContext, profileLock!, false, process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory())
 fs.writeFileSync(path.join(appContext.dataRoot, 'lock-holder.json'), JSON.stringify({pid:process.pid,instance:appContext.instanceId,kind:appContext.kind,session:appContext.sessionId,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600})
+const storageCoordinator = new StorageCoordinator()
 const saveDirectory = profileSaves(appContext.dataRoot, process.env.ARES_SAVE_DIR)
+const personalSaveDirectory = personalStorageDirectory(appContext, saveDirectory)
 
 const appLogs = new AppLogs(path.join(appContext.runtimeRoot, 'logs'), undefined, appContext.instanceId)
 const fatal = (error: unknown) => {
@@ -582,6 +586,7 @@ ipcMain.handle('plugin.library', (event, token: unknown, request: import('./libr
   } finally { --libraryRequests }
 }))
 
+let nativeStartupRequested = false
 let active: NativeSession | null = null,
   port: MessagePortMain | null = null
 let quitting = false,
@@ -636,19 +641,37 @@ async function hashRom(file: string) {
   return hash.digest('hex')
 }
 async function start(options: StartOptions & { agent?: boolean; romHash?: string; title?: string }) {
-  if (appContext.kind === 'named' && options.rom) throw new Error('session_storage_transactions_not_ready')
+  nativeStartupRequested = true
   const romHash = options.rom ? options.romHash ?? await hashRom(options.rom) : undefined
   let system = 'Synthetic'
   await refreshNativeSettings()
   const startupSettings = preferences.catalog()
-  const settingsFile = String(startupSettings.entries.find(entry => entry.descriptor.id === 'paths.importBml')!.value)
+  const selectedSettingsFile = String(startupSettings.entries.find(entry => entry.descriptor.id === 'paths.importBml')!.value)
+  const identity = { session: randomUUID(), epoch: 1 }
+  const configurationDirectory = path.join(appContext.runtimeRoot, 'runtime-settings')
+  fs.mkdirSync(configurationDirectory, { recursive: true, mode: 0o700 })
+  const configurationFile = path.join(configurationDirectory, `${identity.session}.bml`)
+  fs.writeFileSync(configurationFile, nativeSettingsBml(startupSettings), { flag: 'wx', mode: 0o600 })
+  const importedFile = path.join(configurationDirectory, `${identity.session}.import.bml`)
+  // Freeze imported configuration as well as the generated overlay. Preparation
+  // and the actual loader must see the same peripheral/firmware choices.
+  let settingsFile = ''
+  if (selectedSettingsFile) {
+    try { fs.writeFileSync(importedFile, fs.readFileSync(selectedSettingsFile), {flag: 'wx', mode: 0o600}); settingsFile = importedFile }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { fs.rmSync(configurationFile, {force: true}); throw error } }
+  }
+  const transactionFile = path.join(configurationDirectory, `${identity.session}.storage.json`)
+  const removeConfiguration = () => { fs.rmSync(configurationFile, { force: true }); fs.rmSync(transactionFile, {force: true}); fs.rmSync(importedFile, {force: true}) }
+  let reservation: StorageReservation | undefined, barrierFd: number | undefined, launched = false
+  try {
   // Probe before stopping the running game, so an unsupported file leaves it intact.
   if (options.rom) {
     const identifyArgs = [
       '--identify',
       options.rom,
       '--save-dir',
-      saveDirectory,
+      appContext.kind === 'named' ? personalSaveDirectory : saveDirectory,
+      '--settings-overlay', configurationFile,
     ]
     if (options.system) identifyArgs.push('--system', options.system)
     if (settingsFile) identifyArgs.push('--settings', settingsFile)
@@ -674,6 +697,17 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     const member=members.find(entry=>librarySystems[path.posix.extname(entry.name).slice(1).toLowerCase()]?.name===system)??members.find(entry=>librarySystems[path.posix.extname(entry.name).slice(1).toLowerCase()])
     if(member)gameTitle=romDisplayTitle(path.posix.basename(member.name,path.posix.extname(member.name)))
   }
+  // Prepare and reserve before stopping the current game. Reservations belonging
+  // to this coordinator remain held across overlap, with no unlock/relock gap.
+  const persistenceRoot = appContext.kind === 'named' ? personalSaveDirectory : saveDirectory
+  if (options.rom) {
+    const prepareArgs = ['--prepare-storage', '--rom', options.rom, '--system', system, '--save-dir', persistenceRoot, '--settings-overlay', configurationFile, '--silent']
+    if (settingsFile) prepareArgs.push('--settings', settingsFile)
+    for (const media of options.media || []) prepareArgs.push('--media', media)
+    const inventory = JSON.parse(await probe(prepareArgs)) as StorageInventory
+    reservation = await storageCoordinator.reserve(inventory, appContext, gameTitle || system)
+    await storageCoordinator.initialize(reservation, appContext)
+  }
   await stop()
   const args = options.rom ? ['--rom', options.rom] : ['--synthetic']
   if (options.rom) args.push('--system', system)
@@ -683,18 +717,21 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   if (settingsFile) args.push('--settings', settingsFile)
   if (options.hd) args.push('--1080p')
   if (options.silent || process.env.ARES_SILENT === '1') args.push('--silent')
-  args.push('--save-dir', saveDirectory, '--resource-dir', resourceDirectory)
-  const identity = { session: randomUUID(), epoch: 1 }
-  args.push('--control-session', identity.session)
-  const configurationDirectory = path.join(appContext.runtimeRoot, 'runtime-settings')
-  fs.mkdirSync(configurationDirectory, { recursive: true })
-  const configurationFile = path.join(configurationDirectory, `${identity.session}.bml`)
-  fs.writeFileSync(configurationFile, nativeSettingsBml(startupSettings), { flag: 'wx', mode: 0o600 })
-  args.push('--settings-overlay', configurationFile)
-  const removeConfiguration = () => fs.rmSync(configurationFile, { force: true })
+  args.push('--save-dir', persistenceRoot, '--resource-dir', resourceDirectory)
+  args.push('--control-session', identity.session, '--settings-overlay', configurationFile)
+  const inherited: number[] = [profileLock!.fd]
+  if (reservation) {
+    inherited.push(reservation.fd)
+    barrierFd = fs.openSync(storageCoordinator.barrierFile(), fs.constants.O_CREAT | fs.constants.O_RDWR | fs.constants.O_NOFOLLOW, 0o600)
+    const barrierIndex = 4 + inherited.length
+    inherited.push(barrierFd)
+    publishJson(transactionFile, {version: 1, personal: appContext.kind === 'personal', barrier: barrierIndex, resources: reservation.nativeResources()})
+    args.push('--storage-transaction', transactionFile)
+  }
   const child = spawn(hostPath, args, {
-    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe', 'pipe', ...inherited],
   }) as ChildProcessByStdio<Writable, Readable, Readable>
+  launched = true
   const session: NativeSession = {
     child,
     system,
@@ -706,8 +743,9 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     closed: Promise.resolve(),
   }
   session.closed = new Promise((resolve) =>
-    child.once('close', (code, signal) => {
+    child.once('close', async (code, signal) => {
       removeConfiguration()
+      await reservation?.release()
       if (active === session) {
         port?.postMessage({reset:true,system:session.system,reason:'native_disconnected'});
         if(window&&!window.isDestroyed()&&!window.webContents.isDestroyed())window.webContents.send('session-state',{protocol:1,id:'native-disconnected',...(sessions.identity??identity),ok:false,error:'native_host_disconnected'});
@@ -813,6 +851,10 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   if (options.agent) {
     const reply = await sessions.request('session.pause', client.identity, undefined, 'agent-launch');
     if (!reply.ok) throw new Error(reply.error)
+  }
+  } finally {
+    if (barrierFd !== undefined) fs.closeSync(barrierFd)
+    if (!launched) { removeConfiguration(); await reservation?.release() }
   }
 }
 function queueOperation<T>(task: () => Promise<T>) {
@@ -978,8 +1020,8 @@ app
             generation: active.generation,
             receivedMs: performance.timeOrigin + performance.now(),
           })
-      } else
-        enqueue(() =>
+      } else if (!nativeStartupRequested)
+        enqueue(() => nativeStartupRequested ? Promise.resolve() :
           start(
             process.env.ARES_DEV_RELOAD === '1' && process.env.ARES_DEV_SESSION
               ? JSON.parse(process.env.ARES_DEV_SESSION) as StartOptions

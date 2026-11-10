@@ -57,6 +57,7 @@ auto FamicomDiskSystem::load(string location) -> LoadResult {
 }
 
 auto FamicomDiskSystem::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   Pak::save("disk1.sideA", ".d1a");

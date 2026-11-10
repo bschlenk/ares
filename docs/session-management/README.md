@@ -15,18 +15,19 @@ product requirements.
 - Implementation baseline before task 1: `1712fae48925ff52ec810d09a87bb4e837ca98f1`.
 - Task 1 implementation commit: **`7a2216451`**
   (`feat(sessions): add persistent contexts and lifecycle ownership`).
-- Next work: **[task 2 — actual storage ownership and inheritance](02-storage-ownership-inheritance.md)**.
+- Task 2 implementation commit: recorded after the task commit.
+- Next work: **[task 3 — personal windows and shared settings](03-personal-windows-shared-settings.md)**.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
   [repository acceptance documentation](../../electron-ui/ACCEPTANCE.md).
 
-Task 1 is complete as the foundation. It does **not** establish full spec
-acceptance: named game loads currently fail closed with
-`session_storage_transactions_not_ready`, personal profiles remain exclusive,
-and approvals/revocation are not implemented. Do not remove these gates until
-the relevant storage, shared-store and access guarantees are implemented and
-validated. Task 1's `--session-name` opens persistent named storage;
-`--instance-name` still means the legacy endpoint label pending task 5.
+Tasks 1 and 2 are complete within their scopes. Named game loads now use native
+preparation, resource ownership and recoverable inheritance. Personal profiles
+remain exclusive until task 3 coordinates the other mutable stores. Approvals,
+revocation and full spec acceptance remain outstanding. `--session-name` opens
+persistent named storage; `--instance-name` still means the legacy endpoint label
+pending task 5. Full acceptance currently stops at an unrelated stale MCP test;
+see the implementation report for exact results and validation limits.
 
 ## Task list and status
 
@@ -38,16 +39,17 @@ second execution order.
 | Task | Scope | Status | Implementation commit |
 | --- | --- | --- | --- |
 | 1 | [Data model, paths, and lifecycle](01-data-model-paths-lifecycle.md) | **Complete (foundation)** | `7a2216451` |
-| 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Next** | — |
-| 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | Not started | — |
+| 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Complete** | See implementation report |
+| 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Next** | — |
 | 4 | [Managed states and recovery](04-managed-states-recovery.md) | Not started | — |
 | 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | Not started | — |
 | 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | Not started | — |
 | 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | Not started | — |
 
-No task is currently in progress. A local task 2 loader-hook sketch was saved
-outside the repository and removed from the working tree; it is unvalidated and
-does not count as implemented work. Its optional location is in task 2's file.
+No task is currently in progress. Task 2's loader/write inventory and transaction
+implementation are on this branch; its earlier external draft was not used.
+Continue with task 3 without removing personal-profile exclusivity before its
+shared-store guarantees are complete.
 
 ## Working agreement for each agent
 
@@ -108,7 +110,10 @@ alone does not update the host. Electron checks required desktop process access
 in the prior run; sandboxed profile checks timed out before startup. Diagnose
 that distinction rather than claiming an unstarted test passed.
 
-Task 1 evidence: native build, all three TypeScript targets, **44 focused tests**,
+Task 2 evidence: native/TypeScript builds, **42 focused tests**, seven separate
+Electron/profile checks and 316 fixture tests in the attempted full suite. Full
+acceptance failed at a stale MCP expectation; later full-suite gates remain
+unrun. Task 1 evidence: native build, all three TypeScript targets, **44 focused tests**,
 and `PROFILE_OWNERSHIP_PASS`, `SESSION_CONTEXT_PASS`, `SETTINGS_UI_PASS`. Exact
 commands are in the implementation report. Full acceptance, packaged/Dock checks,
 approval/revoke gameplay and capture pixel checks remain unrun for this feature.

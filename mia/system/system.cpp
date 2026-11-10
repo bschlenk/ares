@@ -81,6 +81,6 @@ auto System::create(string name) -> std::shared_ptr<Pak> {
 
 auto System::locate() -> string {
   string location = {mia::homeLocation(), name(), ".sys/"};
-  directory::create(location);
+  if(!storageHooks.read && !storageHooks.write) directory::create(location);
   return location;
 }

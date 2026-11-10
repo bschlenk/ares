@@ -74,6 +74,7 @@ auto NeoGeoAES::load() -> LoadResult {
 }
 
 auto NeoGeoAES::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

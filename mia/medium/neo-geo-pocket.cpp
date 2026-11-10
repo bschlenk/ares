@@ -32,6 +32,7 @@ auto NeoGeoPocket::load(string location) -> LoadResult {
 }
 
 auto NeoGeoPocket::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   Pak::save("program.flash", ".sav");

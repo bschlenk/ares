@@ -152,10 +152,12 @@ auto PlayStation::load() -> LoadResult {
 }
 
 auto PlayStation::unload() -> void {
+  mia::StorageTransaction storageTransaction;
   Emulator::unload();
 }
 
 auto PlayStation::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(game->location);
   game->save(game->location);
@@ -197,9 +199,9 @@ auto PlayStation::loadExpansion() -> LoadResult {
     if(!saveRoot.endsWith("/") && !saveRoot.endsWith("\\")) saveRoot.append("/");
     expansionSavePath = {saveRoot, "PlayStation/", entry.type, ".eeprom"};
     string hashPath = {expansionSavePath, ".firmware"};
-    auto metadata = BML::unserialize(string::read(hashPath));
+    auto metadata = BML::unserialize(string{mia::readPersistent(hashPath)});
+    auto saved = mia::readPersistent(expansionSavePath);
     if(metadata["firmware"].string() == expansionFirmwareHash) {
-      auto saved = file::read(expansionSavePath);
       if(saved.size() == eeprom.size()) eeprom = std::move(saved);
     }
     system->pak->append("expansion.eeprom",eeprom);
@@ -209,11 +211,11 @@ auto PlayStation::loadExpansion() -> LoadResult {
 }
 
 auto PlayStation::saveExpansion() -> bool {
+  mia::StorageTransaction storageTransaction;
   if(!expansionSavePath) return true;
   auto eeprom = system->pak->read("expansion.eeprom");
   if(!eeprom) return false;
   string metadata = {"firmware: ", expansionFirmwareHash, "\n"};
-  directory::create(Location::path(expansionSavePath));
-  if(!file::write(expansionSavePath,{eeprom->data(),eeprom->size()})) return false;
-  return file::write({expansionSavePath,".firmware"},metadata);
+  if(!mia::writePersistent(expansionSavePath,{eeprom->data(),eeprom->size()})) return false;
+  return mia::writePersistent({expansionSavePath,".firmware"}, {reinterpret_cast<const u8*>(metadata.data()), metadata.size()});
 }

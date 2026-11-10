@@ -61,6 +61,7 @@ auto NeoGeoPocketColor::load() -> LoadResult {
 }
 
 auto NeoGeoPocketColor::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

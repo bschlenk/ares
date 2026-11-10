@@ -216,6 +216,7 @@ auto Nintendo64::load() -> LoadResult {
 }
 
 auto Nintendo64::unload() -> void {
+  mia::StorageTransaction storageTransaction;
   Emulator::unload();
 
   gamepad.reset();
@@ -225,6 +226,7 @@ auto Nintendo64::unload() -> void {
 }
 
 auto Nintendo64::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

@@ -39,6 +39,7 @@ auto MasterSystem::load(string location) -> LoadResult {
 }
 
 auto MasterSystem::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   if(auto node = document["game/board/memory(type=RAM,content=Save)"]) {

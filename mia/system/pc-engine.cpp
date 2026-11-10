@@ -15,6 +15,7 @@ auto PCEngine::load(string location) -> LoadResult {
 }
 
 auto PCEngine::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("backup.ram", ".bram");
 
   return true;

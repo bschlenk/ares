@@ -52,6 +52,7 @@ auto PCEngineLD::load(string location) -> LoadResult {
 }
 
 auto PCEngineLD::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   return true;

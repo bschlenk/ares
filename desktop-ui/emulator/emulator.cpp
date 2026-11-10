@@ -79,7 +79,7 @@ auto Emulator::locate(const string& location, const string& suffix, const string
 
   //path override
   string pathname = {path, *system, "/"};
-  directory::create(pathname);
+  if(!mia::storageHooks.read && !mia::storageHooks.write) directory::create(pathname);
   return {pathname, Location::prefix(location), suffix};
 }
 
@@ -229,6 +229,7 @@ auto Emulator::loadFirmware(const Firmware& firmware) -> std::shared_ptr<vfs::fi
 }
 
 auto Emulator::unload() -> void {
+  mia::StorageTransaction storageTransaction;
   save();
   clearGameInputMappings();
   root->unload();
@@ -240,7 +241,7 @@ auto Emulator::unload() -> void {
 
 auto Emulator::load(mia::Pak& node, string name) -> bool {
   if(auto fp = node.pak->read(name)) {
-    auto memory = file::read({node.location, name});
+    auto memory = mia::readPersistent({node.location, name});
     if(!memory.empty()) {
       fp->read(memory);
       return true;
@@ -250,8 +251,9 @@ auto Emulator::load(mia::Pak& node, string name) -> bool {
 }
 
 auto Emulator::save(mia::Pak& node, string name) -> bool {
+  mia::StorageTransaction storageTransaction;
   if(auto memory = node.pak->write(name)) {
-    return file::write({node.location, name}, {memory->data(), memory->size()});
+    return mia::writePersistent({node.location, name}, {memory->data(), memory->size()});
   }
   return false;
 }

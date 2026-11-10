@@ -277,6 +277,7 @@ auto Arcade::loadVs(string location, Markup::Node& document) -> LoadResult {
 }
 
 auto Arcade::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("dips.bml", ".dip");
   return true;
 }

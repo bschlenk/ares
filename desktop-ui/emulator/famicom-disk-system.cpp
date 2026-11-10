@@ -85,10 +85,12 @@ auto FamicomDiskSystem::load() -> LoadResult {
 }
 
 auto FamicomDiskSystem::unload() -> void {
+  mia::StorageTransaction storageTransaction;
   Emulator::unload();
 }
 
 auto FamicomDiskSystem::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   bios->save(bios->location);

@@ -33,6 +33,7 @@ auto MegaLD::load(string location) -> LoadResult {
 }
 
 auto MegaLD::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("backup.ram", ".bram");
 
   return true;

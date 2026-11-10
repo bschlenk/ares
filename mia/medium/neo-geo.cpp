@@ -124,6 +124,7 @@ auto NeoGeo::load(string location) -> LoadResult {
 }
 
 auto NeoGeo::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   Pak::save("dips.bml", ".dip");

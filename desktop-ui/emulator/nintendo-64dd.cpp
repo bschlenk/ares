@@ -158,12 +158,14 @@ auto Nintendo64DD::load() -> LoadResult {
 }
 
 auto Nintendo64DD::unload() -> void {
+  mia::StorageTransaction storageTransaction;
   gamepad.reset();
 
   Emulator::unload();
 }
 
 auto Nintendo64DD::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

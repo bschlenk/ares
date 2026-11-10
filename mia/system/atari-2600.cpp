@@ -9,8 +9,8 @@ auto Atari2600::load(string location) -> LoadResult {
   pak = std::make_shared<vfs::directory>();
   auto loadEeprom = [&](string name) {
     auto location = saveLocation(this->location, name, ".eeprom");
-    if(!file::exists(location)) return;
-    auto memory = file::read(location);
+    auto memory = readPersistent(location);
+    if(memory.empty()) return;
     pak->append(name, memory.size());
     if(auto fp = pak->write(name)) {
       fp->write({memory.data(), memory.size()});
@@ -49,6 +49,7 @@ auto Atari2600::load(string location) -> LoadResult {
 }
 
 auto Atari2600::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("savekey.eeprom", ".eeprom");
   Pak::save("atarivox.eeprom", ".eeprom");
   return true;

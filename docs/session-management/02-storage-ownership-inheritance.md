@@ -1,6 +1,6 @@
 # Task 2: Actual storage ownership and inheritance
 
-Status: **Not started — next task**. Depends on task 1.
+Status: **Complete**. Depends on task 1.
 
 Read [the shared preamble](README.md), the
 [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and task 1's
@@ -11,10 +11,13 @@ Test parent, helper and native death independently before removing the named-gam
 load gate. Preserve exclusive personal-profile ownership until task 3's other
 shared stores are coordinated as well.
 
-A local, **unvalidated** loader-hook sketch was saved at
-`/Users/bschlenk/.bb/thread-storage/thr_2t4tsb7mns/session-management-task2-draft.patch`.
-It is not part of the branch or a required input. Re-audit the actual loaders;
-the sketch has no completed lock, snapshot, inheritance or acceptance protocol.
+Implementation: this task's commit, recorded after commit in the shared preamble.
+Evidence: [task 2 implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-2--actual-storage-ownership-and-inheritance)
+and [loader/write-path inventory](../../electron-ui/sessions/STORAGE-INVENTORY.md).
+Native/TypeScript builds, 42 focused tests and seven separate desktop checks pass.
+Full acceptance passed 316 fixture tests, then stopped at an existing stale MCP
+assertion; later full-suite gates remain unrun. Personal profile exclusivity is
+retained, and tasks 3–7 remain outstanding.
 
 ## Requirements
 

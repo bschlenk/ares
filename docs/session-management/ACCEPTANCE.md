@@ -74,7 +74,9 @@ aliases. New Node helper scripts are `.js` ES modules; keep retired GUI paths de
 Task 1's foundation is implemented in `7a2216451`, with native/TypeScript builds,
 44 focused tests and the three documented Electron checks passing. See
 [the implementation report](../../electron-ui/sessions/IMPLEMENTATION.md) for
-exact commands and limits. Tasks 2–7, full integration acceptance and the final
+exact commands and limits. Task 2 now has native/TypeScript builds, 42 focused tests, seven separate desktop
+checks and an attempted full run with 316 fixture tests passed before a stale MCP
+assertion. Tasks 3–7, full integration acceptance and the final
 map to the spec's eleven criteria remain outstanding.
 
 The original planning-only document recorded source review and no builds/tests.

@@ -67,6 +67,7 @@ auto SC3000::load() -> LoadResult {
 }
 
 auto SC3000::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   if(tape) tape->save(tape->location);
@@ -101,6 +102,7 @@ auto SC3000::loadTape(ares::Node::Object node, string location) -> bool {
 }
 
 auto SC3000::unloadTape(ares::Node::Object node) -> void {
+  mia::StorageTransaction storageTransaction;
   if(node->name() == "SC-3000 Tape") {
     if(tape) tape->save(tape->location);
     tape.reset();

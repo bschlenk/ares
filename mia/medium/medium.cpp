@@ -364,6 +364,14 @@ auto LaserDisc::readDataSector(string mmiPath, string cuePath, u32 sectorID) -> 
 }
 
 auto Tape::load(string location) -> LoadResult {
+  if(storageHooks.read && location.iendsWith(".wav")) {
+    this->location = location;
+    loadPersistentWave(location,true);
+    pak->setAttribute("title", Medium::name(location));
+    if(directory::exists(location)) Pak::load("program.tape", ".sav");
+  return successful;
+  }
+
   if(!inode::exists(location)) return romNotFound;
 
   this->location = location;
@@ -399,10 +407,13 @@ auto Tape::load(string location) -> LoadResult {
     }
   }
 
+  if(directory::exists(location)) Pak::load("program.tape", ".sav");
   return successful;
 }
 
 auto Tape::save(string location) -> bool {
+  if(storageHooks.write && location.iendsWith(".wav")) return savePersistentWave(location);
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
   if (directory::exists(location)) {
     Pak::save("program.tape", ".sav");

@@ -18,6 +18,11 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#ifdef __APPLE__
+#include <sys/attr.h>
+#include <sys/mount.h>
+#undef BSD // sys/param.h macro conflicts with the N64 bus domain register.
+#endif
 #endif
 #ifdef _WIN32
 #include <fcntl.h>
@@ -27,6 +32,7 @@
 #include <n64/n64.hpp>
 #include <ares/frame-observer.hpp>
 #include <nall/gdb/server.hpp>
+#include "native/storage-service.hpp"
 #include "native/session-service.hpp"
 #include "native/n64-service.hpp"
 #include "native/machine-service.hpp"
@@ -361,14 +367,28 @@ struct Host : ares::Platform {
 };
 
 int main(int argc, char** argv) {
+#ifdef __APPLE__
+  if(argc == 3 && std::string(argv[1]) == "--storage-case-sensitive") {
+    struct statfs volume;
+    struct attrlist attributes{}; attributes.bitmapcount = ATTR_BIT_MAP_COUNT;
+    attributes.volattr = ATTR_VOL_CAPABILITIES;
+    struct { uint32_t length; vol_capabilities_attr_t caps; } result{};
+    if(statfs(argv[2],&volume) || getattrlist(volume.f_mntonname,&attributes,&result,sizeof(result),0) ||
+      !(result.caps.valid[VOL_CAPABILITIES_FORMAT] & VOL_CAP_FMT_CASE_SENSITIVE)) return 2;
+    std::cout << ((result.caps.capabilities[VOL_CAPABILITIES_FORMAT] & VOL_CAP_FMT_CASE_SENSITIVE) ? "1\n" : "0\n");
+    return 0;
+  }
+#endif
 #ifndef _WIN32
   // Kernel-owned claim lock: survives stale connection records, releases on death.
   // Keep the inode in place; unlinking advisory locks permits split ownership.
-  if(argc == 3 && (std::string(argv[1]) == "--service-lock" || std::string(argv[1]) == "--storage-lock")) {
-    int fd = open(argv[2], O_CREAT | O_RDWR | O_NOFOLLOW, 0600);
+  if(argc == 3 && (std::string(argv[1]) == "--service-lock" || std::string(argv[1]) == "--storage-lock" || std::string(argv[1]) == "--storage-lock-fd" || std::string(argv[1]) == "--storage-shared-fd")) {
+    bool inherited = std::string(argv[1]).ends_with("-fd");
+    bool shared = std::string(argv[1]) == "--storage-shared-fd";
+    int fd = inherited ? std::atoi(argv[2]) : open(argv[2], O_CREAT | O_RDWR | O_NOFOLLOW, 0600);
     struct stat st;
-    if(fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_uid != getuid() || (st.st_mode & 077) || flock(fd, LOCK_EX | LOCK_NB)) {
-      if(std::string(argv[1]) == "--storage-lock") std::cout << "busy\n" << std::flush;
+    if(fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_uid != getuid() || (st.st_mode & 077) || flock(fd, (shared ? LOCK_SH : LOCK_EX) | LOCK_NB)) {
+      if(std::string(argv[1]) != "--service-lock") std::cout << "busy\n" << std::flush;
       if(fd >= 0) close(fd);
       return 3;
     }
@@ -376,7 +396,7 @@ int main(int argc, char** argv) {
     char byte;
     while(read(STDIN_FILENO, &byte, 1) > 0) {}
     close(fd);
-    if(std::string(argv[1]) == "--storage-lock") std::cout << "released\n" << std::flush;
+    if(std::string(argv[1]) != "--service-lock") std::cout << "released\n" << std::flush;
     return 0;
   }
 #endif
@@ -396,6 +416,9 @@ int main(int argc, char** argv) {
   dup2(fileno(stderr), fileno(stdout));
 #endif
   if(!host.frameOutput) { std::cerr << "Cannot open frame transport\n"; return 1; }
+  StorageService storage;
+  bool prepareStorage = false;
+  std::string storageTransaction;
   bool synthetic = false, identifyOnly = false, listSystems = false, inspectSettings = false;
   unsigned width = 640, height = 480;
   std::string rom, saveDirectory, settingsFile, settingsOverlay, selectedSystem;
@@ -420,6 +443,8 @@ int main(int argc, char** argv) {
     else if(arg == "--synthetic") synthetic = true;
     else if(arg == "--1080p") { width = 1920; height = 1080; }
     else if(arg == "--systems") listSystems = true;
+    else if(arg == "--prepare-storage") prepareStorage = true;
+    else if(arg == "--storage-transaction" && i + 1 < argc) storageTransaction = argv[++i];
     else if(arg == "--settings-info") inspectSettings = true;
     else if(arg == "--settings-overlay" && i + 1 < argc) settingsOverlay = argv[++i];
     else if(arg == "--settings" && i + 1 < argc) settingsFile = argv[++i];
@@ -454,7 +479,7 @@ int main(int argc, char** argv) {
   settings.process(true); // Read configuration only; never rewrite the desktop settings.
   if(saveDirectory.empty()) saveDirectory = std::string(Path::program().data()) + "electron-data/saves/";
   if(saveDirectory.back() != '/') saveDirectory += '/';
-  directory::create(saveDirectory.c_str());
+  if(!prepareStorage && !identifyOnly && storageTransaction.empty()) directory::create(saveDirectory.c_str());
   settings.paths.saves = saveDirectory.c_str();
   mia::setSaveLocation([&]() -> string { return settings.paths.saves; });
   // Imported desktop paths must not redirect writable system data out of the profile.
@@ -462,6 +487,9 @@ int main(int argc, char** argv) {
   mia::setHomeLocation([&]() -> string { return settings.paths.home; });
   ares::platform = &host;
   ares::Memory::FixedAllocator::get();
+  // Identification also parses some media: it must not read persistence.
+  StorageService identificationStorage;
+  if(!synthetic) identificationStorage.install(true);
   if(!synthetic) {
     auto matches = mia::identify(rom.c_str());
     // MIA considers monochrome GB cartridges compatible with both GB models.
@@ -487,16 +515,25 @@ int main(int argc, char** argv) {
     if(matches.size() != 1) { std::cerr << "Ambiguous ROM: select a system explicitly.\n"; return 2; }
     for(auto& entry : emulators) if(entry->name == matches.front()) emulator = entry;
     if(!emulator) { std::cerr << "System is not compiled into this host\n"; return 2; }
+    if(prepareStorage) storage.install(true);
+    else if(!storageTransaction.empty()) storage.configure(storageTransaction);
+    else mia::storageHooks = {};
     host.systemName = emulator->name;
     runtime.mediaQueue = extraMedia;
-    host.setupInput();
-    if(host.sound) {
+    if(!prepareStorage) host.setupInput();
+    if(host.sound && !prepareStorage) {
       if(!host.output.create()) { std::cerr << "Native audio unavailable; use --silent to test without it\n"; return 1; }
       host.output.setBlocking(true);
     }
     if(!emulator->load(string{rom.c_str()})) {
       if(emulator->root) emulator->root->unload();
       emulator.reset(); return 1;
+    }
+    if(prepareStorage) {
+      emulator->unload();
+      std::fprintf(host.frameOutput, "%s\n", storage.inventory().c_str());
+      ares::platform = nullptr;
+      return 0;
     }
     host.root = emulator->root;
     if(auto bytes = emulator->game->pak->read("program.rom")) {

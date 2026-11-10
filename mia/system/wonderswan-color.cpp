@@ -16,6 +16,7 @@ auto WonderSwanColor::load(string location) -> LoadResult {
 }
 
 auto WonderSwanColor::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("save.eeprom", ".eeprom");
 
   return true;

@@ -115,10 +115,12 @@ auto MegaCD::load() -> LoadResult {
 }
 
 auto MegaCD::unload() -> void {
+  mia::StorageTransaction storageTransaction;
   Emulator::unload();
 }
 
 auto MegaCD::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(game->location);
   game->save(game->location);

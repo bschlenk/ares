@@ -38,6 +38,7 @@ auto SuperGrafx::load() -> LoadResult {
 }
 
 auto SuperGrafx::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(game->location);
   game->save(game->location);

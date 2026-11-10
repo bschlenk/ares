@@ -51,6 +51,7 @@ auto PocketChallengeV2::load() -> LoadResult {
 }
 
 auto PocketChallengeV2::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

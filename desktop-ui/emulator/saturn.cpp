@@ -55,6 +55,7 @@ auto Saturn::load() -> LoadResult {
 }
 
 auto Saturn::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

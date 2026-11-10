@@ -1,10 +1,13 @@
 # Task 3: Personal windows and shared settings
 
-Status: **Not started**. Depends on task 2 and task 1's settings transaction.
+Status: **Next — not started**. Depends on task 2 and task 1's settings transaction.
 
 Read [the shared preamble](README.md) first. Reuse
 `settings/transaction.ts` and `sessions/launching.ts`; finish watcher/revision
 reconciliation and every mutable store identified by the data-root audit.
+Task 2 added `storage-routing.json`: preserve its effective contained save subtree
+when opening additional personal windows; coordinate that shared routing rather
+than allowing a default launch to redirect a running custom-root personal game.
 Do not remove the personal-profile exclusion merely because launching another
 process works. Keep broad multiwindow/external-access exposure gated until the
 storage and revocation guarantees in this plan are available.

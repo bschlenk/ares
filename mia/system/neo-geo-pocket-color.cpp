@@ -21,6 +21,7 @@ auto NeoGeoPocketColor::load(string location) -> LoadResult {
 }
 
 auto NeoGeoPocketColor::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("cpu.ram", ".cram");
   Pak::save("apu.ram", ".aram");
 

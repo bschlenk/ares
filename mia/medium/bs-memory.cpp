@@ -40,6 +40,7 @@ auto BSMemory::load(string location) -> LoadResult {
 }
 
 auto BSMemory::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   if(document["game/board/memory(type=Flash)"]) {

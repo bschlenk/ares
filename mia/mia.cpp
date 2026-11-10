@@ -6,6 +6,16 @@ namespace mia {
 
 std::function<string ()> homeLocation = [] { return string{Path::user(), "Emulation/Systems/"}; };
 std::function<string ()> saveLocation = [] { return string{}; };
+StorageHooks storageHooks;
+auto readPersistent(const string& path) -> std::vector<u8> {
+  if(storageHooks.read) return storageHooks.read(path);
+  return file::read(path);
+}
+auto writePersistent(const string& path, std::span<const u8> data) -> bool {
+  if(storageHooks.write) return storageHooks.write(path, data);
+  directory::create(Location::path(path));
+  return file::write(path, data);
+}
 std::vector<string> media;
 std::function<string (const string&)> resourceResolver;
 

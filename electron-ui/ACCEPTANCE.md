@@ -138,3 +138,20 @@ timeout errors are distinguished from child-process exit failures.
 Per-gate logs and revision-tagged summaries remain the source of validation
 results. A configured workflow alone is not evidence that a particular revision
 passed on GitHub's hosted runner.
+
+## Session management task 2 — storage transactions (2026-11-10)
+
+See [implementation evidence](sessions/IMPLEMENTATION.md#task-2--actual-storage-ownership-and-inheritance)
+and the [loader/write-path inventory](sessions/STORAGE-INVENTORY.md). Named ROM
+loads now prepare/reserve actual persistence, snapshot lazily into private
+resource mappings, and hold inherited kernel ownership through native exit.
+Personal profile exclusivity remains until task 3.
+
+Final native/TypeScript builds and **42 focused tests pass with zero skips**.
+The full `mise exec node@24.22.0 -- npm run accept` run in
+`artifacts/acceptance/run-ynzGhW` passed **316 fixture tests**, native smoke and
+three Electron gates, then failed at an existing stale MCP tool-list expectation.
+The full suite is not green and its later gates were not reached. Exact commands,
+crash/alias/peripheral coverage, separate desktop evidence and unrun limits are in
+the implementation report. Task 2 contributes to spec criteria 2–4; it is not
+acceptance of tasks 3–7 or closure of issue #37.

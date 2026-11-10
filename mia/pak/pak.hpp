@@ -18,6 +18,9 @@ struct Pak {
   auto save(string name, string extension, string location = {}) -> bool;
   auto load(Markup::Node node, string extension, string location = {}) -> bool;
   auto save(Markup::Node node, string extension, string location = {}) -> bool;
+  // Memory codecs keep writable tape I/O inside the optional persistence policy.
+  auto loadPersistentWave(const string& location, bool initialize = false) -> bool;
+  auto savePersistentWave(const string& location) -> bool;
   auto saveLocation(string location, string name, string extension) -> string;
 
   string location;

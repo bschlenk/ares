@@ -112,6 +112,7 @@ auto Mega32X::load() -> LoadResult {
 }
 
 auto Mega32X::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);
