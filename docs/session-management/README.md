@@ -19,6 +19,8 @@ product requirements.
   (`feat(sessions): coordinate native storage ownership and inheritance`).
 - Task 3 implementation commit: **`9be56e5f1`**
   (`feat(sessions): coordinate personal windows and shared settings`).
+- Task 4 implementation commit: **`e89674814`**
+  (`feat(sessions): add managed state overlays and recoverable reset`).
 - Next work: **[task 5 — discovery and scoped selection](05-discovery-scoped-selection.md)**.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
@@ -48,7 +50,7 @@ second execution order.
 | 1 | [Data model, paths, and lifecycle](01-data-model-paths-lifecycle.md) | **Complete (foundation)** | `7a2216451` |
 | 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Complete** | `164e91973` |
 | 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Complete** | `9be56e5f1` |
-| 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Complete** | Recorded in completion follow-up |
+| 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Complete** | `e89674814` |
 | 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Next** | — |
 | 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | Not started | — |
 | 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | Not started | — |

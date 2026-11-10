@@ -2,7 +2,8 @@
 
 Status: **Complete**. Depends on tasks 1–3.
 
-Implementation commit: recorded in the completion metadata follow-up.
+Implementation commit: **`e89674814`**
+(`feat(sessions): add managed state overlays and recoverable reset`).
 Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-4--managed-states-and-recovery),
 [acceptance](../../electron-ui/ACCEPTANCE.md), and
 [CLI/MCP recipes](../../electron-ui/sessions/RECOVERY.md).

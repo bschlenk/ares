@@ -323,8 +323,9 @@ selection, authorization grant or claim of full issue #37 acceptance is introduc
 ## Task 4 — Managed states and recovery
 
 Implemented on `feat/session-management`, based on
-`13a03a0cb14ea31102eb2164503c8ccab735e880`. Implementation commit is recorded in
-[the task handoff](../../docs/session-management/04-managed-states-recovery.md).
+`13a03a0cb14ea31102eb2164503c8ccab735e880`. Implementation commit:
+**`e89674814`** (`feat(sessions): add managed state overlays and recoverable reset`).
+See [the task handoff](../../docs/session-management/04-managed-states-recovery.md).
 
 `ScopedCheckpointLibrary` exposes writable local and inherited personal entries
 with explicit origin, writable status and source-qualified references. Timestamp

@@ -185,6 +185,8 @@ remain unrun/manual. Task 4 is next; issue #37 remains open.
 
 ## Session management task 4 — managed states and recovery (2026-11-10)
 
+Implementation commit: **`e89674814`**.
+
 Named windows now list/load read-only personal managed states alongside writable
 session states. Source-qualified references disambiguate timestamp collisions;
 backend rename/delete/retention cannot modify inherited entries. Both whole-
