@@ -5,7 +5,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { profileRoot } from './profile.js';
 
-export const usage='Usage: ares [GUI options] | tools | call TOOL [--json FILE | --name VALUE ...] | run SCRIPT [--args FILE] [--state FILE] [--artifact FILE] [--output FILE] [--video FILE] [--retain-result]\nGUI options: --services, --no-services, --instance-name NAME, --disable-plugins, --user-data-dir PATH\n';
+export const usage='Usage: ares [GUI options] | tools | call TOOL [--json FILE | --name VALUE ...] | run SCRIPT [--args FILE] [--state FILE] [--artifact FILE] [--output FILE] [--video FILE] [--retain-result]\nGUI options: --services, --no-services, --instance-name NAME, --session-name NAME, --disable-plugins, --user-data-dir PATH\n';
 export function dispatch(args:string[]):'help'|'cli'|'gui' {
   if(args.some(v=>v==='--help'||v==='-h')) {
     if(!args.length || ['--help','-h','call','tools','run'].includes(args[0]))return 'help';
@@ -16,7 +16,7 @@ export function dispatch(args:string[]):'help'|'cli'|'gui' {
     return 'cli';
   }
   const flags=new Set(['--services','--no-services','--disable-plugins']);
-  const values=new Set(['--instance-name','--user-data-dir']);
+  const values=new Set(['--instance-name','--session-name','--user-data-dir']);
   for(let i=0;i<args.length;i++){
     if(flags.has(args[i]))continue;
     if(values.has(args[i])&&args[i+1]&&!args[i+1].startsWith('-')){++i;continue;}

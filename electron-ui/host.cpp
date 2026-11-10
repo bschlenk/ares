@@ -364,14 +364,20 @@ int main(int argc, char** argv) {
 #ifndef _WIN32
   // Kernel-owned claim lock: survives stale connection records, releases on death.
   // Keep the inode in place; unlinking advisory locks permits split ownership.
-  if(argc == 3 && std::string(argv[1]) == "--service-lock") {
+  if(argc == 3 && (std::string(argv[1]) == "--service-lock" || std::string(argv[1]) == "--storage-lock")) {
     int fd = open(argv[2], O_CREAT | O_RDWR | O_NOFOLLOW, 0600);
     struct stat st;
-    if(fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_uid != getuid() || (st.st_mode & 077) || flock(fd, LOCK_EX | LOCK_NB)) return 3;
+    if(fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_uid != getuid() || (st.st_mode & 077) || flock(fd, LOCK_EX | LOCK_NB)) {
+      if(std::string(argv[1]) == "--storage-lock") std::cout << "busy\n" << std::flush;
+      if(fd >= 0) close(fd);
+      return 3;
+    }
     std::cout << "locked\n" << std::flush;
     char byte;
     while(read(STDIN_FILENO, &byte, 1) > 0) {}
-    close(fd); return 0;
+    close(fd);
+    if(std::string(argv[1]) == "--storage-lock") std::cout << "released\n" << std::flush;
+    return 0;
   }
 #endif
 #ifdef _WIN32

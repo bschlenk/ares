@@ -122,7 +122,6 @@ export async function connectionInstance(file: string): Promise<string> {
 /** Opt-in, private local endpoint. No renderer-owned backend and no TCP listener. */
 export class LocalServiceHost {
   private leases:OwnerLeases
-  readonly instance = randomUUID()
   private server = net.createServer((socket) => this.accept(socket))
   private sockets = new Set<net.Socket>()
   private claimLock?: ChildProcess
@@ -132,6 +131,7 @@ export class LocalServiceHost {
   constructor(
     private client: SessionClient,
     private manage?: (params: any) => Promise<unknown>,
+    readonly instance: string = randomUUID(),
   ) {this.leases=new OwnerLeases(client);}
   async listen(directory = defaultServiceDirectory(), name?: string, lockExecutable?: string): Promise<string> {
     if (process.platform === 'win32')

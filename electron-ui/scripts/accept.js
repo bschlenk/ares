@@ -123,6 +123,7 @@ async function main() {
     ['electron-recovery', 'electron-recovery.js', ['--disable-plugins']],
   ]) await gate(name, electron, [`tests/${file}`, ...args])
   await gate('profile-ownership', process.execPath, ['tests/profile-live.cjs'])
+  await gate('session-context', process.execPath, ['tests/session-context-live.js'])
   await gate('launch-isolation', process.execPath, ['tests/launch-live.cjs'])
   const bundle = path.join(runDirectory, 'Ares.app')
   try {

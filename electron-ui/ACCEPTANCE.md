@@ -1,5 +1,10 @@
 # Fixture acceptance and remaining gates
 
+Session-management task 1 evidence is recorded in
+[sessions/IMPLEMENTATION.md](sessions/IMPLEMENTATION.md). This is incremental
+work; the eleven session-management spec criteria are not yet accepted. Named
+game loads remain disabled until native storage transactions are implemented.
+
 From `electron-ui/`:
 
 ```sh

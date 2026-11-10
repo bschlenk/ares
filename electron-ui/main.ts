@@ -22,6 +22,9 @@ import { coreDescriptors, firmwareDescriptors, importedValues, nativeSettingsBml
 import { SettingsStore } from './settings/store.js'
 import { presentationSettings, nativeRuntimeSettings, agentSettings } from './settings/builtins.js'
 import { profileRoot, profileSaves } from './profile.js'
+import {personalContext, managementRoot, type AppContext} from './sessions/context.js'
+import {KernelLock} from './sessions/locks.js'
+import {SessionRepository} from './sessions/repository.js'
 import { PluginRegistry } from './plugins/registry.js'
 import {
   app,
@@ -56,38 +59,52 @@ import type {
 } from './services/contracts.js'
 // Compiled entry lives in dist/ in both checkout and copied distribution.
 const appRoot = fileURLToPath(new URL('../', import.meta.url))
-const saveDirectory = (() => {
+let profileLock: KernelLock | undefined
+// Logical data retains its legacy path; Electron browser storage is process-local.
+export const appContext: AppContext = (() => {
+  const inferredProfile = path.join(app.getPath('appData'), app.getName())
+  const suppliedProfile = app.getPath('userData')
+  const selectedProfile = process.env.ARES_PROFILE_DIR ||
+    (app.commandLine.hasSwitch('user-data-dir') || suppliedProfile !== inferredProfile
+      ? suppliedProfile
+      : profileRoot(app.getPath('appData'), process.env.ARES_PROFILE))
+  const index = process.argv.indexOf('--session-name')
+  const name = index >= 0 ? process.argv[index + 1] : undefined
+  if (index >= 0 && (!name || name.startsWith('--'))) throw new Error('invalid_session_name')
+  let context: AppContext
   try {
-    // Respect explicit Electron profiles used by embedders/tests and --user-data-dir.
-    const inferredProfile = path.join(app.getPath('appData'), app.getName())
-    const suppliedProfile = app.getPath('userData')
-    const selectedProfile = process.env.ARES_PROFILE_DIR ||
-      (app.commandLine.hasSwitch('user-data-dir') || suppliedProfile !== inferredProfile
-        ? suppliedProfile
-        : profileRoot(app.getPath('appData'), process.env.ARES_PROFILE))
-    fs.mkdirSync(selectedProfile, { recursive: true })
-    const profileDirectory = fs.realpathSync(selectedProfile)
-    app.setName('ares')
-    app.setPath('userData', profileDirectory)
-    app.setPath('sessionData', path.join(profileDirectory, 'browser'))
-    // Electron owns the OS-backed lock and releases it even after a crash. Never
-    // forward a second launch's arguments or mutations to the existing instance.
-    if (!app.requestSingleInstanceLock()) {
-      console.error(`profile_in_use: ${profileDirectory}; choose ARES_PROFILE or ARES_PROFILE_DIR`)
-      app.exit(1)
+    if (name) {
+      const opened = new SessionRepository(selectedProfile).openSync(name, () => app.exit(1))
+      context = opened.context
+      profileLock = opened.lock
+    } else {
+      context = personalContext(selectedProfile)
+      // Retain exclusive personal ownership until native resource sets are protected.
+      profileLock = KernelLock.acquireSync(path.join(managementRoot(context.personalRoot), 'locks', 'personal.lock'), {onLost: () => app.exit(1), timeoutMs: 0})
     }
-    fs.writeFileSync(path.join(profileDirectory,'lock-holder.json'),JSON.stringify({pid:process.pid,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600});
-    fs.mkdirSync(app.getPath('sessionData'), { recursive: true })
-    app.setAppLogsPath(path.join(profileDirectory, 'logs'))
-    return profileSaves(profileDirectory, process.env.ARES_SAVE_DIR)
   } catch (error) {
-    console.error(error)
+    const existing = (error as Error & {existing?: import('./sessions/repository.js').SessionOwner}).existing
+    if(name && existing) {
+      console.error(`session_existing: ${JSON.stringify(existing)}`)
+      app.exit(0)
+    }
+    console.error(`${name ? 'session_busy_or_unavailable' : 'profile_in_use'}: ${selectedProfile}: ${String(error)}`)
     app.exit(1)
     throw error
   }
+  app.setName('ares')
+  app.setPath('userData', context.runtimeRoot)
+  app.setPath('sessionData', path.join(context.runtimeRoot, 'browser'))
+  fs.mkdirSync(app.getPath('sessionData'), {recursive: true, mode: 0o700})
+  app.setAppLogsPath(path.join(context.runtimeRoot, 'logs'))
+  return context
 })()
+const sessionRepository = appContext.kind === 'named' ? new SessionRepository(appContext.personalRoot) : undefined
+sessionRepository?.advertise(appContext, profileLock!, false, process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory())
+fs.writeFileSync(path.join(appContext.dataRoot, 'lock-holder.json'), JSON.stringify({pid:process.pid,instance:appContext.instanceId,kind:appContext.kind,session:appContext.sessionId,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600})
+const saveDirectory = profileSaves(appContext.dataRoot, process.env.ARES_SAVE_DIR)
 
-const appLogs = new AppLogs(path.join(app.getPath('userData'), 'logs'))
+const appLogs = new AppLogs(path.join(appContext.runtimeRoot, 'logs'), undefined, appContext.instanceId)
 const fatal = (error: unknown) => {
   appLogs.write('main', 'fatal', error)
   const fallback = setTimeout(() => app.exit(1), 1500)
@@ -133,7 +150,7 @@ export const sessions = new SessionRouter((reply) => {
 }, (source,error)=>appLogs.write(source,'error',error))
 export const plugins = new PluginRegistry(
   path.join(appRoot, 'bundled-plugins'),
-  path.join(app.getPath('userData'), 'plugins'),
+  path.join(appContext.dataRoot, 'plugins'),
   sessions,
   () => sessions.identity,
   (catalog) => {
@@ -141,7 +158,7 @@ export const plugins = new PluginRegistry(
       window.webContents.send('plugin-catalog', catalog)
   },
 )
-export const pairedRecovery=plugins.connectRecovery(path.join(app.getPath('userData'),'paired-recovery'),()=>{
+export const pairedRecovery=plugins.connectRecovery(path.join(appContext.dataRoot,'paired-recovery'),()=>{
   if(!active||active.recoveryFailure||!sessions.identity||recoveryTransition)throw new ServiceError('recovery_session_changed');
   const current=active,identity={...sessions.identity};
   return {client:sessions,identity,guard:()=>{if(active!==current||recoveryTransition||sessions.identity?.session!==identity.session||sessions.identity.epoch!==identity.epoch)throw new ServiceError('recovery_session_changed');}};
@@ -276,7 +293,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
       if(Object.keys(params).some(key=>key!=='operation'))throw new Error('invalid_request');
       return await rendererRecovery.recover();
     case 'app_health': return appHealth()
-    case 'app_status': return { ready: sessions.identity !== undefined, pid: process.pid }
+    case 'app_status': return { ready: !!window && !window.isDestroyed(), pid: process.pid, instance: appContext.instanceId, kind: appContext.kind, session_id: appContext.sessionId, session_name: appContext.sessionName }
     case 'load_rom': {
       if (Object.keys(params).some(key => !['operation', 'path', 'system'].includes(key)) || typeof params.path !== 'string' || !path.isAbsolute(params.path) || params.path.includes('\0') || (params.system !== undefined && typeof params.system !== 'string')) throw new Error('invalid_rom_request')
       return queueOperation(async () => {
@@ -359,7 +376,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
     default:
       throw new Error('unknown_plugin_operation')
   }
-})
+}, appContext.instanceId)
 export { stop as stopNative }
 const installedHost = path.join(
   process.resourcesPath,
@@ -389,11 +406,11 @@ if (!app.isPackaged && process.env.ARES_DEV_RELOAD === '1') {
       window.webContents.reloadIgnoringCache()
   })
 }
-export const workspace = new WorkspaceStore(path.join(app.getPath('userData'), 'workspace.json'))
+export const workspace = new WorkspaceStore(path.join(appContext.dataRoot, 'workspace.json'))
 export const preferences = new SettingsStore(
-  path.join(app.getPath('userData'), 'preferences.json'), [
+  path.join(appContext.dataRoot, 'preferences.json'), [
     ...presentationSettings,
-    {id:'states.root',title:'Save-state storage folder (existing files are not moved or deleted)',section:'Save States',type:'string',default:path.join(app.getPath('userData'),'states'),apply:'live',file:{extensions:[],directory:true}},
+    {id:'states.root',title:'Save-state storage folder (existing files are not moved or deleted)',section:'Save States',type:'string',default:path.join(appContext.dataRoot,'states'),apply:'live',file:{extensions:[],directory:true}},
     {id:'states.dateFormat',title:'Capture date format',section:'Save States',type:'string',default:DEFAULT_CHECKPOINT_FORMAT,maxLength:256,apply:'live'},
     { id: 'emulation.pauseOnFocusLoss', title: 'Pause when the window loses focus', section: 'Emulation', type: 'boolean', default: false, apply: 'live' },
     { id: 'library.directory', title: 'ROM directory', section: 'ROM Library', type: 'string', default: '', apply: 'live', file: { extensions: [], directory: true } },
@@ -404,7 +421,7 @@ export const preferences = new SettingsStore(
     ...nativeRuntimeSettings,
     ...inputDescriptors,
     { id: 'paths.importBml', title: 'Imported ares settings', section: 'Paths', type: 'string', file: { extensions: ['bml'] },
-      default: path.join(app.getPath('userData'), 'settings.bml'), apply: 'next-rom' },
+      default: path.join(appContext.dataRoot, 'settings.bml'), apply: 'next-rom' },
   ],
   snapshot => {
     if (window && !window.isDestroyed()) window.webContents.send('preferences-changed', snapshot)
@@ -437,7 +454,7 @@ export const preferences = new SettingsStore(
     if (Object.keys(configuration).some(key => reply.result?.[key as keyof RuntimeSettings] !== configuration[key as keyof RuntimeSettings])) throw new Error('runtime_settings_not_applied')
   },
   {
-    ...(process.env.ARES_SETTINGS ? { 'paths.importBml': process.env.ARES_SETTINGS } : {}),
+    ...(process.env.ARES_SETTINGS && appContext.kind === 'personal' ? { 'paths.importBml': process.env.ARES_SETTINGS } : {}),
     ...(serviceLaunchOverride() === undefined ? {} : { 'agent.enabled': serviceLaunchOverride() }),
   },
 )
@@ -446,6 +463,7 @@ const mainWatchdog=new MainWatchdog(appHealth,error=>appLogs.write('watchdog','e
 function serviceLaunchOverride(): boolean | undefined {
   const switches = process.argv.filter(arg => arg === '--services' || arg === '--no-services')
   if (switches.length) return switches.at(-1) === '--services'
+  if (appContext.kind === 'named') return true
   if (process.env.ARES_ENABLE_SERVICES === '1' || process.argv.includes('--instance-name')) return true
   return undefined
 }
@@ -453,7 +471,8 @@ async function configureServices(enabled: boolean) {
   if (!enabled) { await mainWatchdog.close(); await serviceHost.close(); return }
   if (serviceHost.info) return
   const index = process.argv.indexOf('--instance-name')
-  const name = index < 0 ? undefined : process.argv[index + 1]
+  const name = index < 0 ? appContext.sessionName : process.argv[index + 1]
+  if (appContext.sessionName && name !== appContext.sessionName) throw new Error('conflicting_session_and_instance_name')
   if (index >= 0 && (!name || name.startsWith('--'))) throw new Error('invalid_instance_name')
   const file = await serviceHost.listen(process.env.ARES_SERVICE_DIR, name, hostPath)
   try{await mainWatchdog.start(serviceHost.info!);}catch(error){await mainWatchdog.close();await serviceHost.close();throw error;}
@@ -473,7 +492,10 @@ async function refreshNativeSettings() {
 }
 async function setPreference(id: string, value: unknown, reset = false, guard: () => void = () => {}) {
   if(id==='states.dateFormat' && !reset) {const error=validateCheckpointFormat(String(value));if(error)throw new Error(error)}
-  if(id==='states.root' && !reset && (typeof value!=='string'||!path.isAbsolute(value)))throw new Error('Choose an absolute storage folder')
+  if(id==='states.root' && !reset) {
+    if(typeof value!=='string'||!path.isAbsolute(value))throw new Error('Choose an absolute storage folder')
+    if(appContext.kind==='named') { guard(); profileSaves(appContext.dataRoot, value) }
+  }
   if (reset) await preferences.reset(id, guard); else await preferences.set(id, value, guard)
   if (id === 'paths.importBml') await refreshNativeSettings()
   return preferences.catalog()
@@ -491,8 +513,8 @@ async function choosePreferenceFile(id: string, guard: () => void = () => {}) {
 plugins.connectSettings(new PluginSettingsService(preferences, setPreference, choosePreferenceFile))
 function preferenceValue(id: string) { return preferences.catalog().entries.find(entry => entry.descriptor.id === id)!.value }
 const romLibrary = new RomLibrary(() => String(preferenceValue('library.directory')),
-  path.join(app.getPath('userData'), 'artwork'), () => preferenceValue('library.downloadArtwork') === true)
-void romLibrary.scan().catch(error => appLogs.write('library', 'error', error))
+  path.join(appContext.dataRoot, 'artwork'), () => preferenceValue('library.downloadArtwork') === true)
+
 async function openRomFile(system = '', guard: () => void = () => {}) {
   guard()
   const result = await dialog.showOpenDialog(window, {
@@ -614,6 +636,7 @@ async function hashRom(file: string) {
   return hash.digest('hex')
 }
 async function start(options: StartOptions & { agent?: boolean; romHash?: string; title?: string }) {
+  if (appContext.kind === 'named' && options.rom) throw new Error('session_storage_transactions_not_ready')
   const romHash = options.rom ? options.romHash ?? await hashRom(options.rom) : undefined
   let system = 'Synthetic'
   await refreshNativeSettings()
@@ -663,7 +686,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   args.push('--save-dir', saveDirectory, '--resource-dir', resourceDirectory)
   const identity = { session: randomUUID(), epoch: 1 }
   args.push('--control-session', identity.session)
-  const configurationDirectory = path.join(app.getPath('userData'), 'runtime-settings')
+  const configurationDirectory = path.join(appContext.runtimeRoot, 'runtime-settings')
   fs.mkdirSync(configurationDirectory, { recursive: true })
   const configurationFile = path.join(configurationDirectory, `${identity.session}.bml`)
   fs.writeFileSync(configurationFile, nativeSettingsBml(startupSettings), { flag: 'wx', mode: 0o600 })
@@ -807,6 +830,8 @@ function enqueue(task: () => Promise<void>) {
 app
   .whenReady()
   .then(async () => {
+    if (appContext.kind === 'named') profileSaves(appContext.dataRoot, String(preferenceValue('states.root')))
+    void romLibrary.scan().catch(error => appLogs.write('library', 'error', error))
     await refreshNativeSettings()
     await plugins.initialize(
       (process.env.ARES_PLUGIN_DIRS || '')
@@ -1194,6 +1219,7 @@ app
         if (process.env.ARES_AUTOTEST === '1') app.quit()
       }
     })
+    sessionRepository?.advertise(appContext, profileLock!, true, process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory())
     void window.loadFile(path.join(appRoot, 'index.html'), {
       query: {
         autotest: process.env.ARES_AUTOTEST || '',
@@ -1223,6 +1249,7 @@ app.on('before-quit', (event) => {
     for(const close of [()=>plugins.close(),()=>mainWatchdog.close(),()=>serviceHost.close()]){
       try{await close()}catch(error){appLogs.write('main','error',error)}
     }
+    await profileLock?.release()
     quitReady=true
     app.quit()
   })()
