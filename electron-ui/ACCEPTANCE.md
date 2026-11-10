@@ -158,6 +158,8 @@ acceptance of tasks 3–7 or closure of issue #37.
 
 ## Session management task 3 — personal windows and shared settings (2026-11-10)
 
+Implementation commit: **`9be56e5f1`**.
+
 File → New Window now creates a personal process from personal or named windows,
 with independent browser/native/UI runtime resources and shared coordinated data.
 Preferences reconcile through directory watching, persisted revisions, polling and

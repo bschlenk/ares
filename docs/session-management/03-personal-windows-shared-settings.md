@@ -1,7 +1,8 @@
 # Task 3: Personal windows and shared settings
 
 Status: **Complete**. Builds on task 2 and task 1's settings transaction.
-Implementation commit is recorded in the shared handoff table.
+Implementation commit: **`9be56e5f1`**
+(`feat(sessions): coordinate personal windows and shared settings`).
 Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-3--personal-windows-and-shared-settings)
 and [acceptance documentation](../../electron-ui/ACCEPTANCE.md).
 

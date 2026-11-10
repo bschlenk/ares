@@ -188,6 +188,9 @@ each check. Repository `git diff --check` passes.
 
 ## Task 3 — Personal windows and shared settings
 
+Implementation commit: **`9be56e5f1`**
+(`feat(sessions): coordinate personal windows and shared settings`).
+
 Implemented on `feat/session-management`, based on `d607ab7f1794db9b0db93e869291d5d2c228dbc3`.
 
 File → New Window (`CmdOrCtrl+N`) launches a personal process from either context,
