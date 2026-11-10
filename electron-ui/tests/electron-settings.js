@@ -13,7 +13,7 @@ fs.writeFileSync(file, JSON.stringify({ version: 1, values: {
 } }));
 app.setPath('userData', profile);
 delete process.env.ARES_SETTINGS;
-Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_ROM: '', ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DISABLE_PLUGINS: '1', ARES_ENABLE_SERVICES: '0' });
+Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_SERVICE_DIR: path.join(temporary, 'ipc'), ARES_ROM: '', ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DISABLE_PLUGINS: '1', ARES_ENABLE_SERVICES: '0' });
 const { sessions, appContext } = await import('../dist/main.js');
 const until = async check => {
   for (let i = 0; i < 300; i++) {

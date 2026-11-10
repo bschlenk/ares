@@ -1,6 +1,15 @@
 # Task 3: Personal windows and shared settings
 
-Status: **Next — not started**. Depends on task 2 and task 1's settings transaction.
+Status: **Complete**. Builds on task 2 and task 1's settings transaction.
+Implementation commit is recorded in the shared handoff table.
+Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-3--personal-windows-and-shared-settings)
+and [acceptance documentation](../../electron-ui/ACCEPTANCE.md).
+
+Validation: native/TypeScript builds, 81 focused tests, eleven separate desktop
+checks and 329 full-suite fixture tests pass. Full acceptance stops at the
+previously documented stale MCP tool-list assertion; later full-suite and
+packaged/Dock gates remain unrun. Task 4 is next. Window-wide approvals,
+revocation and scoped external targeting remain gated by tasks 5–6.
 
 Read [the shared preamble](README.md) first. Reuse
 `settings/transaction.ts` and `sessions/launching.ts`; finish watcher/revision

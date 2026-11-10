@@ -4,7 +4,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {KernelLock, withLock, lockExecutable} from './locks.js';
 import {privateDirectory, publishJson, readJson, syncDirectory} from './files.js';
-import type {AppContext} from './context.js';
+import {managementRoot, type AppContext} from './context.js';
 import type {GenerationData} from './repository.js';
 
 export type StorageResource = {source: string; scope: 'file' | 'directory'};
@@ -27,26 +27,36 @@ export function canonicalStoragePath(filename: string): string {
 /** A personal launch can select a contained save subtree. Remember that routing
  * separately from process-local arguments so a later named launch prepares the
  * same personal destinations, including when no personal window is open. */
-export function personalStorageDirectory(context: AppContext, effective?: string): string {
+export function personalStorageDirectory(context: AppContext, effective?: string, hold?: (lock: KernelLock) => void): string {
   const marker = path.join(context.personalRoot, 'storage-routing.json');
-  const contained = (directory: string) => {
-    const relative = path.relative(context.personalRoot, directory);
-    if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('invalid_personal_storage_routing');
-    return relative;
-  };
-  if (context.kind === 'personal') {
-    if (!effective) throw new Error('personal_save_directory_required');
-    const directory = canonicalStoragePath(effective);
-    publishJson(marker, {version: 1, directory: contained(directory)});
+  const root = managementRoot(context.personalRoot);
+  const transaction = KernelLock.acquireSync(path.join(root, 'locks', 'routing.lock'));
+  try {
+    const contained = (directory: string) => {
+      const relative = path.relative(context.personalRoot, directory);
+      if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('invalid_personal_storage_routing');
+      return relative;
+    };
+    let record: {version: number; directory: string} | undefined;
+    try { record = readJson(marker, 8192, true); }
+    catch (error) { if (!missing(error)) throw error; }
+    if (record && (record.version !== 1 || typeof record.directory !== 'string' || path.isAbsolute(record.directory))) throw new Error('invalid_personal_storage_routing');
+    let directory = canonicalStoragePath(path.resolve(context.personalRoot, record?.directory ?? 'saves'));
+    contained(directory);
+    if (context.kind === 'personal') {
+      const requested = effective ? canonicalStoragePath(effective) : directory;
+      contained(requested);
+      if (!record || requested !== directory) {
+        // A routing change must exclude every existing personal writer.
+        const exclusive = KernelLock.acquireSync(path.join(root, 'locks', 'personal.lock'), {timeoutMs: 0});
+        try { publishJson(marker, {version: 1, directory: contained(requested)}); }
+        finally { exclusive.releaseSync(); }
+        directory = requested;
+      }
+      if (hold) hold(KernelLock.acquireSync(path.join(root, 'locks', 'personal.lock'), {shared: true, timeoutMs: 0, onLost: () => process.exit(1)}));
+    }
     return directory;
-  }
-  let record: {version: number; directory: string};
-  try { record = readJson(marker, 8192, true); }
-  catch (error) { if (missing(error)) return path.join(context.personalRoot, 'saves'); throw error; }
-  if (record.version !== 1 || typeof record.directory !== 'string' || path.isAbsolute(record.directory)) throw new Error('invalid_personal_storage_routing');
-  const directory = canonicalStoragePath(path.resolve(context.personalRoot, record.directory));
-  contained(directory);
-  return directory;
+  } finally { transaction.releaseSync(); }
 }
 
 function inode(filename: string): string | undefined {

@@ -1,5 +1,4 @@
-import { spawn } from 'node:child_process';
-import fs from 'node:fs';
+import {spawnWindow} from './sessions/launching.js';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -31,13 +30,8 @@ export async function launch(args=process.argv.slice(2)) {
     if(action==='cli'){process.argv=[process.argv[0],process.argv[1],...args];await import('./cli.js');return;}
     const index=args.indexOf('--user-data-dir');
     const directory=process.env.ARES_PROFILE_DIR||(index>=0?args[index+1]:profileRoot(path.join(os.homedir(),'Library/Application Support'),process.env.ARES_PROFILE));
-    const logs=path.join(directory,'logs');fs.mkdirSync(logs,{recursive:true,mode:0o700});
-    const file=path.join(logs,'launch.log');
-    if(fs.existsSync(file)&&fs.statSync(file).size>1024*1024)fs.renameSync(file,file+'.1');
-    const fd=fs.openSync(file,'a',0o600);
     const env={...process.env};for(const key of ['ELECTRON_RUN_AS_NODE','NODE_OPTIONS','NODE_PATH'])delete env[key];
-    try {const child=spawn(process.execPath,args,{detached:true,stdio:['ignore',fd,fd],env});child.once('error',()=>{process.exitCode=1;});child.unref();}
-    finally{fs.closeSync(fd);}
+    spawnWindow({executable:process.execPath,args,env},directory);
   }catch(error){process.stderr.write(String(error)+'\n'+usage);process.exitCode=1;}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))void launch();

@@ -53,7 +53,7 @@ export class KernelLock {
   /** Startup must select durable data before constructing any consumers. Electron
    * does not pump child I/O during synchronous module evaluation before ready. A
    * bounded, private acknowledgement file permits kernel locking at that boundary. */
-  static acquireSync(filename: string, options: {executable?: string; onLost?: () => void; timeoutMs?: number} = {}): KernelLock {
+  static acquireSync(filename: string, options: {executable?: string; onLost?: () => void; timeoutMs?: number; shared?: boolean} = {}): KernelLock {
     privateDirectory(path.dirname(filename));
     const executable = options.executable ?? lockExecutable();
     fs.accessSync(executable, fs.constants.X_OK);
@@ -64,7 +64,7 @@ export class KernelLock {
       let child: ChildProcess | undefined, acquired = false;
       try {
         const descriptor = fs.openSync(filename, fs.constants.O_CREAT | fs.constants.O_RDWR | fs.constants.O_NOFOLLOW, 0o600);
-        child = spawn(executable, ['--storage-lock-fd', '4'], {stdio: ['pipe', fd, 'ignore', 'ignore', descriptor]});
+        child = spawn(executable, [options.shared ? '--storage-shared-fd' : '--storage-lock-fd', '4'], {stdio: ['pipe', fd, 'ignore', 'ignore', descriptor]});
         // The parent retains the same open description, which writers can inherit.
         (child as ChildProcess & {storageDescriptor: number}).storageDescriptor = descriptor;
         child.on('error', () => {});

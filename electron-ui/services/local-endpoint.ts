@@ -130,7 +130,7 @@ export class LocalServiceHost {
   metadataFile?: string
   constructor(
     private client: SessionClient,
-    private manage?: (params: any) => Promise<unknown>,
+    private manage?: (params: any, guard: () => void) => Promise<unknown>,
     readonly instance: string = randomUUID(),
   ) {this.leases=new OwnerLeases(client);}
   async listen(directory = defaultServiceDirectory(), name?: string, lockExecutable?: string): Promise<string> {
@@ -367,7 +367,9 @@ export class LocalServiceHost {
           return
         }
         ++inFlight
-        void manage(message.params)
+        void manage(message.params, () => {
+          if (!authenticated || socket.destroyed || !this.sockets.has(socket)) throw new ServiceError('stale_connection');
+        })
           .then(
             (result) => {
               if (Buffer.byteLength(JSON.stringify(result)) > 48000) {

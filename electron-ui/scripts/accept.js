@@ -122,6 +122,7 @@ async function main() {
     ['electron-agent-forced-off', 'electron-agent-integration.js', ['--no-services']],
     ['electron-recovery', 'electron-recovery.js', ['--disable-plugins']],
   ]) await gate(name, electron, [`tests/${file}`, ...args])
+  await gate('personal-windows', process.execPath, ['tests/personal-windows-live.js']);
   await gate('profile-ownership', process.execPath, ['tests/profile-live.cjs'])
   await gate('session-context', process.execPath, ['tests/session-context-live.js'])
   await gate('session-storage', process.execPath, ['tests/session-storage-live.js'])

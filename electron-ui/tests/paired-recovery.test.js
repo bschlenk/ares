@@ -106,3 +106,20 @@ test('scheduled recovery reports input deferral, publishes on the next idle atte
     broker.stop('owner');await new Promise(r=>setTimeout(r,1100));const stopped=await status();assert.equal(stopped.monitoring,false);assert.equal(stopped.point.id,ready.point.id);
   }finally{broker.stop('owner');}
 }));
+test('native capture and restore never await with recovery or journal kernel transactions held',()=>fixture(async({store,access,broker,append})=>{
+  const {KernelLock}=await import('../dist/sessions/locks.js');
+  const {storeLockFile}=await import('../dist/sessions/transactions.js');
+  await append('one',1);
+  const checked=session=>{
+    const native=new FakeNative(session),request=native.request.bind(native);
+    native.request=async(...args)=>{
+      for(const file of [path.join(store,'recovery'),access.journalFile]){
+        const lock=await KernelLock.acquire(storeLockFile(file),{timeoutMs:0});await lock.release();
+      }
+      return request(...args);
+    };
+    return native;
+  };
+  const source=checked('source');await broker.capture(access,source,{...source.identity},guard);
+  const target=checked('target');assert.equal((await broker.restoreStartup([access],target,{...target.identity})).restored,true);
+}));

@@ -17,14 +17,16 @@ product requirements.
   (`feat(sessions): add persistent contexts and lifecycle ownership`).
 - Task 2 implementation commit: **`164e91973`**
   (`feat(sessions): coordinate native storage ownership and inheritance`).
-- Next work: **[task 3 — personal windows and shared settings](03-personal-windows-shared-settings.md)**.
+- Next work: **[task 4 — managed states and recovery](04-managed-states-recovery.md)**.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
   [repository acceptance documentation](../../electron-ui/ACCEPTANCE.md).
 
-Tasks 1 and 2 are complete within their scopes. Named game loads now use native
-preparation, resource ownership and recoverable inheritance. Personal profiles
-remain exclusive until task 3 coordinates the other mutable stores. Approvals,
+Tasks 1–3 are complete within their scopes. Named game loads now use native
+preparation, resource ownership and recoverable inheritance. Personal windows
+now share coordinated preferences and mutable stores, with per-process runtimes
+and File → New Window. Save-root changes still require exclusive personal
+ownership. Approvals,
 revocation and full spec acceptance remain outstanding. `--session-name` opens
 persistent named storage; `--instance-name` still means the legacy endpoint label
 pending task 5. Full acceptance currently stops at an unrelated stale MCP test;
@@ -41,16 +43,17 @@ second execution order.
 | --- | --- | --- | --- |
 | 1 | [Data model, paths, and lifecycle](01-data-model-paths-lifecycle.md) | **Complete (foundation)** | `7a2216451` |
 | 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Complete** | `164e91973` |
-| 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Next** | — |
-| 4 | [Managed states and recovery](04-managed-states-recovery.md) | Not started | — |
+| 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Complete** | See task report |
+| 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Next** | — |
 | 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | Not started | — |
 | 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | Not started | — |
 | 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | Not started | — |
 
-No task is currently in progress. Task 2's loader/write inventory and transaction
-implementation are on this branch; its earlier external draft was not used.
-Continue with task 3 without removing personal-profile exclusivity before its
-shared-store guarantees are complete.
+No task is currently in progress. Task 3's shared-store transactions, preference
+reconciliation and multiwindow launch checks are on this branch. Continue with
+task 4, preserving kernel coordination on the personal checkpoint library and
+session lifecycle locks around named generation operations. Named overlays,
+whole-session reset/archive/restore and revocation are not implemented yet.
 
 ## Working agreement for each agent
 
@@ -110,6 +113,12 @@ when appropriate. Native changes require rebuilding it; TypeScript compilation
 alone does not update the host. Electron checks required desktop process access
 in the prior run; sandboxed profile checks timed out before startup. Diagnose
 that distinction rather than claiming an unstarted test passed.
+
+Task 3 evidence: native/TypeScript builds, **81 focused tests**, eleven separate
+desktop checks, and **329 full-suite fixture tests**. Full acceptance still fails
+at the stale MCP tool-list assertion; later full-suite gates are unrun. Packaged
+New Window/Dock checks remain manual/unrun. Exact evidence and limits are in the
+implementation report.
 
 Task 2 evidence: native/TypeScript builds, **42 focused tests**, seven separate
 Electron/profile checks and 316 fixture tests in the attempted full suite. Full

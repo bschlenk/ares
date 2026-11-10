@@ -6,6 +6,7 @@ import {LocalServiceClient} from '../services/local-endpoint.js';
 import {ServiceError} from '../services/contracts.js';
 import {privateDirectory} from './files.js';
 import {SessionRepository, type SessionManifest, type SessionOwner} from './repository.js';
+import {lockExecutable} from './locks.js';
 import {managementRoot, sessionName} from './context.js';
 
 export interface LaunchInstallation { appRoot: string; executable: string; packaged: boolean }
@@ -22,8 +23,14 @@ export function launchPlan(installation: LaunchInstallation, personalRoot: strin
 
 export function launchWindow(installation: LaunchInstallation, personalRoot: string, name?: string): number {
   const plan = launchPlan(installation, personalRoot, name);
+  return spawnWindow(plan, personalRoot, installation);
+}
+
+export function spawnWindow(plan: {executable: string; args: string[]; env: NodeJS.ProcessEnv}, personalRoot: string, installation?: LaunchInstallation): number {
+  fs.mkdirSync(personalRoot, {recursive: true, mode: 0o700});
   const launches = privateDirectory(path.join(managementRoot(personalRoot), 'launches'));
   const directory = privateDirectory(path.join(launches, randomUUID()));
+  if (installation && !installation.packaged) snapshotCheckout(installation, plan, directory);
   const log = fs.openSync(path.join(directory, 'launch.log'), 'wx', 0o600);
   try {
     const child = spawn(plan.executable, plan.args, {env: plan.env, detached: true, stdio: ['ignore', log, log]});
@@ -32,6 +39,36 @@ export function launchWindow(installation: LaunchInstallation, personalRoot: str
     if (!child.pid) throw new Error('app_launch_failed');
     return child.pid;
   } finally { fs.closeSync(log); }
+}
+
+/** A child must outlive a development launcher's temporary installation and
+ * checkout rebuilds. Only dependencies/plugin sources refer to canonical stable
+ * source paths; compiled UI, native executable and resources are copied. */
+export function snapshotCheckout(installation: LaunchInstallation, plan: ReturnType<typeof launchPlan>, directory: string): void {
+  const runtime = privateDirectory(path.join(directory, 'app'));
+  const copy = (from: string, to: string) => fs.cpSync(from, to, {recursive: true, mode: fs.constants.COPYFILE_FICLONE});
+  for (const name of ['dist', 'index.html', 'style.css', 'templates', 'assets']) {
+    const source = path.join(installation.appRoot, name);
+    if (fs.existsSync(source)) copy(source, path.join(runtime, name));
+  }
+  for (const name of ['node_modules', 'bundled-plugins']) {
+    const source = path.join(installation.appRoot, name);
+    if (fs.existsSync(source)) fs.symlinkSync(fs.realpathSync(source), path.join(runtime, name), 'dir');
+  }
+  fs.writeFileSync(path.join(runtime, 'package.json'), JSON.stringify({name:'ares',type:'module',main:'dist/main.js'}), {mode: 0o600});
+  const native = privateDirectory(path.join(runtime, 'native', 'bin'));
+  const sourceHost = plan.env.ARES_HOST || path.join(installation.appRoot, 'native', 'bin', 'ares-electron-host');
+  const actualHost = fs.existsSync(sourceHost) ? sourceHost : lockExecutable();
+  copy(actualHost, path.join(native, 'ares-electron-host'));
+  const database = path.join(plan.env.ARES_RESOURCE_DIR || path.dirname(actualHost), 'Database');
+  if (fs.existsSync(database)) {
+    copy(database, path.join(native, 'Database'));
+    copy(database, path.join(path.dirname(native), 'Database'));
+  }
+  plan.args[0] = runtime;
+  plan.env.ARES_HOST = path.join(native, 'ares-electron-host');
+  plan.env.ARES_RESOURCE_DIR = native;
+  delete plan.env.ARES_DEV_RELOAD;
 }
 
 /** Called only after a kernel ownership check found the name busy. An owner

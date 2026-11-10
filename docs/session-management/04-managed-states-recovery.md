@@ -1,9 +1,11 @@
 # Task 4: Managed states and recovery
 
-Status: **Not started**. Depends on tasks 1–3.
+Status: **Next — not started**. Depends on tasks 1–3.
 
 Read [the shared preamble](README.md) first. Build on the generation repository
-and the native/lifecycle ownership protocol completed in task 2. Creation's
+and the native/lifecycle ownership protocol completed in task 2. Task 3 now
+coordinates personal checkpoint publication/read/retention and the remaining
+shared stores; preserve those transactions when adding the overlay. Creation's
 journal alone is not a reset/restore protocol. Keep the personal library
 read-only through the backend, including collisions in timestamp IDs.
 

@@ -1,3 +1,4 @@
+import {storeTransaction} from '../sessions/transactions.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
@@ -26,7 +27,7 @@ export class CheckpointLibrary {
   private tail: Promise<unknown> = Promise.resolve();
   constructor(readonly root: string, private trash: (file: string) => Promise<void>, private warn: (message:string)=>void = ()=>{}) {if(!path.isAbsolute(root))throw new Error('invalid_storage_root')}
   private serial<T>(run: () => Promise<T>): Promise<T> {
-    const result = this.tail.then(run); this.tail = result.catch(() => {}); return result;
+    const result = this.tail.then(() => storeTransaction(path.join(this.root, 'library'), run)); this.tail = result.catch(() => {}); return result;
   }
   private async folder(game: CheckpointGame, create = false): Promise<string | null> {
     validateGame(game);
@@ -119,11 +120,13 @@ export class CheckpointLibrary {
     });
   }
   async read(game: CheckpointGame, id: string) {
+    return this.serial(async () => {
     const {directory, metadata}=await this.entry(game,id),file=path.join(directory,`${id}.state`),stat=await fs.lstat(file);
     if(!stat.isFile()||stat.size!==metadata.state.bytes)throw new Error('checkpoint_integrity_failed');
     const state=await fs.readFile(file);
     if (state.length !== metadata.state.bytes || digest(state) !== metadata.state.sha256) throw new Error('checkpoint_integrity_failed');
     return {state, metadata};
+    });
   }
   async revealPath(game: CheckpointGame, id: string): Promise<string> { return (await this.entry(game, id)).directory; }
   delete(game: CheckpointGame, id: string): Promise<void> { return this.serial(async () => this.trash((await this.entry(game, id)).directory)); }

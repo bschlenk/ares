@@ -185,3 +185,134 @@ regressions also pass. Personal profile exclusion remains covered by
 storage,settings,checkpoints,reload,recovery}.log`; final focused test output is
 `/tmp/ares-task2-focused.log`. The fixtures and runtime roots were cleaned after
 each check. Repository `git diff --check` passes.
+
+## Task 3 — Personal windows and shared settings
+
+Implemented on `feat/session-management`, based on `d607ab7f1794db9b0db93e869291d5d2c228dbc3`.
+
+File → New Window (`CmdOrCtrl+N`) launches a personal process from either context,
+with a fresh app instance/runtime and the same canonical personal data root.
+The shared argument-array launcher removes inherited named selection, ROM,
+settings/private-save overrides and development-session replay. Packaged launches
+use the app executable; checkout launches copy compiled UI/native resources into
+a private launch directory, so parent snapshot cleanup and checkout rebuilds do
+not break the new window. Plugin source/dependency links resolve to their stable
+canonical source directories. Launch logs and these runtime copies live under
+the personal namespace's UUID `launches/` directories, not shared profile logs.
+They currently remain as runtime caches; no new automatic deletion policy is
+introduced. Each process retains its own Dock activation behavior; packaged Dock
+interaction is still a manual release check.
+
+Personal lifecycle ownership is now a shared kernel lease inherited by the native
+writer. The routing transaction reads the recorded contained save subtree before
+selecting defaults. Changing that subtree requires exclusive personal ownership;
+a concurrent/custom-root game, including an orphan native writer, prevents a
+redirect. Task 2's actual resource ownership continues to arbitrate game loads
+before stopping the current game. Diagnostics use per-instance runtime records;
+PID records still do not establish ownership.
+
+Settings continue to read latest values and patch/reset one key under their kernel
+transaction, preserve unknown values, validate/refuse malformed files and publish
+persisted revisions atomically. After releasing the lock, every changed live
+setting is applied locally, including unrelated changes learned during a write.
+A directory watcher, periodic resync (two seconds), focus resync and initial resync
+reconcile revisions and values. Next-ROM/restart entries remain pending until
+acknowledged by their existing lifecycle. No startup/shutdown preference write is
+introduced. A transport guard reaches external provenance setting commits, so a
+disconnected queued request cannot publish. The settings transaction rechecks the
+supplied guard after lock acquisition; task 6 must add window-wide grant generation
+checks across the complete external boundary, cancellation and revocation.
+
+The [data-root audit](DATA-ROOT-AUDIT.md) now accounts for the remaining writers:
+plugin configuration uses latest-file ID/directory patches and preserves unknown
+fields, ordinary startup does not republish cached enablement, and explicit
+recovery reset can still replace malformed plugin configuration. Plugin key
+storage and journals serialize latest-file patches; workspace saves serialize
+whole layouts with latest-file reads; personal checkpoint publication/read,
+rename/delete and retention coordinate across processes. Paired-recovery index,
+retention and journal publication coordinate without holding kernel locks across
+native awaits, and restore checks its index again before final publication.
+Artwork and built plugin artifacts use process-local caches, preventing another
+window's pruning from removing a live artifact. Generic store locks use stable
+canonical-path hashes outside the stores under `/tmp/ares-stores-v1-<uid>`.
+
+### Validation — 2026-11-10, macOS arm64
+
+Node **24.22.0**, Electron **45.1.0**. Disposable roots, private service directories
+and generated cartridges only. Principal commands (repository root first,
+then `electron-ui/`):
+
+```sh
+cmake --build build_macos/workbench --target ares-electron-host -j 8
+mise exec node@24.22.0 -- node scripts/build.js
+ARES_HOST=/Users/bschlenk/Developer/forks/ares/build_macos/workbench/bin/ares-electron-host mise exec node@24.22.0 -- node --test tests/personal-windows.test.js tests/settings.test.cjs tests/workspace.test.cjs tests/session-repository.test.js tests/session-storage.test.js tests/plugin-journal.test.js tests/checkpoint-library.test.js tests/paired-recovery.test.js tests/plugins.test.cjs tests/plugin-recovery.test.cjs tests/local-endpoint.test.cjs
+ARES_HOST=/Users/bschlenk/Developer/forks/ares/build_macos/workbench/bin/ares-electron-host mise exec node@24.22.0 -- node tests/personal-windows-live.js
+ARES_HOST=/Users/bschlenk/Developer/forks/ares/build_macos/workbench/bin/ares-electron-host mise exec node@24.22.0 -- node tests/profile-live.cjs
+ARES_HOST=/Users/bschlenk/Developer/forks/ares/build_macos/workbench/bin/ares-electron-host mise exec node@24.22.0 -- node tests/session-context-live.js
+ARES_HOST=/Users/bschlenk/Developer/forks/ares/build_macos/workbench/bin/ares-electron-host mise exec node@24.22.0 -- node tests/session-storage-live.js
+ARES_HOST=/Users/bschlenk/Developer/forks/ares/build_macos/workbench/bin/ares-electron-host mise exec node@24.22.0 -- node tests/launch-live.cjs
+mise exec node@24.22.0 -- npm run accept
+```
+
+The same `ARES_HOST` and pinned `mise exec` prefix were used with
+`./node_modules/.bin/electron tests/<file>` separately for `electron-settings.js`,
+`electron-journal.js`, `electron-plugins.js`, `electron-reload.js`,
+`electron-workspace.js` and `electron-plugin-settings.js`.
+
+Native and all three TypeScript builds pass. Final focused run: **81/81 passed,
+zero skips**. Coverage includes subprocess disjoint/same-key settings writes,
+unknown values, polling with an unavailable watcher, next-ROM/restart semantics,
+no startup/shutdown writes, authorization after lock wait, disconnected queued
+external writes, canonical routing leases, concurrent plugin configuration/key
+patches, journal sequences, workspace publication and native-await lock freedom.
+The existing storage race, alias, crash and peripheral suite also passes against
+the rebuilt binary (task 2's inventory/coverage limits still apply).
+
+The multiwindow desktop test passes from named-only startup, creating two personal
+windows, checking distinct instances/browser roots, shared live native settings,
+independent named settings, disjoint games, conflict refusal without replacing the
+current game, unload/reacquire, preserved custom routing and actual saves, and
+child operation after deleting the parent's temporary installation. The suite is
+registered in `scripts/accept.js` and exposed as `test:personal-windows`.
+
+Separate desktop checks passed: `PERSONAL_WINDOWS_PASS`,
+`PROFILE_OWNERSHIP_PASS`, `SESSION_CONTEXT_PASS`, `SESSION_STORAGE_PASS`,
+`ISOLATED_LAUNCH_PASS`, `SETTINGS_UI_PASS`, `PLUGIN_JOURNAL_PASS`,
+`PLUGIN_UI_PASS`, `PLUGIN_RELOAD_PASS`, `WORKSPACE_PASS` and
+`PLUGIN_SETTINGS_PASS`. The plugin artifact-pruning test now uses the runtime
+cache location; affected tests select short private service directories. Desktop
+Electron cannot start in this sandbox (the initial attempt aborted with SIGABRT);
+the passing runs used desktop process access. An early plugin UI invocation had
+an overlong Unix socket path and did not reach its pass marker; the short-path
+rerun did.
+
+Full run `artifacts/acceptance/run-6uKFuz` passed configuration/native/TypeScript
+builds, **329 fixture tests with zero skips**, native smoke, `electron-local-ai`,
+`electron-session` and `electron-shutdown`. It failed at
+`tests/electron-mcp.js:44`, the previously recorded stale exact tool-list
+expectation (for example it omits current input, renderer and video tools).
+Later full-suite gates, including the newly registered personal-window gate,
+were not reached; separate checks above provide their task-specific evidence.
+This is not a green full acceptance result. Its summary records baseline
+`d607ab7f1794db9b0db93e869291d5d2c228dbc3` with dirty task-3 changes. The final
+focused run also covers the explicit same-key subprocess race added to that test
+before commit.
+
+Earlier full run `run-v9CJEO` reported 327/328 fixture passes and caught this
+change's malformed-plugin-reset regression. The explicit reset repair was fixed,
+its focused test passed, and the second full fixture lane passed. Initial focused
+attempts with an unset/stale host failed; rebuilding and selecting `ARES_HOST`
+fixed those. A focused run overlapping the acceptance TypeScript rebuild saw a
+transient missing `dist` import; the final 81-test run ran after compilation and
+passed. These earlier failures are not counted as passes.
+
+Packaged/Dock hover/activation, physical input, other operating systems, final
+approval/revocation gameplay and banner/capture pixel acceptance were not run for
+this milestone. Packaged argument construction has unit coverage; it does not
+substitute for packaged New Window/Dock acceptance. The full MCP assertion and
+remaining task-4–7 acceptance are still outstanding.
+
+Task 3 contributes to spec criteria 1–2 and preserves criteria 3–5. Managed named
+state overlay/reset/restore is task 4. Scoped discovery/selection, approval/revoke,
+and final titles/banner/capture behavior remain tasks 5–7. No new automatic target
+selection, authorization grant or claim of full issue #37 acceptance is introduced.

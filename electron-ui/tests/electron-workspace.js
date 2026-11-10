@@ -18,6 +18,7 @@ fs.writeFileSync(path.join(source, 'plugin.js'), `export function activate(ctx) 
   });
   ctx.ui.registerCommand('open', () => ctx.ui.openPanel('counter'));
 }`);
+process.env.ARES_SERVICE_DIR = path.join(temporary, 'ipc');
 app.setPath('userData', profile);
 Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_PLUGIN_DIRS: source, ARES_ROM: rom, ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DEFAULT_PLUGINS: '0', ARES_ENABLE_SERVICES: '0' });
 delete process.env.ARES_DISABLE_PLUGINS; delete process.env.ARES_SETTINGS;

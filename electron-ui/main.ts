@@ -22,10 +22,11 @@ import { coreDescriptors, firmwareDescriptors, importedValues, nativeSettingsBml
 import { SettingsStore } from './settings/store.js'
 import { presentationSettings, nativeRuntimeSettings, agentSettings } from './settings/builtins.js'
 import { profileRoot, profileSaves } from './profile.js'
-import {personalContext, managementRoot, type AppContext} from './sessions/context.js'
+import {personalContext, type AppContext} from './sessions/context.js'
 import {KernelLock} from './sessions/locks.js'
 import {StorageCoordinator, personalStorageDirectory, type StorageReservation, type StorageInventory} from './sessions/storage.js'
 import {publishJson} from './sessions/files.js'
+import {launchWindow} from './sessions/launching.js'
 import {SessionRepository} from './sessions/repository.js'
 import { PluginRegistry } from './plugins/registry.js'
 import {
@@ -81,8 +82,6 @@ export const appContext: AppContext = (() => {
       profileLock = opened.lock
     } else {
       context = personalContext(selectedProfile)
-      // Retain exclusive personal ownership until native resource sets are protected.
-      profileLock = KernelLock.acquireSync(path.join(managementRoot(context.personalRoot), 'locks', 'personal.lock'), {onLost: () => app.exit(1), timeoutMs: 0})
     }
   } catch (error) {
     const existing = (error as Error & {existing?: import('./sessions/repository.js').SessionOwner}).existing
@@ -103,10 +102,11 @@ export const appContext: AppContext = (() => {
 })()
 const sessionRepository = appContext.kind === 'named' ? new SessionRepository(appContext.personalRoot) : undefined
 sessionRepository?.advertise(appContext, profileLock!, false, process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory())
-fs.writeFileSync(path.join(appContext.dataRoot, 'lock-holder.json'), JSON.stringify({pid:process.pid,instance:appContext.instanceId,kind:appContext.kind,session:appContext.sessionId,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600})
+fs.writeFileSync(path.join(appContext.runtimeRoot, 'lock-holder.json'), JSON.stringify({pid:process.pid,instance:appContext.instanceId,kind:appContext.kind,session:appContext.sessionId,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600})
 const storageCoordinator = new StorageCoordinator()
-const saveDirectory = profileSaves(appContext.dataRoot, process.env.ARES_SAVE_DIR)
-const personalSaveDirectory = personalStorageDirectory(appContext, saveDirectory)
+const requestedSaveDirectory = process.env.ARES_SAVE_DIR ? profileSaves(appContext.dataRoot, process.env.ARES_SAVE_DIR) : undefined
+const personalSaveDirectory = personalStorageDirectory(appContext, requestedSaveDirectory, lock => {profileLock = lock})
+const saveDirectory = appContext.kind === 'personal' ? personalSaveDirectory : profileSaves(appContext.dataRoot)
 
 const appLogs = new AppLogs(path.join(appContext.runtimeRoot, 'logs'), undefined, appContext.instanceId)
 const fatal = (error: unknown) => {
@@ -161,6 +161,7 @@ export const plugins = new PluginRegistry(
     if (window && !window.isDestroyed())
       window.webContents.send('plugin-catalog', catalog)
   },
+  path.join(appContext.runtimeRoot, 'plugin-artifacts'),
 )
 export const pairedRecovery=plugins.connectRecovery(path.join(appContext.dataRoot,'paired-recovery'),()=>{
   if(!active||active.recoveryFailure||!sessions.identity||recoveryTransition)throw new ServiceError('recovery_session_changed');
@@ -251,7 +252,7 @@ async function pluginAction(
   })
   return { completed: true }
 }
-export const serviceHost = new LocalServiceHost(sessions, async (params) => {
+export const serviceHost = new LocalServiceHost(sessions, async (params, guard) => {
   if (
     !params ||
     typeof params !== 'object' ||
@@ -320,7 +321,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
     case 'provenance': {
       if (Object.keys(params).sort().join(',') !== 'operation' && Object.keys(params).sort().join(',') !== 'enabled,operation') throw new Error('invalid_provenance_request')
       if (params.enabled !== undefined && typeof params.enabled !== 'boolean') throw new Error('invalid_provenance_request')
-      const snapshot = params.enabled === undefined ? preferences.catalog() : await setPreference('debug.provenance', params.enabled)
+      const snapshot = params.enabled === undefined ? preferences.catalog() : await setPreference('debug.provenance', params.enabled, false, guard)
       const entry = snapshot.entries.find(entry => entry.descriptor.id === 'debug.provenance')!
       return { enabled: entry.applied, requested: entry.value, pending: entry.pending, error: snapshot.error ?? null }
     }
@@ -517,7 +518,7 @@ async function choosePreferenceFile(id: string, guard: () => void = () => {}) {
 plugins.connectSettings(new PluginSettingsService(preferences, setPreference, choosePreferenceFile))
 function preferenceValue(id: string) { return preferences.catalog().entries.find(entry => entry.descriptor.id === id)!.value }
 const romLibrary = new RomLibrary(() => String(preferenceValue('library.directory')),
-  path.join(appContext.dataRoot, 'artwork'), () => preferenceValue('library.downloadArtwork') === true)
+  path.join(appContext.runtimeRoot, 'artwork'), () => preferenceValue('library.downloadArtwork') === true)
 
 async function openRomFile(system = '', guard: () => void = () => {}) {
   guard()
@@ -924,7 +925,7 @@ app
     window.on('close',event=>{if(!quitReady){event.preventDefault();app.quit()}})
     window.on('page-title-updated', event => event.preventDefault());
     const focusChanged = () => { void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window.isFocused()).catch(error => appLogs.write('focus-pause', 'error', error)); };
-    window.on('focus', focusChanged); window.on('blur', () => { command('fastforward 0'); focusChanged(); });
+    window.on('focus', () => { focusChanged(); void preferences.resync(); }); window.on('blur', () => { command('fastforward 0'); focusChanged(); });
     window.webContents.on('did-start-loading', () => command('fastforward 0'));
     window.webContents.on('render-process-gone', () => command('fastforward 0'));
     window.on('enter-full-screen', () => window.webContents.send('window-fullscreen', true));
@@ -941,6 +942,7 @@ app
         { type: 'separator' as const }, { role: 'quit' as const },
       ] }] : []),
       { label: 'File', submenu: [
+        { label: 'New Window', accelerator: 'CmdOrCtrl+N', click: () => { try { launchWindow({appRoot, executable: process.execPath, packaged: app.isPackaged}, appContext.personalRoot); } catch (error) { status(String(error)); } } },
         { label: 'Open ROM…', accelerator: 'CmdOrCtrl+O', click: action('open') },
         ...(process.platform !== 'darwin' ? [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: action('settings') }] : []),
         { role: 'close' as const },
@@ -1261,6 +1263,7 @@ app
         if (process.env.ARES_AUTOTEST === '1') app.quit()
       }
     })
+    preferences.watch()
     sessionRepository?.advertise(appContext, profileLock!, true, process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory())
     void window.loadFile(path.join(appRoot, 'index.html'), {
       query: {
@@ -1291,6 +1294,7 @@ app.on('before-quit', (event) => {
     for(const close of [()=>plugins.close(),()=>mainWatchdog.close(),()=>serviceHost.close()]){
       try{await close()}catch(error){appLogs.write('main','error',error)}
     }
+    preferences.close()
     await profileLock?.release()
     quitReady=true
     app.quit()

@@ -60,7 +60,7 @@ const entry = path.join(source, 'plugin.js')
 fs.writeFileSync(entry, plugin(1))
 process.env.ARES_DEFAULT_PLUGINS = '0'
 let peer
-const { sessions, plugins, serviceHost, stopNative } =
+const { sessions, plugins, serviceHost, stopNative, appContext } =
   await import('../dist/main.js')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const until = async (fn, label) => {
@@ -248,7 +248,7 @@ app.whenReady().then(async () => {
     await js("window.probes=0;window.dispatchEvent(new Event('plugin-probe'))")
     assert.equal(await js('window.probes'), 1)
     assert.equal(await read(), original)
-    const cache = path.join(temporary, 'profile/plugins/artifacts')
+    const cache = path.join(appContext.runtimeRoot, 'plugin-artifacts')
     await until(
       () =>
         fs.readdirSync(cache).filter((n) => /^[a-f0-9]{64}$/.test(n)).length <=

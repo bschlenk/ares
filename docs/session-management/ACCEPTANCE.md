@@ -76,7 +76,9 @@ Task 1's foundation is implemented in `7a2216451`, with native/TypeScript builds
 [the implementation report](../../electron-ui/sessions/IMPLEMENTATION.md) for
 exact commands and limits. Task 2 now has native/TypeScript builds, 42 focused tests, seven separate desktop
 checks and an attempted full run with 316 fixture tests passed before a stale MCP
-assertion. Tasks 3–7, full integration acceptance and the final
+assertion. Task 3 adds 81 focused passes, eleven separate desktop checks and
+329 fixture passes before that same MCP assertion. Tasks 4–7, full integration
+acceptance and the final
 map to the spec's eleven criteria remain outstanding.
 
 The original planning-only document recorded source review and no builds/tests.

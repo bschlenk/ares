@@ -30,13 +30,10 @@ async function run() {
   await ready(first)
   const {profileHolder}=await import('../dist/services/profile-holder.js');const holder=await profileHolder(path.join(temporary,'shared'));assert.equal(holder.pid,first.pid);assert.equal(holder.process_exists,true);assert.equal(holder.service_directory,path.join(temporary,'shared-ipc'));assert.equal(holder.service_directory_exists,true);assert(!Number.isNaN(Date.parse(holder.started_at)));
   const duplicate = launch('shared')
-  const [code] = await duplicate.closed
-  assert.equal(code, 1, duplicate.output)
-  assert.match(duplicate.output, /profile_in_use/)
+  await ready(duplicate)
   fs.symlinkSync(path.join(temporary, 'shared'), path.join(temporary, 'alias'))
   const alias = launch('alias')
-  assert.equal((await alias.closed)[0], 1, alias.output)
-  assert.match(alias.output, /profile_in_use/)
+  await ready(alias)
   const independent = launch('independent')
   await ready(independent)
   assert.equal(first.exitCode, null)
@@ -44,10 +41,9 @@ async function run() {
   await first.closed
   const recovered = launch('shared')
   await ready(recovered)
-  recovered.kill('SIGTERM')
-  independent.kill('SIGTERM')
-  await Promise.all([recovered.closed, independent.closed])
-  console.log('PROFILE_OWNERSHIP_PASS: duplicate/alias refused, independent concurrent profile, crash recovery')
+  for (const child of [recovered, independent, duplicate, alias]) child.kill('SIGTERM')
+  await Promise.all([recovered.closed, independent.closed, duplicate.closed, alias.closed])
+  console.log('PROFILE_OWNERSHIP_PASS: shared/alias personal windows, independent profile, crash recovery')
 }
 const deadline = setTimeout(() => { for (const child of children) child.kill('SIGKILL') }, 30000)
 run().catch(error => { console.error(error); process.exitCode = 1 }).finally(async () => {

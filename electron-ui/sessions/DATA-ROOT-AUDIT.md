@@ -8,22 +8,22 @@ do not establish another ownership domain.
 
 | Consumer | Logical durable data | Process-local data / coordination still required |
 | --- | --- | --- |
-| `SettingsStore` | `preferences.json`, unknown/plugin values | Kernel transaction, latest-file key patch, persisted revision; cross-window reconciliation in task 3 |
+| `SettingsStore` | `preferences.json`, unknown/plugin values | Kernel transaction, latest-file key patch, persisted revision; directory watcher, persisted-revision reconciliation, polling/focus resync in task 3 |
 | Imported configuration | Personal `settings.bml` / selected read-only import; named copies import once | Generated native settings overlays in runtime root |
 | Native persistent media | Personal `saves/` or its recorded contained subtree; generation-local `storage/<resource>/data` | Task 2 descriptors, inherited ownership, snapshot/flush barriers and initialization ledger |
-| Managed checkpoints | Default `states/`; personal may select an external library | Named `states.root` is rebased and contained; original source recorded in generation metadata; overlay/coordination in task 4 |
-| Plugin registry | `plugins/enabled.json`, per-plugin storage and journals | Enablement patches, key storage, journal and paired-recovery transactions need process coordination before personal multiwindow |
-| Paired recovery | `paired-recovery/`, plugin journals | Keep each generation's records together; cross-process personal namespace coordination required |
-| Workspace | `workspace.json` | Whole-layout saves need serialization/latest-file reconciliation before personal multiwindow |
-| Artwork/catalog | `artwork/` | Cache; can move to runtime or coordinate publication before personal multiwindow |
+| Managed checkpoints | Default `states/`; personal may select an external library | Named `states.root` is rebased and contained; original source recorded in generation metadata; personal publication/read/retention transactions in task 3; named overlay in task 4 |
+| Plugin registry | `plugins/enabled.json`, per-plugin storage and journals | Enablement/key patches and journal transactions use stable kernel locks; built artifacts are process-local |
+| Paired recovery | `paired-recovery/`, plugin journals | Root transaction protects indexes, retention and journal reconciliation; native awaits run outside kernel locks |
+| Workspace | `workspace.json` | Kernel transaction, latest-file reads, atomic whole-layout publication (last committed layout wins) |
+| Artwork/catalog | `artwork/` | Process-local runtime cache in task 3 |
 | App/native diagnostics | No authoritative profile store | Runtime `logs/`; application log identity equals service instance identity |
 | Chromium/session storage | Never authoritative for shared preferences/workspace | Runtime `userData`, `browser/`; renderer reconstructs preferences and workspace from main |
-| Launcher diagnostics | Existing bounded profile launch logs | Move to private launch runtime when multiwindow launch helpers land |
+| Launcher diagnostics | Existing bounded profile launch logs | Private UUID launch directories; checkout child installations are copied so parent cleanup/rebuild cannot break them |
 | Endpoint credentials | Private service-directory files only | Never included in session manifests or recovery data |
 
 Every process retains a private runtime directory under the namespace's
 `instances/<UUID>`. Startup acquires a kernel lock before constructing data-root
-consumers. Personal roots remain exclusive until task 2 protects actual native
+consumers. Personal windows now share a lifecycle kernel lease; task 2 protects native
 write paths and task 3 coordinates the remaining mutable stores. At the task 1 handoff, named game
 loads failed closed until storage transactions landed; creating/opening an empty
 named workspace is intentionally available for lifecycle validation.
@@ -40,9 +40,9 @@ The synchronous startup lock mode uses the native host's kernel lock and a
 private, unlinked acknowledgement file. Startup cannot wait on child stdout
 callbacks before Electron readiness. It bounds acquisition and release waits;
 ordinary settings operations use the asynchronous helper. Neither mode relies on
-PID metadata or deleting lock files for recovery. Task 2 must retain the lock
-holder through native child exit, including parent/helper crash tests, before
-enabling simultaneous writers.
+PID metadata or deleting lock files for recovery. Task 2 retains lock
+descriptors through native child exit, including the parent/helper crash cases,
+so orphan writers cannot lose their ownership early.
 
 Task 2 adds actual load descriptors and a recoverable resource initialization
 ledger under each generation's `storage/`. `data.json.initialized` records private
@@ -52,5 +52,25 @@ contained save subtree. Neither Electron runtime roots nor service directories
 change resource ownership identity. Resource, lifecycle and snapshot-barrier
 kernel descriptors are inherited into the actual native writer. See
 [STORAGE-INVENTORY.md](STORAGE-INVENTORY.md) and task 2's implementation report for
-native/open-time safeguards and validation limits. Personal profile exclusivity
-continues until task 3 coordinates the remaining shared stores.
+native/open-time safeguards and validation limits. Task 3 replaces personal
+exclusivity with shared lifecycle leases. A routing
+change still requires exclusive personal ownership under the routing transaction;
+a default launch reuses the recorded subtree. Both parent and native writer retain
+the shared lease, so an orphan writer also prevents a routing change.
+
+
+Task 3 store locks use stable hashed canonical-path identities under the private
+`/tmp/ares-stores-v1-<uid>` directory. Lock files are never removed as stale;
+kernel ownership recovers after process death. They sit outside store directories
+so journal enumeration, recovery quotas and checkpoint listings are unchanged.
+Settings retain their existing `.settings-locks` transaction namespace. Workspace
+layouts are whole-document last-commit wins; loads always reread the latest file.
+Plugin enablement patches preserve unrelated IDs/directories and unknown fields;
+startup without an explicit plugin selection does not publish cached configuration.
+Enablement changes affect other windows on their next initialization, while
+preference values reconcile live according to each setting's apply timing.
+Paired recovery keeps its existing per-plugin/version latest/previous retention
+policy; file publication and cleanup serialize across windows. Native capture and
+restore run outside the kernel transactions; restore rechecks its index before
+journal/index publication. Managed personal checkpoint reads, publication,
+rename/delete and retention serialize; named overlay/lifecycle remains task 4.

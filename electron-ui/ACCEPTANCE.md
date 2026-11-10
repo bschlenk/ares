@@ -1,9 +1,9 @@
 # Fixture acceptance and remaining gates
 
-Session-management task 1 evidence is recorded in
+Session-management task evidence is recorded in
 [sessions/IMPLEMENTATION.md](sessions/IMPLEMENTATION.md). This is incremental
-work; the eleven session-management spec criteria are not yet accepted. Named
-game loads remain disabled until native storage transactions are implemented.
+work; the eleven session-management spec criteria are not yet accepted. Named game loads and personal multiwindow now use coordinated storage;
+approval/revocation and full session lifecycle remain outstanding.
 
 From `electron-ui/`:
 
@@ -155,3 +155,27 @@ The full suite is not green and its later gates were not reached. Exact commands
 crash/alias/peripheral coverage, separate desktop evidence and unrun limits are in
 the implementation report. Task 2 contributes to spec criteria 2–4; it is not
 acceptance of tasks 3–7 or closure of issue #37.
+
+## Session management task 3 — personal windows and shared settings (2026-11-10)
+
+File → New Window now creates a personal process from personal or named windows,
+with independent browser/native/UI runtime resources and shared coordinated data.
+Preferences reconcile through directory watching, persisted revisions, polling and
+focus. The remaining stores have kernel transactions or process-local caches;
+see the [data-root audit](sessions/DATA-ROOT-AUDIT.md) and
+[task evidence](sessions/IMPLEMENTATION.md#task-3--personal-windows-and-shared-settings).
+
+Native/TypeScript builds and **81 focused tests pass with zero skips**. Eleven
+separate desktop checks pass, including named-only New Window twice, shared live
+settings, conflicting loads preserving the current game, effective custom routing,
+actual independent saves and child operation after parent installation removal.
+The acceptance runner includes the new `personal-windows` gate.
+
+Full `mise exec node@24.22.0 -- npm run accept` run
+`artifacts/acceptance/run-6uKFuz` passed **329 fixture tests**, native smoke and
+three Electron gates before failing at the existing stale MCP tool-list assertion
+in `tests/electron-mcp.js:44`. Later full-suite gates were not reached; full
+acceptance is not green. The implementation report records exact commands,
+earlier corrected failures and the dirty baseline revision. Packaged New Window,
+Dock behavior, physical input, approval/revoke gameplay and capture/banner checks
+remain unrun/manual. Task 4 is next; issue #37 remains open.
