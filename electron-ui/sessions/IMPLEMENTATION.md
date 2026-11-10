@@ -58,7 +58,7 @@ remains open.
 ## Task 2 — Actual storage ownership and inheritance
 
 Implemented on `feat/session-management`, based on `972498009a2866a0cab8544f13c8ace4c4f18e3b`.
-Implementation commit: recorded in the task handoff after commit.
+Implementation commit: **`164e91973`** (`feat(sessions): coordinate native storage ownership and inheritance`).
 
 The [loader/write-path inventory](STORAGE-INVENTORY.md) covers the active MIA
 helpers, direct runtime writes, shared peripherals and VFS modes. Optional MIA

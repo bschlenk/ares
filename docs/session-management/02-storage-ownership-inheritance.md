@@ -11,7 +11,7 @@ Test parent, helper and native death independently before removing the named-gam
 load gate. Preserve exclusive personal-profile ownership until task 3's other
 shared stores are coordinated as well.
 
-Implementation: this task's commit, recorded after commit in the shared preamble.
+Implementation: **`164e91973`** (`feat(sessions): coordinate native storage ownership and inheritance`).
 Evidence: [task 2 implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-2--actual-storage-ownership-and-inheritance)
 and [loader/write-path inventory](../../electron-ui/sessions/STORAGE-INVENTORY.md).
 Native/TypeScript builds, 42 focused tests and seven separate desktop checks pass.

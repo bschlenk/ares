@@ -15,7 +15,8 @@ product requirements.
 - Implementation baseline before task 1: `1712fae48925ff52ec810d09a87bb4e837ca98f1`.
 - Task 1 implementation commit: **`7a2216451`**
   (`feat(sessions): add persistent contexts and lifecycle ownership`).
-- Task 2 implementation commit: recorded after the task commit.
+- Task 2 implementation commit: **`164e91973`**
+  (`feat(sessions): coordinate native storage ownership and inheritance`).
 - Next work: **[task 3 — personal windows and shared settings](03-personal-windows-shared-settings.md)**.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
@@ -39,7 +40,7 @@ second execution order.
 | Task | Scope | Status | Implementation commit |
 | --- | --- | --- | --- |
 | 1 | [Data model, paths, and lifecycle](01-data-model-paths-lifecycle.md) | **Complete (foundation)** | `7a2216451` |
-| 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Complete** | See implementation report |
+| 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Complete** | `164e91973` |
 | 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Next** | — |
 | 4 | [Managed states and recovery](04-managed-states-recovery.md) | Not started | — |
 | 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | Not started | — |
