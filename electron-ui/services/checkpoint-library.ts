@@ -56,7 +56,8 @@ export class CheckpointLibrary {
     if (!validMetadata(metadata, game)) throw new Error('invalid_checkpoint');
     return {directory, metadata};
   }
-  async list(game: CheckpointGame, screenshots = false): Promise<CheckpointEntry[]> {
+  list(game: CheckpointGame, screenshots = false): Promise<CheckpointEntry[]> { return this.serial(() => this.listUnlocked(game, screenshots)); }
+  private async listUnlocked(game: CheckpointGame, screenshots = false): Promise<CheckpointEntry[]> {
     const folder = await this.folder(game); if (!folder) return [];
     const entries: CheckpointEntry[] = [];
     for (const dir of await fs.readdir(folder, {withFileTypes: true})) {
@@ -131,7 +132,7 @@ export class CheckpointLibrary {
   async revealPath(game: CheckpointGame, id: string): Promise<string> { return (await this.entry(game, id)).directory; }
   delete(game: CheckpointGame, id: string): Promise<void> { return this.serial(async () => this.trash((await this.entry(game, id)).directory)); }
   private async prune(game: CheckpointGame) {
-    const autosaves = (await this.list(game)).filter(e => !e.permanent);
+    const autosaves = (await this.listUnlocked(game)).filter(e => !e.permanent);
     for (const entry of autosaves.slice(10)) await this.trash((await this.entry(game, entry.id)).directory);
   }
 }

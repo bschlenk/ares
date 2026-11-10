@@ -27,6 +27,7 @@
     "test:kirby": "node scripts/build.js && electron tests/electron-kirby.js",
     "test:kirby-feedback": "node scripts/build.js && node tests/kirby-feedback-live.cjs",
     "plugin": "node dist/plugins/cli.js",
+    "test:session-recovery": "node scripts/build.js && node --test tests/session-recovery.test.js && electron tests/electron-session-recovery.js",
     "test:session-storage": "node --test tests/session-storage.test.js && node tests/session-storage-live.js",
     "test:personal-windows": "node scripts/build.js && node --test tests/personal-windows.test.js && node tests/personal-windows-live.js",
     "test:profiles": "node scripts/build.js && node tests/profile-live.cjs",

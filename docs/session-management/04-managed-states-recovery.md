@@ -1,6 +1,17 @@
 # Task 4: Managed states and recovery
 
-Status: **Next — not started**. Depends on tasks 1–3.
+Status: **Complete**. Depends on tasks 1–3.
+
+Implementation commit: recorded in the completion metadata follow-up.
+Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-4--managed-states-and-recovery),
+[acceptance](../../electron-ui/ACCEPTANCE.md), and
+[CLI/MCP recipes](../../electron-ui/sessions/RECOVERY.md).
+
+Native/TypeScript builds, 60 focused tests and three separate desktop checks pass.
+Full acceptance passed 338 fixture tests and stopped at an unrelated stale MCP
+Game Boy video-clock assertion; later full-suite gates remain unrun. Task 5 is
+next. Scoped selection, approval/revocation and presentation remain gated by
+tasks 5–7; issue #37 stays open.
 
 Read [the shared preamble](README.md) first. Build on the generation repository
 and the native/lifecycle ownership protocol completed in task 2. Task 3 now

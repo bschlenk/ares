@@ -144,7 +144,7 @@
     }
   ],
   "reference_count": 68,
-  "current_count": 119,
+  "current_count": 127,
   "missing": [],
   "added": [
     "app_health",
@@ -166,6 +166,11 @@
     "input_set",
     "input_state",
     "load_rom",
+    "managed_state_delete",
+    "managed_state_load",
+    "managed_state_rename",
+    "managed_state_save",
+    "managed_states",
     "matrix_capture",
     "memory_capture_export",
     "memory_capture_freeze",
@@ -195,6 +200,9 @@
     "script_result",
     "script_result_release",
     "script_results",
+    "session_archives",
+    "session_reset",
+    "session_restore",
     "ui_screenshot",
     "video_surfaces",
     "wait_frames"

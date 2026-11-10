@@ -36,6 +36,7 @@ const api: AresBridge = {
     ipcRenderer.on('app-action', listener)
     return () => ipcRenderer.removeListener('app-action', listener)
   },
+  sessionData: request => ipcRenderer.invoke('session-data',request),
   preferences: {
     catalog: () => ipcRenderer.invoke('preferences.catalog'),
     set: (id, value) => ipcRenderer.invoke('preferences.set', id, value),

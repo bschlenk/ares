@@ -423,3 +423,9 @@ The full source audit and multi-media mapping are in
 `electron tests/electron-checkpoints.js` after building JS/native. The Electron
 fixture uses disposable profiles and original artificial media, and stubs Trash
 and save-failure decisions; it never uses an existing user session.
+
+## Managed states and session recovery
+
+See [managed-library tools and reset/restore recipes](../sessions/RECOVERY.md). Named states
+include explicit Personal/Session origin and read-only inherited references.
+Whole-session reset/restore requires a closed target; previous data is retained.

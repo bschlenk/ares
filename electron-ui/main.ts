@@ -2,6 +2,9 @@ import {RendererRecovery} from './services/renderer-recovery.js';
 import {romDisplayTitle} from './library/title.js';
 import {zipEntries} from './library/zip.js';
 import {systems as librarySystems} from './library/systems.js';
+import {ScopedCheckpointLibrary} from './services/scoped-checkpoint-library.js';
+import {readJson, publishJson} from './sessions/files.js';
+import type {GenerationData} from './sessions/repository.js';
 import {CheckpointLibrary} from './services/checkpoint-library.js';
 import {Checkpoints} from './services/checkpoints.js';
 import {DEFAULT_CHECKPOINT_FORMAT,validateCheckpointFormat} from './services/checkpoint-format.js';
@@ -25,7 +28,6 @@ import { profileRoot, profileSaves } from './profile.js'
 import {personalContext, type AppContext} from './sessions/context.js'
 import {KernelLock} from './sessions/locks.js'
 import {StorageCoordinator, personalStorageDirectory, type StorageReservation, type StorageInventory} from './sessions/storage.js'
-import {publishJson} from './sessions/files.js'
 import {launchWindow} from './sessions/launching.js'
 import {SessionRepository} from './sessions/repository.js'
 import { PluginRegistry } from './plugins/registry.js'
@@ -252,7 +254,7 @@ async function pluginAction(
   })
   return { completed: true }
 }
-export const serviceHost = new LocalServiceHost(sessions, async (params, guard) => {
+export const serviceHost = new LocalServiceHost(sessions, async (params, guard, owner) => {
   if (
     !params ||
     typeof params !== 'object' ||
@@ -260,6 +262,9 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard) 
       (key) =>
         ![
           'operation',
+          'action',
+          'session',
+          'epoch',
           'handle',
           'release',
           'operation_id',
@@ -282,6 +287,25 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard) 
   )
     throw new Error('invalid_plugin_request')
   switch (params.operation) {
+    case 'managed_states': return queueOperation(async()=>{
+      guard();
+      const controller=active?.checkpoints;
+      if(!controller)throw new Error(active?.checkpointReason || 'checkpoint_unavailable');
+      if(params.session!==sessions.identity?.session || params.epoch!==sessions.identity?.epoch)throw new Error('checkpoint_session_changed');
+      const library=checkpointLibrary();
+      if(params.action==='list'){
+        const offset=params.offset??0,limit=params.limit??20;
+        if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>20)throw new Error('invalid_checkpoint_page');
+        const entries=await library.list(controller.game);
+        return {entries:entries.slice(offset,offset+limit),total:entries.length,nextOffset:offset+limit<entries.length?offset+limit:null};
+      }
+      if(params.action==='save')return saveCheckpoint(true,controller.forOwner(owner,guard));
+      if(typeof params.id!=='string')throw new Error('invalid_checkpoint_reference');
+      if(params.action==='load'){await controller.forOwner(owner,guard).load(library,params.id);return {loaded:true};}
+      if(params.action==='rename'&&typeof params.name==='string'){await library.rename(controller.game,params.id,params.name);return {renamed:true};}
+      if(params.action==='delete'){await library.delete(controller.game,params.id);return {deleted:true};}
+      throw new Error('invalid_request');
+    });
     case 'plugin_exports': return pluginExports.page(params)
     case 'script_result': return sessions.readScriptResult(params)
     case 'build_info': return {...buildInfo(),runtime:{electron:process.versions.electron,chromium:process.versions.chrome,node:process.versions.node},local_models:{local_ai_handler_supported:typeof browserSession.defaultSession.registerLocalAIHandler==='function',provider:'none',usable:false,reason:'provider_not_configured'},native_sha256:await hashRom(hostPath),app_instance:appLogs.instance,app_root:appRoot,executable:process.execPath}
@@ -600,12 +624,16 @@ function command(text: string) {
     active.child.stdin.write(text + '\n')
 }
 let checkpointBusy=false
-function checkpointLibrary() {return new CheckpointLibrary(String(preferenceValue('states.root')),file=>shell.trashItem(file),message=>appLogs.write('checkpoint-retention','warn',message))}
-async function saveCheckpoint(permanent:boolean) {
+function checkpointLibrary() {
+  const local = new CheckpointLibrary(String(preferenceValue('states.root')),file=>shell.trashItem(file),message=>appLogs.write('checkpoint-retention','warn',message));
+  const inherited = appContext.kind === 'named' ? readJson<GenerationData>(path.join(appContext.dataRoot,'data.json'),1024*1024,true).personalStates : undefined;
+  return new ScopedCheckpointLibrary(local, inherited ? new CheckpointLibrary(inherited, async()=>{throw new Error('inherited_checkpoint_read_only')}) : undefined);
+}
+async function saveCheckpoint(permanent:boolean, controller=active?.checkpoints) {
   if(checkpointBusy)throw new Error('checkpoint_busy')
   const session=active;if(!session?.checkpoints)throw new Error(session?.checkpointReason||'Save states unavailable')
   checkpointBusy=true
-  try{return await session.checkpoints.save(checkpointLibrary(),permanent)}finally{checkpointBusy=false}
+  try{return await controller!.save(checkpointLibrary(),permanent)}finally{checkpointBusy=false}
 }
 async function autosaveBeforeStop(old:NativeSession) {
   if(!old.checkpoints)return
@@ -1174,6 +1202,17 @@ app
         throw new Error('invalid_request')
       })
     }
+    ipcMain.handle('session-data',async(event,request:unknown)=>{
+      if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!request||typeof request!=='object')throw new Error('invalid_request');
+      const p=request as {operation:string;name?:string;mode?:string;archiveId?:string};
+      const repository=new SessionRepository(appContext.personalRoot);
+      if(p.operation==='list')return repository.list();
+      if(typeof p.name!=='string')throw new Error('invalid_request');
+      if(p.operation==='archives')return repository.archives(p.name);
+      if(p.operation==='reset'&&(p.mode==='fresh'||p.mode==='inherit-personal'))return repository.replace(p.name,p.mode);
+      if(p.operation==='restore')return repository.replace(p.name,'restore',p.archiveId);
+      throw new Error('invalid_request');
+    });
     ipcMain.handle('checkpoints',async(event,request:unknown)=>{
       if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!request||typeof request!=='object')throw new Error('invalid_request')
       const p=request as {operation:string;id?:string;name?:string;session?:string}

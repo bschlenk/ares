@@ -712,3 +712,9 @@ not determine identity. See [SAVE-STATES-PLAN.md](SAVE-STATES-PLAN.md#technical-
 for the system audit, content/media identity and publication schema. Saturn and
 ZX Spectrum currently report save states unavailable because their core payloads
 are incomplete.
+
+## Managed states and session recovery
+
+See [managed-library tools and reset/restore recipes](sessions/RECOVERY.md). Named states
+include explicit Personal/Session origin and read-only inherited references.
+Whole-session reset/restore requires a closed target; previous data is retained.

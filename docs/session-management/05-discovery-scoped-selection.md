@@ -9,6 +9,16 @@ Wire access operations to the task 6 controller; keep protected operations close
 until that controller exists. Preserve legacy explicit instance targeting while
 adding persistent session selection.
 
+Task 4 now supplies `SessionRepository.archives/replace`, journaled lifecycle
+replacement, the scoped checkpoint facade and shared `session_archives`,
+`session_reset`, `session_restore`, `managed_states` and `managed_state_*` tools.
+Reuse them when adding scoped selection. Offline lifecycle tools currently require
+an explicit `personal_root`; bind that namespace to target handles without adding
+a machine-global current session. Managed native transfers already preserve their
+connection/lease owner through the management boundary. See
+[task 4 evidence](../../electron-ui/sessions/IMPLEMENTATION.md#task-4--managed-states-and-recovery)
+and [tool recipes](../../electron-ui/sessions/RECOVERY.md).
+
 ## Requirements
 
 Introduce typed management messages separate from native game-service methods.

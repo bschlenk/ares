@@ -8,6 +8,8 @@ import {settingsSnapshotSync} from '../settings/transaction.js';
 
 export type InheritancePolicy = 'inherit-personal' | 'fresh';
 export type SessionManifest = {version: 1; id: string; name: string; generation: string};
+export type RecoveryArchive = {version: 1; id: string; generation: string; mode: 'inherit-personal' | 'fresh' | 'restore'; timestamp: string};
+type Replacement = {version: 1; before: SessionManifest; after: SessionManifest; archive: RecoveryArchive};
 type Registry = {version: 1; sessions: Record<string, string>};
 export type GenerationData = {version: 1; policy: InheritancePolicy; initialized: Record<string, unknown>; personalStates: string};
 export type SessionOwner = {version: 1; sessionId: string; instanceId: string; ready: boolean; serviceDirectory: string};
@@ -143,6 +145,97 @@ export class SessionRepository {
       } finally { void lifecycle.release(); }
     }
   }
+  private async existing(name: string): Promise<string> {
+    sessionName(name);
+    return withLock(path.join(this.root, 'locks', 'registry.lock'), () => {
+      const id = this.registry().sessions[name];
+      if (!id) throw new Error('session_not_found');
+      return id;
+    });
+  }
+  private recover(id: string, lock: KernelLock): void {
+    const directory = this.directory(id), journal = path.join(directory, 'replacing.json');
+    let intent: Replacement;
+    try { intent = readJson<Replacement>(journal, 32768, true); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error; }
+    if (intent.version !== 1 || intent.before.id !== id || intent.after.id !== id || !uuid(intent.before.generation) || !uuid(intent.after.generation)
+      || !uuid(intent.archive.id) || intent.archive.generation !== intent.before.generation || !['inherit-personal', 'fresh', 'restore'].includes(intent.archive.mode)) throw new Error('invalid_replacement_journal');
+    lock.assertHeld();
+    // Archive bookkeeping precedes the pointer. Neither generation is ever moved
+    // or deleted, so replay is idempotent on either side of the commit point.
+    const recovery = privateDirectory(path.join(directory, 'recovery'));
+    publishJson(path.join(recovery, `${intent.archive.id}.json`), intent.archive);
+    this.fault('archive-published');
+    publishJson(path.join(directory, 'session.json'), intent.after);
+    this.fault('replacement-published');
+    this.manifest(id);
+    fs.unlinkSync(journal); syncDirectory(directory);
+  }
+  async archives(name: string): Promise<RecoveryArchive[]> {
+    const id = await this.existing(name), directory = privateDirectory(path.join(this.directory(id), 'recovery'));
+    return fs.readdirSync(directory).filter(file => /^[0-9a-f-]+\.json$/.test(file)).map(file => {
+      const entry = readJson<RecoveryArchive>(path.join(directory, file), 8192, true);
+      if (entry.version !== 1 || !uuid(entry.id) || !uuid(entry.generation) || file !== `${entry.id}.json`) throw new Error('invalid_recovery_archive');
+      return entry;
+    }).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+  }
+  async replace(name: string, mode: InheritancePolicy | 'restore', archiveId?: string): Promise<SessionManifest> {
+    if (!['inherit-personal', 'fresh', 'restore'].includes(mode)) throw new Error('invalid_reset_mode');
+    const id = await this.existing(name);
+    let lock: KernelLock;
+    try { lock = await this.lifecycle(id); }
+    catch (error) { if ((error as Error).message === 'storage_busy') throw new Error('session_running: close the named session before reset or restore'); throw error; }
+    try {
+      this.recover(id, lock);
+      const before = this.manifest(id), directory = this.directory(id), generation = randomUUID();
+      const target = path.join(directory, 'generations', generation);
+      if (mode === 'restore') {
+        if (!uuid(archiveId)) throw new Error('invalid_recovery_archive');
+        const archive = (await this.archives(name)).find(entry => entry.id === archiveId);
+        if (!archive) throw new Error('recovery_archive_not_found');
+        const source = path.join(directory, 'generations', archive.generation);
+        // Copy session-owned files only; never traverse referenced personal paths
+        // or symlinks. Restore creates a new generation and retains the archive.
+        const copy = (from: string, to: string) => {
+          const stat = fs.lstatSync(from);
+          if (stat.isDirectory()) { privateDirectory(to); for (const file of fs.readdirSync(from)) copy(path.join(from,file),path.join(to,file)); syncDirectory(to); }
+          else if (stat.isFile()) publish(to, fs.readFileSync(from));
+          else throw new Error('invalid_generation_file');
+        };
+        copy(source, target);
+        const preferences = readJson<any>(path.join(target, 'preferences.json'), 1024 * 1024, true);
+        for (const key of ['states.root', 'paths.importBml']) {
+          const old = preferences.values[key];
+          const relative = typeof old === 'string' ? path.relative(source, old) : '..';
+          preferences.values[key] = key === 'paths.importBml' && typeof old === 'string' && path.isAbsolute(old) && (relative === '..' || relative.startsWith(`..${path.sep}`)) ? old : relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+            ? path.join(target, relative) : path.join(target, key === 'states.root' ? 'states' : 'settings.bml');
+        }
+        publishJson(path.join(target, 'preferences.json'), preferences);
+        const initialization = path.join(target, 'storage', 'initializing.json');
+        if (fs.existsSync(initialization)) {
+          const intent = readJson<{resources: {destination:string;staged:string|null}[]}>(initialization,1024*1024,true);
+          for (const row of intent.resources) {
+            for (const key of ['destination','staged'] as const) {
+              if (row[key] === null) continue;
+              const relative = path.relative(source,row[key]!);
+              if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('invalid_storage_journal');
+              row[key] = path.join(target,relative);
+            }
+          }
+          publishJson(initialization,intent);
+        }
+      } else this.buildGeneration(target, mode);
+      syncDirectory(path.dirname(target));
+      this.fault('replacement-staged');
+      lock.assertHeld();
+      const after = {...before, generation};
+      publishJson(path.join(directory, 'replacing.json'), {version: 1, before, after,
+        archive: {version: 1, id: randomUUID(), generation: before.generation, mode, timestamp: new Date().toISOString()}} satisfies Replacement);
+      this.fault('replacement-intent');
+      this.recover(id, lock);
+      return after;
+    } finally { await lock.release(); }
+  }
   openSync(name: string, onLost?: () => void): {context: AppContext; lock: KernelLock} {
     const resolved = this.resolveSync(name);
     let lock: KernelLock;
@@ -152,6 +245,7 @@ export class SessionRepository {
       throw error;
     }
     try {
+      this.recover(resolved.id, lock);
       const current = this.manifest(resolved.id);
       return {context: {...personalContext(this.personalRoot), kind: 'named', sessionId: current.id, sessionName: current.name,
         dataRoot: path.join(this.directory(current.id), 'generations', current.generation)}, lock};
@@ -162,6 +256,7 @@ export class SessionRepository {
     const lock = await this.lifecycle(resolved.id, 0, onLost);
     try {
       // Resolve the active generation only AFTER acquiring lifecycle ownership.
+      this.recover(resolved.id, lock);
       const current = this.manifest(resolved.id);
       const context = personalContext(this.personalRoot);
       return {context: {...context, kind: 'named', sessionId: current.id, sessionName: current.name,

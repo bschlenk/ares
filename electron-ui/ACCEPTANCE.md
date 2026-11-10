@@ -181,3 +181,35 @@ acceptance is not green. The implementation report records exact commands,
 earlier corrected failures and the dirty baseline revision. Packaged New Window,
 Dock behavior, physical input, approval/revoke gameplay and capture/banner checks
 remain unrun/manual. Task 4 is next; issue #37 remains open.
+
+
+## Session management task 4 — managed states and recovery (2026-11-10)
+
+Named windows now list/load read-only personal managed states alongside writable
+session states. Source-qualified references disambiguate timestamp collisions;
+backend rename/delete/retention cannot modify inherited entries. Both whole-
+session reset modes and archive restore use exclusive lifecycle ownership and a
+recoverable generation transaction. Restore retains the selected archive and
+displaced current data. Settings → Sessions exposes Restore previous data;
+CLI/MCP provide managed-library and offline lifecycle tools.
+
+See [implementation evidence](sessions/IMPLEMENTATION.md#task-4--managed-states-and-recovery)
+for exact commands, revision, crash boundaries, coverage and earlier corrected
+failures, and [recipes](sessions/RECOVERY.md). Native/TypeScript builds and **60
+focused tests** pass with zero skips. Separate desktop checks pass:
+`SESSION_RECOVERY_UI_PASS`, `SESSION_RECOVERY_NO_SERVICES_PASS`,
+`CHECKPOINT_UI_PASS`. Generated-media screenshots of the new views were inspected.
+
+Full `mise exec node@24.22.0 -- npm run accept` run
+`artifacts/acceptance/run-mz2PPL` passed **338 fixture tests**, native smoke and
+three Electron gates. MCP's updated inventory passed, then its existing Game Boy
+recording assertion failed at `tests/electron-mcp.js:101`: the runtime correctly
+returns `primary-screen-frame` rather than the old expected `unavailable`.
+Later full-suite gates are unrun; full acceptance is not green. The first full
+attempt also caught schema-report drift (corrected) and overlapping-build
+identity failures (no rebuilds overlapped the rerun).
+
+This contributes spec criteria 6–7, not completion of issue #37. Packaged/Dock,
+physical gameplay, personal approval/revoke, banner/capture pixels and other
+platforms remain unrun/manual. Task 5 is next; reuse the repository lifecycle and
+scoped state facade when adding selection. No user personal saves were used.

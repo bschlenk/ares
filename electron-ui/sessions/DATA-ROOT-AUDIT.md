@@ -11,7 +11,7 @@ do not establish another ownership domain.
 | `SettingsStore` | `preferences.json`, unknown/plugin values | Kernel transaction, latest-file key patch, persisted revision; directory watcher, persisted-revision reconciliation, polling/focus resync in task 3 |
 | Imported configuration | Personal `settings.bml` / selected read-only import; named copies import once | Generated native settings overlays in runtime root |
 | Native persistent media | Personal `saves/` or its recorded contained subtree; generation-local `storage/<resource>/data` | Task 2 descriptors, inherited ownership, snapshot/flush barriers and initialization ledger |
-| Managed checkpoints | Default `states/`; personal may select an external library | Named `states.root` is rebased and contained; original source recorded in generation metadata; personal publication/read/retention transactions in task 3; named overlay in task 4 |
+| Managed checkpoints | Default `states/`; personal may select an external library | Named `states.root` is rebased and contained; original source recorded in generation metadata; publication/read/list/retention transactions; scoped facade exposes personal read-only and local writable references |
 | Plugin registry | `plugins/enabled.json`, per-plugin storage and journals | Enablement/key patches and journal transactions use stable kernel locks; built artifacts are process-local |
 | Paired recovery | `paired-recovery/`, plugin journals | Root transaction protects indexes, retention and journal reconciliation; native awaits run outside kernel locks |
 | Workspace | `workspace.json` | Kernel transaction, latest-file reads, atomic whole-layout publication (last committed layout wins) |
@@ -73,4 +73,13 @@ Paired recovery keeps its existing per-plugin/version latest/previous retention
 policy; file publication and cleanup serialize across windows. Native capture and
 restore run outside the kernel transactions; restore rechecks its index before
 journal/index publication. Managed personal checkpoint reads, publication,
-rename/delete and retention serialize; named overlay/lifecycle remains task 4.
+rename/delete, listing and retention serialize. Task 4 adds the scoped overlay and journaled reset/restore lifecycle.
+
+Task 4 keeps immutable displaced generations and recovery records under each
+session directory. Reset/restore acquires the same exclusive lifecycle lock as
+open before reading the active generation. `replacing.json` records the complete
+replacement and displaced archive; replay publishes the archive and active
+pointer without deleting either generation. Restore copies owned files only,
+rejects symlinks, rebases owned preferences and pending initialization paths, and
+archives displaced current data. No external personal folders are archived. See
+[RECOVERY.md](RECOVERY.md) for layout and offline CLI/MCP recipes.

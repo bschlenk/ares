@@ -130,7 +130,7 @@ export class LocalServiceHost {
   metadataFile?: string
   constructor(
     private client: SessionClient,
-    private manage?: (params: any, guard: () => void) => Promise<unknown>,
+    private manage?: (params: any, guard: () => void, owner: string) => Promise<unknown>,
     readonly instance: string = randomUUID(),
   ) {this.leases=new OwnerLeases(client);}
   async listen(directory = defaultServiceDirectory(), name?: string, lockExecutable?: string): Promise<string> {
@@ -366,10 +366,14 @@ export class LocalServiceHost {
           error('unavailable')
           return
         }
+        const managementLease=message.params?.operation==='managed_states'?selectedLease:undefined;
+        let manageOwner:string=connection;
+        try {if(managementLease)manageOwner=this.leases.owner(managementLease);}catch(e){error((e as ServiceError).code);return;}
         ++inFlight
         void manage(message.params, () => {
           if (!authenticated || socket.destroyed || !this.sockets.has(socket)) throw new ServiceError('stale_connection');
-        })
+          if(managementLease && this.leases.owner(managementLease)!==manageOwner)throw new ServiceError('stale_connection');
+        }, manageOwner)
           .then(
             (result) => {
               if (Buffer.byteLength(JSON.stringify(result)) > 48000) {

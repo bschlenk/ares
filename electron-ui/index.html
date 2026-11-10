@@ -46,9 +46,10 @@
     <header class="settings-header"><h1 id="settings-title">Settings</h1><button id="close-settings" aria-label="Close settings">×</button></header>
     <div class="settings-layout">
       <nav id="settings-tabs" aria-label="Settings sections">
-        <button data-tab="general">General</button><button data-tab="input">Input</button><button data-tab="firmware">Firmware</button><button data-tab="core">Core options</button><button data-tab="plugins">Plugins</button><button data-tab="agent">Agent Integration</button><button data-tab="workspace">Workspace</button>
+        <button data-tab="sessions">Sessions</button><button data-tab="general">General</button><button data-tab="input">Input</button><button data-tab="firmware">Firmware</button><button data-tab="core">Core options</button><button data-tab="plugins">Plugins</button><button data-tab="agent">Agent Integration</button><button data-tab="workspace">Workspace</button>
       </nav>
       <div class="settings-pages">
+        <section data-page="sessions" hidden><h2>Sessions</h2><p>Close a named session before resetting or restoring it. Previous data is retained for recovery. Create named sessions through CLI or MCP.</p><div id="settings-sessions"></div></section>
         <section data-page="general">
           <div class="session-controls"><label>System for next ROM<select id="system"><option value="">Auto-detect</option></select></label><button id="pause">Pause</button><button id="reset">Reset game</button></div>
           <div id="settings-general"></div>

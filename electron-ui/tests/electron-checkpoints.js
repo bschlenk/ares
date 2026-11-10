@@ -66,8 +66,8 @@ app.whenReady().then(async()=>{try{
   await call('load',{id:originalEntries[0].id});
   // Exercise an actual scrolling grid without a fixed count/slot limit.
   const fixtureLibrary=new CheckpointLibrary(autos,async()=>{}),fixtureGame=originalEntries[0].game;
-  const fixtureState=await fixtureLibrary.read(fixtureGame,originalEntries[0].id),fixtureFolder=await fixtureLibrary.revealPath(fixtureGame,originalEntries[0].id);
-  const fixtureImage=fs.readFileSync(path.join(fixtureFolder,`${originalEntries[0].id}.png`));
+  const fixtureState=await fixtureLibrary.read(fixtureGame,originalEntries[0].id.split(':')[1]),fixtureFolder=await fixtureLibrary.revealPath(fixtureGame,originalEntries[0].id.split(':')[1]);
+  const fixtureImage=fs.readFileSync(path.join(fixtureFolder,`${originalEntries[0].id.split(':')[1]}.png`));
   for(let i=0;i<14;i++)await fixtureLibrary.publish(fixtureGame,{state:fixtureState.state,screenshot:fixtureImage,capturedAt:new Date(Date.now()+i*1000),screenshotGeometry:{width:160,height:144,aspect:4/3},compatibility:fixtureState.metadata.compatibility},true);
   await js("document.querySelector('#state-close').click();document.querySelector('#video-load-state').click()");await until(()=>js("document.querySelectorAll('.state-card').length===15"));
   assert.equal(await js("document.querySelector('#state-grid').scrollHeight>document.querySelector('#state-grid').clientHeight"),true);

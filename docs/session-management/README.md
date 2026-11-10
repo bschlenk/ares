@@ -19,19 +19,21 @@ product requirements.
   (`feat(sessions): coordinate native storage ownership and inheritance`).
 - Task 3 implementation commit: **`9be56e5f1`**
   (`feat(sessions): coordinate personal windows and shared settings`).
-- Next work: **[task 4 — managed states and recovery](04-managed-states-recovery.md)**.
+- Next work: **[task 5 — discovery and scoped selection](05-discovery-scoped-selection.md)**.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
   [repository acceptance documentation](../../electron-ui/ACCEPTANCE.md).
 
-Tasks 1–3 are complete within their scopes. Named game loads now use native
+Tasks 1–4 are complete within their scopes. Named game loads now use native
 preparation, resource ownership and recoverable inheritance. Personal windows
 now share coordinated preferences and mutable stores, with per-process runtimes
 and File → New Window. Save-root changes still require exclusive personal
-ownership. Approvals,
+ownership. Managed states now expose read-only personal inheritance, and
+whole-session reset/restore retains recovery generations. Approvals,
 revocation and full spec acceptance remain outstanding. `--session-name` opens
 persistent named storage; `--instance-name` still means the legacy endpoint label
-pending task 5. Full acceptance currently stops at an unrelated stale MCP test;
+pending task 5. Full acceptance now passes 338 fixture tests and stops at an
+unrelated stale MCP Game Boy video-clock assertion;
 see the implementation report for exact results and validation limits.
 
 ## Task list and status
@@ -46,16 +48,20 @@ second execution order.
 | 1 | [Data model, paths, and lifecycle](01-data-model-paths-lifecycle.md) | **Complete (foundation)** | `7a2216451` |
 | 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Complete** | `164e91973` |
 | 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Complete** | `9be56e5f1` |
-| 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Next** | — |
-| 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | Not started | — |
+| 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Complete** | Recorded in completion follow-up |
+| 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Next** | — |
 | 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | Not started | — |
 | 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | Not started | — |
 
-No task is currently in progress. Task 3's shared-store transactions, preference
-reconciliation and multiwindow launch checks are on this branch. Continue with
-task 4, preserving kernel coordination on the personal checkpoint library and
-session lifecycle locks around named generation operations. Named overlays,
-whole-session reset/archive/restore and revocation are not implemented yet.
+No task is currently in progress. Task 4 adds scoped managed-state references,
+read-only inherited libraries, offline reset/archive/restore tools and a Sessions
+settings view. Native/TypeScript builds, 60 focused tests and three separate
+desktop checks pass. The full rerun passes 338 fixture tests, native smoke and
+three Electron gates, then fails at the existing MCP Game Boy recording clock
+assertion; later full-suite gates remain unrun. Preserve generation lifecycle
+locks, personal checkpoint transactions and connection/lease ownership when
+adding task 5 selection. Approval/revocation and final presentation remain tasks
+6–7.
 
 ## Working agreement for each agent
 
@@ -115,6 +121,12 @@ when appropriate. Native changes require rebuilding it; TypeScript compilation
 alone does not update the host. Electron checks required desktop process access
 in the prior run; sandboxed profile checks timed out before startup. Diagnose
 that distinction rather than claiming an unstarted test passed.
+
+Task 4 evidence: native/TypeScript builds, **60 focused tests**, three separate
+desktop passes and **338 full-suite fixture tests**. The MCP exact tool inventory
+and schema parity report were updated; full acceptance now stops at the stale
+Game Boy video-clock expectation at `tests/electron-mcp.js:101`. See the
+implementation report for exact commands and limits.
 
 Task 3 evidence: native/TypeScript builds, **81 focused tests**, eleven separate
 desktop checks, and **329 full-suite fixture tests**. Full acceptance still fails

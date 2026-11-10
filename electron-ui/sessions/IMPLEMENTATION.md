@@ -319,3 +319,112 @@ Task 3 contributes to spec criteria 1–2 and preserves criteria 3–5. Managed 
 state overlay/reset/restore is task 4. Scoped discovery/selection, approval/revoke,
 and final titles/banner/capture behavior remain tasks 5–7. No new automatic target
 selection, authorization grant or claim of full issue #37 acceptance is introduced.
+
+## Task 4 — Managed states and recovery
+
+Implemented on `feat/session-management`, based on
+`13a03a0cb14ea31102eb2164503c8ccab735e880`. Implementation commit is recorded in
+[the task handoff](../../docs/session-management/04-managed-states-recovery.md).
+
+`ScopedCheckpointLibrary` exposes writable local and inherited personal entries
+with explicit origin, writable status and source-qualified references. Timestamp
+collisions cannot redirect inherited rename/delete to the writable library.
+Personal windows enumerate only their personal library. Backend retention touches
+only the local library; verified personal reads and listings use the same kernel
+transaction as publication/retention, with immutable bytes retained after read.
+The browser labels origins, disables inherited mutation controls and uses only
+local autosaves for Continue. Existing checksum, ROM and configuration checks
+remain; file-based N64 state tools and explicit imports/exports are unchanged.
+
+Five managed-library tools add paged listing, explicit load, save, rename and
+local deletion. They route native transfers through their connection/lease owner
+and recheck liveness throughout the operation. Three offline lifecycle tools
+provide archive listing, reset and restore without launching an app or requiring
+its service endpoint. See [recipes and storage layout](RECOVERY.md). Selection
+and personal authorization/revocation remain tasks 5–6.
+
+Whole-session replacement acquires the exclusive lifecycle lock before selecting
+data, refusing a running or orphan-native-owned session even without services.
+Fresh clone snapshots current personal preferences/BML and clears initialization;
+Start empty omits personal BML and persists the `fresh` policy. Both retain the
+explicit personal checkpoint source. A complete synced generation precedes the
+replacement journal; archive bookkeeping and the active manifest are atomically
+published and replayable at open/reset/restore. Displaced generations never move
+or disappear. Restore copies a selected archive into a new generation, rebases
+owned settings and pending storage journal paths, and archives the displaced
+current generation. It does not follow symlinks or traverse referenced external
+personal directories. Interrupted pre-intent staging may leave an unreferenced
+generation, while active data stays intact. No automatic permanent deletion was
+added. Settings → Sessions makes both reset modes and Restore previous data
+available for existing sessions; name creation remains CLI/MCP-only.
+
+Validation uses generated media/disposable roots, macOS arm64, Node **24.22.0**
+and Electron **45.1.0**. Final focused commands from the repository root:
+
+```sh
+mise exec node@24.22.0 -- node electron-ui/scripts/build.js
+ARES_HOST="$PWD/build_macos/workbench/bin/ares-electron-host" mise exec node@24.22.0 -- node --test electron-ui/tests/session-recovery.test.js electron-ui/tests/session-repository.test.js electron-ui/tests/checkpoint-library.test.js electron-ui/tests/session-storage.test.js electron-ui/tests/local-endpoint.test.cjs electron-ui/tests/tool-registry.test.cjs electron-ui/tests/schema-parity.test.cjs
+ARES_HOST="$PWD/build_macos/workbench/bin/ares-electron-host" mise exec node@24.22.0 -- node electron-ui/node_modules/electron/cli.js electron-ui/tests/electron-session-recovery.js
+ARES_HOST="$PWD/build_macos/workbench/bin/ares-electron-host" mise exec node@24.22.0 -- node electron-ui/node_modules/electron/cli.js electron-ui/tests/electron-session-recovery.js --no-services-test
+ARES_HOST="$PWD/build_macos/workbench/bin/ares-electron-host" mise exec node@24.22.0 -- node electron-ui/node_modules/electron/cli.js electron-ui/tests/electron-checkpoints.js
+# Full lane, from electron-ui/
+mise exec node@24.22.0 -- npm run accept
+```
+
+All three TypeScript targets and **60 focused tests** passed with zero skips.
+Task 4 adds nine focused cases including source collisions, personal immutability,
+local retention, verified bytes after subprocess deletion, compatibility failures,
+SIGKILL at four reset and four restore boundaries, services-independent lifecycle
+refusal, persistent fresh/inherit policy for different resources after reopen,
+restored custom roots and interrupted storage journals, symlink rejection,
+external native transfer ownership/liveness, and actual offline CLI calls.
+Existing native alias, peripheral, inheritance and orphan-writer coverage remains
+passing; its supported inventory limits are unchanged from task 2.
+
+Separate desktop passes: `SESSION_RECOVERY_UI_PASS`,
+`SESSION_RECOVERY_NO_SERVICES_PASS`, and `CHECKPOINT_UI_PASS`. The first uses a real
+native capture with identical personal/local timestamp IDs, explicitly loads the
+personal source through the shared tool registry, rejects inherited mutations,
+checks origin controls and performs closed-session reset/restore through renderer
+IPC. The second uses a real named native window with no endpoints and refuses
+both reset modes and restore. Screenshots in `artifacts/session-recovery/` were
+visually inspected. The new desktop cases are registered in `scripts/accept.js`.
+Sandboxed Electron aborted before startup; passing checks used desktop access.
+
+The first full run, `artifacts/acceptance/run-6SfnFB`, passed native and TypeScript
+builds but reported **334/337 fixture passes**. New tool registration required
+updating the schema parity report and explicit additions. Two unrelated fixture
+failures were transient adapter/app identity mismatches caused by overlapping a
+local rebuild with the full run. That overlap was stopped; no rebuilds overlapped
+the rerun. The MCP exact inventory expectation was also updated for these eight
+new tools and eight already-existing tools omitted by the previously stale test.
+No schemas or assertions were weakened. Final full-run results follow below.
+
+Final full run `artifacts/acceptance/run-mz2PPL` passed native/TypeScript builds,
+**338/338 fixture tests with zero skips**, native smoke, `electron-local-ai`,
+`electron-session`, and `electron-shutdown`. The corrected MCP inventory passed;
+that test then failed at `tests/electron-mcp.js:101`, another pre-existing stale
+expectation: Game Boy recording now returns `primary-screen-frame`, while the
+assertion expects `unavailable`. The non-N64 primary-screen clock is documented
+in `services/CORE-CONTROL.md` and is unrelated to session recovery. Later gates,
+including the newly registered recovery gates, were not reached in the full run;
+the separate desktop passes above cover this task. Full acceptance is **not
+green**. The summary records baseline `13a03a0cb14ea31102eb2164503c8ccab735e880`
+with dirty task-4 changes. Earlier unset-host focused checks failed before lock
+startup; selecting the rebuilt host corrected them. A first recovery fixture
+assertion compared macOS `/var` against canonical `/private/var`; fixing the
+fixture path made it pass. A first managed tool call accidentally spread status
+fields into management params; it now sends only the native identity.
+
+Task 4 covers spec criteria **6–7** within this milestone, preserving the earlier
+storage/settings checks. Packaged/Dock behavior, physical input, final
+approval/revoke gameplay, banner/capture pixel checks, other platforms and the
+final eleven-criterion feature acceptance remain unrun/manual. No personal user
+saves were read or changed. Tasks **5–7** and issue #37 remain open. Task 5 should
+reuse the offline lifecycle methods and scoped managed tools when introducing
+request-local target selection and binding namespace/instance identity.
+
+The two recovery desktop commands were also rerun after full acceptance, with
+`ARES_HOST="$PWD/build-electron-acceptance/bin/ares-electron-host"` and the final
+compiled UI. Both pass markers were produced again. The older workbench-host
+checkpoint UI pass remains relevant: no native sources changed in this task.

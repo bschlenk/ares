@@ -1184,3 +1184,9 @@ belongs to the primary view. See [video contracts](../video/README.md).
 crashed renderer while retaining the native game, with bounded timeout/retry and
 explicit identity verification. Neither operation is exposed to model scripts
 or the plugin SDK. See [recovery diagnostics](../services/RENDERER-RECOVERY.md).
+
+## Managed states and session recovery
+
+See [managed-library tools and reset/restore recipes](../sessions/RECOVERY.md). Named states
+include explicit Personal/Session origin and read-only inherited references.
+Whole-session reset/restore requires a closed target; previous data is retained.

@@ -1,3 +1,4 @@
+import {refreshSessions} from '../ui/sessions.js';
 import {dismissOnBackdrop} from '../ui/dialog-dismiss.js';
 import { styleModalClose } from '../ui/modal-close.js';
 import { mountSettingsForm } from '../settings/form.js';
@@ -12,6 +13,7 @@ export function notify(error: unknown): void {
 }
 let workspace: Workspace;
 export function showSettings(tab = 'general'): void {
+  if (tab === 'sessions') void refreshSessions(element('settings-sessions'));
   if (tab === 'agent') void refreshAgentConfiguration();
   window.dispatchEvent(new Event('ares-input-release'));
   for (const page of document.querySelectorAll<HTMLElement>('[data-page]')) page.hidden = page.dataset.page !== tab;
