@@ -1,7 +1,8 @@
 # Session-management implementation evidence
 
 Branch: `feat/session-management`. Planning source:
-`docs/SESSION-MANAGEMENT-PLAN.md`, with the spec in the adjacent file authoritative.
+[docs/session-management/README.md](../../docs/session-management/README.md), with
+[the session-management spec](../../docs/SESSION-MANAGEMENT-SPEC.md) authoritative.
 The pre-existing uncommitted planning documents and `.gitignore` change are not
 part of implementation commits.
 
