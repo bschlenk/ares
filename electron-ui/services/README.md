@@ -429,3 +429,27 @@ and save-failure decisions; it never uses an existing user session.
 See [managed-library tools and reset/restore recipes](../sessions/RECOVERY.md). Named states
 include explicit Personal/Session origin and read-only inherited references.
 Whole-session reset/restore requires a closed target; previous data is retained.
+
+## Session discovery and target scope
+
+Local `management({operation:'app_status'})` returns the typed metadata allowlist
+in `management-contracts.ts`: instance UUID, kind, persistent name/ID, namespace
+open sequence, cached title/system/playback state, readiness and approval state.
+It never calls native `session.status`. Endpoint permissions, authentication and
+schema negotiation still apply. Name-lock liveness uses this same metadata probe.
+Open order is allocated under the session namespace's kernel lock.
+
+The public CLI/MCP registry adds an optional `target` to gameplay and management
+tools. Each selected instance gets its own bounded client/registry/cancellation
+context; there is no adapter-global mutable selection. Instances remain pinned
+across disconnects; a new request to a named handle may reopen its persisted name.
+Additional `operation_ref`, `lease_ref` and `result_ref` fields returned by scoped tools are opaque
+`aresref1` values containing their original instance target and native identity for operations.
+Retain them verbatim; references reject another target or changed native epoch.
+Legacy numeric IDs remain supported for explicit low-level use.
+
+Personal external operations fail with `access_required` until task 6 implements
+the grant controller. Only authenticated minimal app metadata is available before
+approval. `access_request/status/wait` currently report
+`{state:'unavailable',reason:'approval_controller_pending'}` without prompting or
+queueing gameplay work. Named sessions retain implicit external access.

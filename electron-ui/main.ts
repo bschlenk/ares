@@ -1,3 +1,5 @@
+import {nextOpenSequence} from './sessions/discovery.js';
+import {prepareManagementRoot} from './sessions/context.js';
 import {RendererRecovery} from './services/renderer-recovery.js';
 import {romDisplayTitle} from './library/title.js';
 import {zipEntries} from './library/zip.js';
@@ -105,6 +107,8 @@ export const appContext: AppContext = (() => {
 const sessionRepository = appContext.kind === 'named' ? new SessionRepository(appContext.personalRoot) : undefined
 sessionRepository?.advertise(appContext, profileLock!, false, process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory())
 fs.writeFileSync(path.join(appContext.runtimeRoot, 'lock-holder.json'), JSON.stringify({pid:process.pid,instance:appContext.instanceId,kind:appContext.kind,session:appContext.sessionId,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600})
+const openedOrder = nextOpenSequence(prepareManagementRoot(appContext.personalRoot))
+let discoveryState: {title?: string; running?: boolean; paused?: boolean} = {}
 const storageCoordinator = new StorageCoordinator()
 const requestedSaveDirectory = process.env.ARES_SAVE_DIR ? profileSaves(appContext.dataRoot, process.env.ARES_SAVE_DIR) : undefined
 const personalSaveDirectory = personalStorageDirectory(appContext, requestedSaveDirectory, lock => {profileLock = lock})
@@ -149,6 +153,7 @@ protocol.registerSchemesAsPrivileged([
 ])
 let recoveryStarting=false,recoveryTransition=false
 export const sessions = new SessionRouter((reply) => {
+  if(reply.ok && reply.result) { const state=reply.result as any; discoveryState={title:state.title, running:state.paused === false, paused:state.paused}; }
   if(recoveryStarting)return
   if(!active?.recoveryFailure)plugins.observe(reply)
   if (window && !window.isDestroyed() && !window.webContents.isDestroyed())
@@ -322,7 +327,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard, 
       if(Object.keys(params).some(key=>key!=='operation'))throw new Error('invalid_request');
       return await rendererRecovery.recover();
     case 'app_health': return appHealth()
-    case 'app_status': return { ready: !!window && !window.isDestroyed(), pid: process.pid, instance: appContext.instanceId, kind: appContext.kind, session_id: appContext.sessionId, session_name: appContext.sessionName }
+    case 'app_status': return { ready: !!window && !window.isDestroyed(), pid: process.pid, instance: appContext.instanceId, kind: appContext.kind, session_id: appContext.sessionId, session_name: appContext.sessionName, opened_order: openedOrder, loaded: !!active?.romHash, game_title: discoveryState.title, system: active?.system, running: discoveryState.running === true, paused: discoveryState.paused === true, approval: appContext.kind === 'named' ? 'implicit' : 'required' }
     case 'load_rom': {
       if (Object.keys(params).some(key => !['operation', 'path', 'system'].includes(key)) || typeof params.path !== 'string' || !path.isAbsolute(params.path) || params.path.includes('\0') || (params.system !== undefined && typeof params.system !== 'string')) throw new Error('invalid_rom_request')
       return queueOperation(async () => {
@@ -405,7 +410,9 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard, 
     default:
       throw new Error('unknown_plugin_operation')
   }
-}, appContext.instanceId)
+}, appContext.instanceId, operation => {
+  if(appContext.kind === 'personal' && operation !== 'app_status') throw new ServiceError('access_required');
+})
 export { stop as stopNative }
 const installedHost = path.join(
   process.resourcesPath,
@@ -487,8 +494,8 @@ export const preferences = new SettingsStore(
     ...(serviceLaunchOverride() === undefined ? {} : { 'agent.enabled': serviceLaunchOverride() }),
   },
 )
-function appHealth(){return { instance: appLogs.instance, observed_at: new Date().toISOString(), renderer:rendererRecovery.status(), native: { pid: active?.child.pid, recovery_failure: active?.recoveryFailure, generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
-const mainWatchdog=new MainWatchdog(appHealth,error=>appLogs.write('watchdog','error',error));
+function appHealth(){return { kind:appContext.kind, opened_order:openedOrder, instance: appLogs.instance, observed_at: new Date().toISOString(), renderer:rendererRecovery.status(), native: { pid: active?.child.pid, recovery_failure: active?.recoveryFailure, generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
+const mainWatchdog=new MainWatchdog(()=>appContext.kind==='named'?appHealth():{instance:appContext.instanceId,kind:'personal',opened_order:openedOrder,approval:'required'},error=>appLogs.write('watchdog','error',error));
 function serviceLaunchOverride(): boolean | undefined {
   const switches = process.argv.filter(arg => arg === '--services' || arg === '--no-services')
   if (switches.length) return switches.at(-1) === '--services'

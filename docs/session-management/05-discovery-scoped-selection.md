@@ -1,6 +1,9 @@
 # Task 5: Discovery and scoped selection
 
-Status: **Not started**. Depends on tasks 1–4; coordinate activation with task 6.
+Status: **Complete (selection; personal access gated)**. Implementation commit is
+recorded in [the handoff](README.md); evidence is in
+[the implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-5--discovery-and-scoped-selection).
+Personal protected operations remain closed pending task 6.
 
 Read [the shared preamble](README.md) first. The existing task 1 launch helper
 already probes authenticated `app_status` without native inspection. Extend this
@@ -78,3 +81,20 @@ callers sharing one MCP adapter.
 ---
 
 Previous: [Task 4: Managed states and recovery](04-managed-states-recovery.md) · Next: [Task 6: Approval, cancellation, and revocation](06-approval-cancellation-revocation.md)
+
+
+## Completion and next-task boundary
+
+The public shared registry supplies `sessions_list`, `session_open`,
+`session_select`, scoped recovery and optional targets on dependent tools.
+`ARES_TARGET` and immutable MCP startup defaults preserve caller scope. The
+existing `managed_states` / `managed_state_*` tools remain the checkpoint-library
+interface. Raw IDs remain compatible; `operation_ref`, `handle_ref`, `lease_ref`
+and `result_ref` companions add instance/native scope. Legacy endpoint names
+remain supported without implying persistent storage or personal authorization.
+
+Task 6 must implement the actual access controller, deduplicated nonblocking
+requests/waits, complete cancellation/revocation and generation guards. Access
+stubs report `approval_controller_pending`; personal native/management calls fail
+with `access_required`. Named tools are active with implicit authorization.
+Task 7 still owns presentation and capture acceptance; issue #37 stays open.

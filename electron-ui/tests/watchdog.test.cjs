@@ -32,7 +32,7 @@ test('fresh MCP health remains responsive while the actual Electron main process
  const dir=fs.mkdtempSync('/tmp/ares-watchdog-ui-'),ipc=path.join(dir,'ipc'),root=path.resolve(__dirname,'..');
  const env={...process.env};for(const k of Object.keys(env))if(k.startsWith('ARES_')||['ELECTRON_RUN_AS_NODE','NODE_OPTIONS','NODE_PATH'].includes(k))delete env[k];
  Object.assign(env,{ARES_PROFILE_DIR:path.join(dir,'profile'),ARES_SERVICE_DIR:ipc,ARES_BACKGROUND_TEST:'1',ARES_DEFAULT_PLUGINS:'0',ARES_SILENT:'1',ARES_DISABLE_PLUGINS:'1'});if(process.env.ARES_HOST)env.ARES_HOST=process.env.ARES_HOST;
- const child=spawn(require('electron'),[root,'--services'],{env,stdio:['ignore','ignore','pipe']});const closed=once(child,'close');let diagnostics='';child.stderr.on('data',b=>diagnostics+=b);let peer;
+ const child=spawn(require('electron'),[root,'--services','--session-name','watchdog'],{env,stdio:['ignore','ignore','pipe']});const closed=once(child,'close');let diagnostics='';child.stderr.on('data',b=>diagnostics+=b);let peer;
  t.after(async()=>{await peer?.close();if(child.exitCode===null&&child.signalCode===null){child.kill('SIGCONT');child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),5000);await closed;clearTimeout(timer);}fs.rmSync(dir,{recursive:true,force:true});});
  const file=await until(async()=>{try{return fs.readdirSync(ipc).filter(n=>/^[a-f0-9-]{36}\.json$/.test(n)).map(n=>path.join(ipc,n))[0];}catch{}});
  const id=path.basename(file,'.json'),info=await readConnection(file,id),client=new LocalServiceClient(file,id);t.after(()=>client.close());

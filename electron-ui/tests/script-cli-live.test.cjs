@@ -4,7 +4,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('direct CLI uses discovery, preserves stdout JSON, writes output and owns SIGINT cancellation',{timeout:30000},async()=>{
  const dir=fs.mkdtempSync('/tmp/ares-script-cli-'),identity={session:'cli-test',epoch:1};
  const nativeProcess=spawn((process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host')),['--synthetic','--paused','--silent','--save-dir',dir,'--control-session',identity.session],{stdio:['pipe','pipe','pipe','pipe']});nativeProcess.stdout.resume();nativeProcess.stderr.resume();const closed=once(nativeProcess,'close');
- const native=new NativeSessionClient(nativeProcess.stdin,nativeProcess.stdio[3],identity,()=>{});const router=new SessionRouter();router.attach(native);const host=new LocalServiceHost(router,async p=>p.operation==='script_result'?router.readScriptResult(p):({ready:true}));
+ const native=new NativeSessionClient(nativeProcess.stdin,nativeProcess.stdio[3],identity,()=>{});const router=new SessionRouter();router.attach(native);const host=new LocalServiceHost(router,async p=>p.operation==='script_result'?router.readScriptResult(p):({ready:true,instance:host.instance,kind:'personal',opened_order:1}));
  function cli(args,cwd,lease){const child=spawn(process.execPath,[path.resolve(__dirname,'../dist/cli.js'),...args],{cwd,env:{...process.env,ARES_PROFILE_DIR:path.join(dir,'cli-profile'),ARES_SERVICE_DIR:path.join(dir,'ipc'),ARES_OWNER_LEASE:lease??''}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);return {child,done:once(child,'close').then(([code])=>({code,out,err}))};}
  try{
   await host.listen(path.join(dir,'ipc'));

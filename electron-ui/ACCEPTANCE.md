@@ -215,3 +215,39 @@ This contributes spec criteria 6–7, not completion of issue #37. Packaged/Dock
 physical gameplay, personal approval/revoke, banner/capture pixels and other
 platforms remain unrun/manual. Task 5 is next; reuse the repository lifecycle and
 scoped state facade when adding selection. No user personal saves were used.
+
+## Session management task 5 — discovery and scoped selection (2026-11-10)
+
+Task 5 adds typed metadata discovery, monotonic open order, personal-default
+resolution, named runtime open/select, immutable startup selection and shell-scoped
+`ARES_TARGET` handles. The public CLI/MCP registry pools target clients with
+request-local native identities and cancellation. Scoped operation/capture/lease/
+script-result references retain their original target; raw IDs remain compatible.
+Offline recovery tools accept the selected named namespace. Personal external
+operations remain closed until task 6 supplies approval/revocation; access tools
+explicitly report that dependency. Named sessions remain implicitly authorized.
+
+Focused coverage includes concurrent subprocess sequence allocation, stopped-name
+selection without launch, offline reset/restore, two interleaved callers, native
+cancellation isolation, stale references, mismatched leases, CLI exported handles,
+legacy reconnect and no preapproval native requests. New desktop checks use only
+disposable profiles and generated Game Boy media. `scripts/accept.js` discovers
+the new fixture tests and includes both desktop modes plus the launch integration
+check. See `sessions/IMPLEMENTATION.md` for exact final commands and outcomes.
+
+Spec criterion 8 now has automated implementation coverage. Criteria 9–10 remain
+gated on task 6, and criterion 11 remains task 7. Packaged/Dock and complete final
+acceptance are not claimed by this task.
+
+Final task 5 validation: all three TypeScript targets and the full native build
+pass. The final `mise exec node@24.22.0 -- npm run accept` run
+(`artifacts/acceptance/run-oHmuAx/summary.json`) reports **346/347 fixture tests
+passed**, zero skips, with one unchanged recovery scheduler timing assertion
+(`input_active` versus `undefined`, `paired-recovery.test.js:105`). Its isolated
+rerun passes. All nine new selection tests pass in the full run. Later full-suite
+gates remain unrun after this failure. Independent desktop runs report
+`SESSION_SELECTION_NAMED_PASS`, `SESSION_SELECTION_PERSONAL_PASS` and
+`SESSION_SELECTION_LIVE_PASS`. The separately attempted MCP desktop gate reaches
+its known Game Boy video-clock mismatch (`primary-screen-frame` versus
+`unavailable`, now line 103). Exact commands and revision/coverage limits are in
+the implementation report. Task 6 is next; full issue acceptance remains open.

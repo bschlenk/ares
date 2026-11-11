@@ -429,3 +429,117 @@ The two recovery desktop commands were also rerun after full acceptance, with
 `ARES_HOST="$PWD/build-electron-acceptance/bin/ares-electron-host"` and the final
 compiled UI. Both pass markers were produced again. The older workbench-host
 checkpoint UI pass remains relevant: no native sources changed in this task.
+
+## Task 5 — discovery and scoped selection
+
+Implementation extends the task 1 launch/readiness helpers and task 4 lifecycle
+repository. The shared public CLI/MCP registry now exposes persisted/live session
+listing, runtime named open/select, scoped recovery operations and optional opaque
+`target` selectors on target-dependent tools. A returned name selector can reopen
+its storage; returned instance selectors pin a UUID and never choose replacements.
+`ARES_TARGET` and immutable MCP startup selectors avoid a machine-global current
+session. Legacy `ARES_INSTANCE_NAME` / `--instance-name` retain endpoint-label
+semantics, including fresh explicit legacy-name reconnects without mutation replay.
+
+Discovery uses typed authenticated `app_status` metadata, independent of native
+identity: kind, UUID, persistent ID/name, namespace-locked monotonic open order,
+cached game title/system/playback state, readiness and approval state. It neither
+launches nor reads native gameplay. Name-claim liveness uses the same probe.
+Default calls choose the earliest personal window and ignore named windows; when
+none exists, automatic startup opens personal storage. Explicit named open uses
+persistent isolated storage and implicit authorization.
+
+The bounded pool holds eight target clients. Every entry has independent tool
+caches, request-local native identities and cancellation context; active calls
+cannot be evicted. Socket reply callbacks update connection state, while the
+awaiting request updates its own identity scope. This distinction is necessary
+because a socket listener retains the async context in which it was installed.
+Scoped `operation_ref`, `handle_ref`, `lease_ref` and `result_ref` companions retain
+the initial target, and native identity for operations/captures; legacy raw IDs
+remain available. Scoped references reject another target, and operation/capture
+references reject changed native identity. Lease/result references can survive
+native game changes according to their existing lifetime rules. Explicit leases
+remain necessary for durable resources across short CLI processes.
+
+Personal protected external requests are closed at the authenticated local
+boundary with `access_required`. Cached personal watchdog observations contain
+only minimal instance/approval information. This gate does not affect internal UI
+or plugin/native ownership. `access_request/status/wait` report
+`approval_controller_pending`; no prompt, grant, delayed command or authorization
+bypass is exposed before task 6. Task 6 must replace this gate with the real
+window-wide grant controller and guard queued/in-flight work and all owners.
+Task 7 still owns presentation/capture acceptance. Issue #37 remains open.
+
+Validation commands and final outcomes are recorded below after the final run.
+
+Validation environment: macOS arm64, Node 24.22.0, Electron 45.1.0. Commands ran
+on base `930ee0213` plus the task 5 working tree; implementation/handoff commits
+are recorded in `docs/session-management/README.md`. Native source is unchanged
+by task 5. The full lane nevertheless configures/builds its own native host.
+
+- `mise exec node@24.22.0 -- node electron-ui/scripts/build.js` — passed all
+  three TypeScript targets and generated build/schema provenance.
+- `ARES_HOST="$PWD/build_macos/workbench/bin/ares-electron-host" mise exec
+  node@24.22.0 -- node --test electron-ui/tests/session-selection.test.js` —
+  **9 passed**, zero failures/skips, on the final source. Includes subprocess
+  open sequence races, two callers, request-local identity, real native
+  cancellation isolation, scoped lease/epoch rejection, stopped-name recovery,
+  personal denial, and cached-health personal-default selection. Nested batch
+  references retain their own epoch, rather than the batch's final epoch.
+- The expanded selection/automatic-client/tool-registry/schema-parity run passed
+  **16 tests**. The recovery/selection/tool-registry/parity run passed **20**;
+  the native batch/signals/selection regression command passed **10**. These
+  overlap; their counts must not be added. The final full fixture lane includes
+  these suites. The schema report records 134 public tools, no missing reference
+  tools, and intentional optional-target differences on all 68 frozen FastMCP
+  reference signatures. Raw ID compatibility is retained alongside scoped refs.
+- With desktop access, and the same `ARES_HOST` prefix, the final frozen source
+  separately passed:
+  `mise exec node@24.22.0 -- electron-ui/node_modules/.bin/electron electron-ui/tests/electron-session-selection.js`
+  (`SESSION_SELECTION_NAMED_PASS`), the same command with `--personal-test`
+  (`SESSION_SELECTION_PERSONAL_PASS`), and
+  `mise exec node@24.22.0 -- node electron-ui/tests/session-selection-live.js`
+  (`SESSION_SELECTION_LIVE_PASS`). These cover real generated-ROM load/status/
+  close, empty-app discovery, personal refusal, runtime named open/reuse, two
+  targets through one MCP adapter, CLI exported handles, and automatic personal
+  startup when only named windows exist.
+- `ARES_HOST=... mise exec node@24.22.0 -- electron-ui/node_modules/.bin/electron
+  electron-ui/tests/electron-mcp.js` — updated inventory/schema assertions pass;
+  execution reaches the pre-existing Game Boy video-clock assertion (now line
+  103), actual `primary-screen-frame`, expected `unavailable`.
+
+Sandboxed Electron startup aborted before app initialization; desktop checks above
+were rerun with desktop process access. Exploratory full runs `run-VFfl1k` and
+`run-EB1J7r` found compatibility/fixture issues during implementation and are
+superseded by the final run. Superseded/interrupted runs `run-pS1lcJ` and
+`run-sFLAK0` are not acceptance passes. No private ROMs or personal saves were
+used. Packaged/Dock checks, actual approvals/revocation and task 7 capture pixels
+remain unrun for this milestone.
+
+The overlapping focused commands above used these explicit test paths (with the
+same pinned Node and `ARES_HOST` prefix):
+
+```sh
+node --test electron-ui/tests/session-selection.test.js electron-ui/tests/automatic-client.test.cjs electron-ui/tests/tool-registry.test.cjs electron-ui/tests/schema-parity.test.cjs
+node --test electron-ui/tests/session-selection.test.js electron-ui/tests/tool-registry.test.cjs electron-ui/tests/session-recovery.test.js electron-ui/tests/schema-parity.test.cjs
+node --test electron-ui/tests/signals-live.test.cjs electron-ui/tests/batch-live.test.cjs electron-ui/tests/session-selection.test.js
+```
+
+Final full command (from `electron-ui/`, with desktop process access):
+`mise exec node@24.22.0 -- npm run accept`.
+[Final summary](../artifacts/acceptance/run-oHmuAx/summary.json) and
+[fixture log](../artifacts/acceptance/run-oHmuAx/fixture-regressions.log): configure,
+native build and TypeScript passed; **347 fixture tests, 346 passed, 1 failed,
+zero skipped/cancelled**. The only failure is the unchanged paired-recovery
+scheduler timing assertion at `tests/paired-recovery.test.js:105`: `input_active`
+remained visible when the test expected `undefined`. All nine new selection tests
+and all updated compatibility/schema fixtures passed within this full run.
+The exact isolated rerun
+`ARES_HOST="$PWD/build_macos/workbench/bin/ares-electron-host" mise exec node@24.22.0 -- node --test --test-name-pattern='scheduled recovery reports' electron-ui/tests/paired-recovery.test.js`
+passed (1 test). No scheduler implementation/test was changed for task 5.
+
+The final full command stops at that fixture failure, so its native-smoke,
+Electron, launch and packaged gates are **unrun**, not passes. The three task 5
+desktop checks were run separately and passed as recorded above. The separate
+existing MCP desktop check still fails at its previously documented Game Boy
+video-clock expectation. These limits prevent claiming full spec acceptance.

@@ -79,7 +79,12 @@ checks and an attempted full run with 316 fixture tests passed before a stale MC
 assertion. Task 3 adds 81 focused passes, eleven separate desktop checks and
 329 fixture passes before that same MCP assertion. Task 4 adds 60 focused
 passes, three separate desktop checks and 338 full-suite fixture passes. Its updated MCP inventory passes, then the full run stops at
-the existing stale Game Boy video-clock assertion. Tasks 5–7, full integration
+the existing stale Game Boy video-clock assertion. Task 5 now adds scoped discovery/selection and keeps personal external access
+closed pending the task 6 controller. Nine selection tests and three independent
+desktop checks pass. Final full acceptance passes 346/347 fixtures, with an
+unchanged scheduler timing assertion failing (isolated rerun passes); later gates
+are unrun. The separate MCP desktop check still reaches its known video-clock
+mismatch. Exact validation is in the implementation report. Tasks 6–7, full integration
 acceptance and the final
 map to the spec's eleven criteria remain outstanding.
 

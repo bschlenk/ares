@@ -4,8 +4,87 @@
     "sha256": "28db87365993793d6844bf05894372fe3f19b30a64a856f06aaabd249ed0465c",
     "mcp_version": "1.30.0"
   },
-  "signature_matching": 66,
+  "signature_matching": 0,
   "signature_differences": [
+    {
+      "name": "audio_capture",
+      "reference": {
+        "properties": {
+          "seconds": {
+            "default": 3,
+            "types": [
+              "number"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "seconds": {
+            "default": 3,
+            "types": [
+              "number"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "audio_save",
+      "reference": {
+        "properties": {
+          "path": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "current": {
+        "properties": {
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "audio_status",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
     {
       "name": "batch",
       "reference": {
@@ -56,11 +135,3024 @@
             "types": [
               "boolean"
             ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
           }
         },
         "required": [
           "steps"
         ]
+      }
+    },
+    {
+      "name": "break_add",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "condition": {
+            "default": null,
+            "types": [
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "condition": {
+            "default": null,
+            "types": [
+              "null"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      }
+    },
+    {
+      "name": "break_list",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "break_remove",
+      "reference": {
+        "properties": {
+          "id": {
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "current": {
+        "properties": {
+          "id": {
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "call_function",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "args": {
+            "default": null,
+            "types": [
+              "array",
+              "null"
+            ]
+          },
+          "max_frames": {
+            "default": 60,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_instructions": {
+            "default": 100000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 5,
+            "types": [
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "args": {
+            "default": null,
+            "types": [
+              "array",
+              "null"
+            ]
+          },
+          "max_frames": {
+            "default": 60,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_instructions": {
+            "default": 100000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 5,
+            "types": [
+              "number"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      }
+    },
+    {
+      "name": "call_recover",
+      "reference": {
+        "properties": {
+          "restore": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "restore": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "cancel_operation",
+      "reference": {
+        "properties": {
+          "operation_id": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "operation_id": {
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "capture_control",
+      "reference": {
+        "properties": {
+          "rdp": {
+            "default": null,
+            "types": [
+              "boolean",
+              "null"
+            ]
+          },
+          "rsp": {
+            "default": null,
+            "types": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "rdp": {
+            "default": null,
+            "types": [
+              "boolean",
+              "null"
+            ]
+          },
+          "rsp": {
+            "default": null,
+            "types": [
+              "boolean",
+              "null"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "controller_host_mode",
+      "reference": {
+        "properties": {
+          "neutral_during_operations": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "neutral_during_operations": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "controller_release",
+      "reference": {
+        "properties": {
+          "port": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "port": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "controller_set",
+      "reference": {
+        "properties": {
+          "a": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "b": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "c_down": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "c_left": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "c_right": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "c_up": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "down": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "l": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "left": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "port": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "r": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "right": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "start": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "timeout_frames": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          },
+          "timeout_seconds": {
+            "default": null,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "up": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "x": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "y": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "z": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "a": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "b": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "c_down": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "c_left": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "c_right": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "c_up": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "down": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "l": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "left": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "port": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "r": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "right": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "start": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "timeout_frames": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          },
+          "timeout_seconds": {
+            "default": null,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "up": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "x": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "y": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "z": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "controller_state",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "controller_tap",
+      "reference": {
+        "properties": {
+          "button": {
+            "types": [
+              "string"
+            ]
+          },
+          "frames": {
+            "default": 2,
+            "types": [
+              "integer"
+            ]
+          },
+          "keep_override": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "port": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "button"
+        ]
+      },
+      "current": {
+        "properties": {
+          "button": {
+            "types": [
+              "string"
+            ]
+          },
+          "frames": {
+            "default": 2,
+            "types": [
+              "integer"
+            ]
+          },
+          "keep_override": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "port": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "button"
+        ]
+      }
+    },
+    {
+      "name": "cpu_profiler_top",
+      "reference": {
+        "properties": {
+          "limit": {
+            "default": 32,
+            "types": [
+              "integer"
+            ]
+          },
+          "window": {
+            "default": "continuous",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "limit": {
+            "default": 32,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "window": {
+            "default": "continuous",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "cpu_registers",
+      "reference": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "cpu_set_registers",
+      "reference": {
+        "properties": {
+          "gpr": {
+            "default": null,
+            "types": [
+              "null",
+              "object"
+            ]
+          },
+          "hi": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "llbit": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          },
+          "lo": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "pc": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "gpr": {
+            "default": null,
+            "types": [
+              "null",
+              "object"
+            ]
+          },
+          "hi": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "llbit": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          },
+          "lo": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "pc": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "disassemble",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "count": {
+            "default": 32,
+            "types": [
+              "integer"
+            ]
+          },
+          "view": {
+            "default": "cpu",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "count": {
+            "default": 32,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "view": {
+            "default": "cpu",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      }
+    },
+    {
+      "name": "dump_range",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "length": {
+            "types": [
+              "integer"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "view": {
+            "default": "rdram",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "length",
+          "path"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "length": {
+            "types": [
+              "integer"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "view": {
+            "default": "rdram",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "length",
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "dump_rdram",
+      "reference": {
+        "properties": {
+          "expect_size": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "current": {
+        "properties": {
+          "expect_size": {
+            "default": null,
+            "types": [
+              "integer",
+              "null"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "emu_status",
+      "reference": {
+        "properties": {
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "last_stop",
+      "reference": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "memory_regions",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "operation_status",
+      "reference": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "operation_id": {
+            "types": [
+              "integer"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "operation_id"
+        ]
+      },
+      "current": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "operation_id": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "operation_id"
+        ]
+      }
+    },
+    {
+      "name": "overlay_log",
+      "reference": {
+        "properties": {
+          "code_end": {
+            "default": 2359296,
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "code_start": {
+            "default": 1024,
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "limit": {
+            "default": 1024,
+            "types": [
+              "integer"
+            ]
+          },
+          "since_id": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "code_end": {
+            "default": 2359296,
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "code_start": {
+            "default": 1024,
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "limit": {
+            "default": 1024,
+            "types": [
+              "integer"
+            ]
+          },
+          "since_id": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "pause",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "peripheral_registers",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "profiler_clear",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "profiler_control",
+      "reference": {
+        "properties": {
+          "enable": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "enable": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rdp_capture",
+      "reference": {
+        "properties": {
+          "dmem_snapshots": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "limit": {
+            "default": 4096,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_commands": {
+            "default": 1000000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "next_frame": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "dmem_snapshots": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "limit": {
+            "default": 4096,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_commands": {
+            "default": 1000000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "next_frame": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rdp_state",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "read_memory",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "length": {
+            "default": 64,
+            "types": [
+              "integer"
+            ]
+          },
+          "region": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "region"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "length": {
+            "default": 64,
+            "types": [
+              "integer"
+            ]
+          },
+          "region": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "region"
+        ]
+      }
+    },
+    {
+      "name": "read_memory_va",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "length": {
+            "default": 64,
+            "types": [
+              "integer"
+            ]
+          },
+          "view": {
+            "default": "rdram",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "length": {
+            "default": 64,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "view": {
+            "default": "rdram",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      }
+    },
+    {
+      "name": "render_probe",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "resume",
+      "reference": {
+        "properties": {
+          "keep_overrides": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "keep_overrides": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rsp_break",
+      "reference": {
+        "properties": {
+          "action": {
+            "default": "list",
+            "types": [
+              "string"
+            ]
+          },
+          "addr": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "action": {
+            "default": "list",
+            "types": [
+              "string"
+            ]
+          },
+          "addr": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rsp_capture",
+      "reference": {
+        "properties": {
+          "limit": {
+            "default": 4096,
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "limit": {
+            "default": 4096,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rsp_debug",
+      "reference": {
+        "properties": {
+          "enable": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "enable": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rsp_registers",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rsp_run",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rsp_step",
+      "reference": {
+        "properties": {
+          "count": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "count": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "rsp_stop",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "run_frames",
+      "reference": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "n": {
+            "types": [
+              "integer"
+            ]
+          },
+          "screenshot_after": {
+            "default": null,
+            "types": [
+              "null",
+              "object"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "n"
+        ]
+      },
+      "current": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "n": {
+            "types": [
+              "integer"
+            ]
+          },
+          "screenshot_after": {
+            "default": null,
+            "types": [
+              "null",
+              "object"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "n"
+        ]
+      }
+    },
+    {
+      "name": "run_until_frame",
+      "reference": {
+        "properties": {
+          "k": {
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "k"
+        ]
+      },
+      "current": {
+        "properties": {
+          "k": {
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "k"
+        ]
+      }
+    },
+    {
+      "name": "run_until_hit",
+      "reference": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_frames": {
+            "default": 600,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_frames": {
+            "default": 600,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "screenshot",
+      "reference": {
+        "properties": {
+          "inline": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "region": {
+            "default": null,
+            "types": [
+              "array",
+              "null"
+            ]
+          },
+          "scale": {
+            "default": 1,
+            "types": [
+              "number"
+            ]
+          },
+          "source": {
+            "default": "framebuffer",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "inline": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "region": {
+            "default": null,
+            "types": [
+              "array",
+              "null"
+            ]
+          },
+          "scale": {
+            "default": 1,
+            "types": [
+              "number"
+            ]
+          },
+          "source": {
+            "default": "framebuffer",
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "stack",
+      "reference": {
+        "properties": {
+          "function_start": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "function_start": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "state_info",
+      "reference": {
+        "properties": {
+          "path": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "current": {
+        "properties": {
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "state_list",
+      "reference": {
+        "properties": {
+          "directory": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "limit": {
+            "default": 100,
+            "types": [
+              "integer"
+            ]
+          },
+          "offset": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "directory": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "limit": {
+            "default": 100,
+            "types": [
+              "integer"
+            ]
+          },
+          "offset": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "state_load",
+      "reference": {
+        "properties": {
+          "keep_overrides": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "resume": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "current": {
+        "properties": {
+          "keep_overrides": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "resume": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "state_peek",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "assume_current_configuration": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "length": {
+            "default": 64,
+            "types": [
+              "integer"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "view": {
+            "default": "rdram",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "path"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "assume_current_configuration": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "length": {
+            "default": 64,
+            "types": [
+              "integer"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "view": {
+            "default": "rdram",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "state_save",
+      "reference": {
+        "properties": {
+          "metadata": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "current": {
+        "properties": {
+          "metadata": {
+            "default": true,
+            "types": [
+              "boolean"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "step",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "step_instructions",
+      "reference": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "n": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "cop0": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "fpr": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "n": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verbose": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "trace_calls",
+      "reference": {
+        "properties": {
+          "f12": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "filter_end": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "filter_start": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "inline_limit": {
+            "default": 20000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_records": {
+            "default": 2000000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "n_frames": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "registers": {
+            "default": null,
+            "types": [
+              "array",
+              "null"
+            ]
+          },
+          "start_frame": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target_end": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target_start": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "f12": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "filter_end": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "filter_start": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "inline_limit": {
+            "default": 20000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_records": {
+            "default": 2000000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "n_frames": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "registers": {
+            "default": null,
+            "types": [
+              "array",
+              "null"
+            ]
+          },
+          "start_frame": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "target_end": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target_start": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "trace_page",
+      "reference": {
+        "properties": {
+          "limit": {
+            "default": 20000,
+            "types": [
+              "integer"
+            ]
+          },
+          "offset": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "operation_id": {
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "operation_id"
+        ]
+      },
+      "current": {
+        "properties": {
+          "limit": {
+            "default": 20000,
+            "types": [
+              "integer"
+            ]
+          },
+          "offset": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "operation_id": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "operation_id"
+        ]
+      }
+    },
+    {
+      "name": "trace_pc",
+      "reference": {
+        "properties": {
+          "filter_end": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "filter_start": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "inline_limit": {
+            "default": 20000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_records": {
+            "default": 2000000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "n_frames": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "start_frame": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "filter_end": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "filter_start": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "inline_limit": {
+            "default": 20000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_records": {
+            "default": 2000000,
+            "types": [
+              "integer"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "n_frames": {
+            "default": 1,
+            "types": [
+              "integer"
+            ]
+          },
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "default": null,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "start_frame": {
+            "default": null,
+            "types": [
+              "integer",
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
       }
     },
     {
@@ -137,16 +3229,400 @@
             "types": [
               "string"
             ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
           }
         },
         "required": []
       }
+    },
+    {
+      "name": "video_status",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "video_stop",
+      "reference": {
+        "properties": {
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "current": {
+        "properties": {
+          "overwrite": {
+            "default": false,
+            "types": [
+              "boolean"
+            ]
+          },
+          "path": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "watch_add",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "condition": {
+            "default": null,
+            "types": [
+              "null"
+            ]
+          },
+          "kind": {
+            "default": "write",
+            "types": [
+              "string"
+            ]
+          },
+          "length": {
+            "default": 4,
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "condition": {
+            "default": null,
+            "types": [
+              "null"
+            ]
+          },
+          "kind": {
+            "default": "write",
+            "types": [
+              "string"
+            ]
+          },
+          "length": {
+            "default": 4,
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr"
+        ]
+      }
+    },
+    {
+      "name": "watch_list",
+      "reference": {
+        "properties": {},
+        "required": []
+      },
+      "current": {
+        "properties": {
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "watch_remove",
+      "reference": {
+        "properties": {
+          "id": {
+            "types": [
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "current": {
+        "properties": {
+          "id": {
+            "types": [
+              "integer"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "write_memory",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "hex_bytes": {
+            "types": [
+              "string"
+            ]
+          },
+          "region": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "hex_bytes",
+          "region"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "hex_bytes": {
+            "types": [
+              "string"
+            ]
+          },
+          "region": {
+            "types": [
+              "string"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "hex_bytes",
+          "region"
+        ]
+      }
+    },
+    {
+      "name": "write_memory_many",
+      "reference": {
+        "properties": {
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "verify_after_frames": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "writes": {
+            "types": [
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "writes"
+        ]
+      },
+      "current": {
+        "properties": {
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verify_after_frames": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "writes": {
+            "types": [
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "writes"
+        ]
+      }
+    },
+    {
+      "name": "write_memory_va",
+      "reference": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "hex_bytes": {
+            "types": [
+              "string"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "verify_after_frames": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "view": {
+            "default": "cpu",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "hex_bytes"
+        ]
+      },
+      "current": {
+        "properties": {
+          "addr": {
+            "types": [
+              "integer",
+              "string"
+            ]
+          },
+          "hex_bytes": {
+            "types": [
+              "string"
+            ]
+          },
+          "max_seconds": {
+            "default": 60,
+            "types": [
+              "number"
+            ]
+          },
+          "target": {
+            "types": [
+              "string"
+            ]
+          },
+          "verify_after_frames": {
+            "default": 0,
+            "types": [
+              "integer"
+            ]
+          },
+          "view": {
+            "default": "cpu",
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "addr",
+          "hex_bytes"
+        ]
+      }
     }
   ],
   "reference_count": 68,
-  "current_count": 127,
+  "current_count": 134,
   "missing": [],
   "added": [
+    "access_request",
+    "access_status",
+    "access_wait",
     "app_health",
     "app_logs",
     "build_info",
@@ -201,8 +3677,12 @@
     "script_result_release",
     "script_results",
     "session_archives",
+    "session_open",
+    "session_recovery_list",
     "session_reset",
     "session_restore",
+    "session_select",
+    "sessions_list",
     "ui_screenshot",
     "video_surfaces",
     "wait_frames"
@@ -232,6 +3712,14 @@
             "maximum": 3600,
             "minimum": 0,
             "type": "number"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -264,6 +3752,14 @@
             "minLength": 1,
             "type": "string"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -278,7 +3774,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "batch",
@@ -705,6 +4210,14 @@
             "minItems": 1,
             "type": "array"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -750,6 +4263,14 @@
               }
             ]
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -764,7 +4285,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "break_remove",
@@ -793,6 +4323,14 @@
             "maximum": 4294967295,
             "minimum": 1,
             "type": "integer"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -926,6 +4464,14 @@
             "minimum": 0.001,
             "type": "number"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -940,7 +4486,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "cancel_operation",
@@ -970,15 +4525,33 @@
           "current": {
             "anyOf": [
               {
-                "maximum": 9007199254740991,
-                "minimum": 1,
-                "type": "integer"
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
               },
               {
-                "type": "null"
+                "format": "starts_with",
+                "maxLength": 32768,
+                "pattern": "^aresref1\\..*",
+                "type": "string"
               }
-            ],
-            "default": null
+            ]
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -1036,6 +4609,14 @@
               "null"
             ]
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -1050,7 +4631,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "controller_release",
@@ -1090,6 +4680,14 @@
             ],
             "default": null
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -1116,6 +4714,14 @@
             "maximum": 4,
             "minimum": 1,
             "type": "integer"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         },
         {
@@ -1211,7 +4817,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "controller_tap",
@@ -1269,6 +4884,14 @@
             "minimum": 1,
             "type": "integer"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -1295,6 +4918,14 @@
             "maximum": 100000,
             "minimum": 1,
             "type": "integer"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         },
         {
@@ -1325,7 +4956,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "cpu_set_registers",
@@ -1563,6 +5203,14 @@
             ],
             "default": null
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -1620,6 +5268,14 @@
             "maximum": 128,
             "minimum": 1,
             "type": "integer"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         },
         {
@@ -1698,6 +5354,14 @@
           }
         },
         {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        },
+        {
           "field": "view",
           "reference": {
             "default": "rdram",
@@ -1758,6 +5422,14 @@
             ],
             "default": null
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -1772,7 +5444,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "last_stop",
@@ -1785,7 +5466,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "memory_regions",
@@ -1798,7 +5488,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "operation_status",
@@ -1824,9 +5523,27 @@
             "type": "integer"
           },
           "current": {
-            "maximum": 9007199254740991,
-            "minimum": 1,
-            "type": "integer"
+            "anyOf": [
+              {
+                "format": "starts_with",
+                "maxLength": 32768,
+                "pattern": "^aresref1\\..*",
+                "type": "string"
+              },
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -1922,6 +5639,14 @@
             "minimum": 0,
             "type": "integer"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -1936,7 +5661,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "peripheral_registers",
@@ -1949,7 +5683,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "profiler_clear",
@@ -1962,7 +5705,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "profiler_control",
@@ -1975,7 +5727,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "rdp_capture",
@@ -2048,6 +5809,14 @@
               "string"
             ]
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2062,7 +5831,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "read_memory",
@@ -2120,6 +5898,14 @@
             "maximum": 1024,
             "minimum": 1,
             "type": "integer"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -2181,6 +5967,14 @@
           }
         },
         {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        },
+        {
           "field": "view",
           "reference": {
             "default": "rdram",
@@ -2208,7 +6002,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "resume",
@@ -2221,7 +6024,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "rsp_break",
@@ -2288,6 +6100,14 @@
             ],
             "default": null
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2315,6 +6135,14 @@
             "minimum": 0,
             "type": "integer"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2329,7 +6157,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "rsp_registers",
@@ -2342,7 +6179,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "rsp_run",
@@ -2355,7 +6201,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "rsp_step",
@@ -2381,6 +6236,14 @@
             "minimum": 1,
             "type": "integer"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2395,7 +6258,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "run_frames",
@@ -2468,6 +6340,14 @@
             ],
             "default": null
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2512,6 +6392,14 @@
             "minimum": 0.001,
             "type": "number"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2551,6 +6439,14 @@
             "maximum": 600,
             "minimum": 0.001,
             "type": "number"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -2655,6 +6551,14 @@
             ],
             "type": "string"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2706,6 +6610,14 @@
             ],
             "default": null
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2735,6 +6647,14 @@
           "current": {
             "maxLength": 4096,
             "minLength": 1,
+            "type": "string"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
             "type": "string"
           }
         }
@@ -2804,6 +6724,14 @@
             "minimum": 0,
             "type": "integer"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2833,6 +6761,14 @@
           "current": {
             "maxLength": 4096,
             "minLength": 1,
+            "type": "string"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
             "type": "string"
           }
         }
@@ -2908,6 +6844,14 @@
           }
         },
         {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        },
+        {
           "field": "view",
           "reference": {
             "default": "rdram",
@@ -2951,6 +6895,14 @@
             "minLength": 1,
             "type": "string"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -2965,7 +6917,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "step_instructions",
@@ -3003,6 +6964,14 @@
             "maximum": 1000000,
             "minimum": 1,
             "type": "integer"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -3236,6 +7205,14 @@
           }
         },
         {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        },
+        {
           "field": "target_end",
           "reference": {
             "anyOf": [
@@ -3361,9 +7338,27 @@
             "type": "integer"
           },
           "current": {
-            "maximum": 9007199254740991,
-            "minimum": 1,
-            "type": "integer"
+            "anyOf": [
+              {
+                "format": "starts_with",
+                "maxLength": 32768,
+                "pattern": "^aresref1\\..*",
+                "type": "string"
+              },
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -3563,6 +7558,14 @@
             ],
             "default": null
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -3641,6 +7644,14 @@
             ],
             "type": "string"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -3655,7 +7666,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "video_stop",
@@ -3683,6 +7703,14 @@
           "current": {
             "maxLength": 4096,
             "minLength": 1,
+            "type": "string"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
             "type": "string"
           }
         }
@@ -3759,6 +7787,14 @@
             "minimum": 1,
             "type": "integer"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -3773,7 +7809,16 @@
           "type": "object"
         }
       },
-      "fields": []
+      "fields": [
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
+        }
+      ]
     },
     {
       "name": "watch_remove",
@@ -3802,6 +7847,14 @@
             "maximum": 4294967295,
             "minimum": 1,
             "type": "integer"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         }
       ]
@@ -3862,6 +7915,14 @@
             "maxLength": 4096,
             "type": "string"
           }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
+          }
         }
       ]
     },
@@ -3894,6 +7955,14 @@
             "maximum": 600,
             "minimum": 0.001,
             "type": "number"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         },
         {
@@ -4026,6 +8095,14 @@
             "maximum": 600,
             "minimum": 0.001,
             "type": "number"
+          }
+        },
+        {
+          "field": "target",
+          "reference": null,
+          "current": {
+            "maxLength": 16384,
+            "type": "string"
           }
         },
         {

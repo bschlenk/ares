@@ -86,7 +86,7 @@ test('named selection uses a kernel claim lock and fresh credentials across laun
   const binary=(process.env.ARES_HOST || path.resolve(__dirname,'../../build-electron-make/bin/ares-electron-host'));
   let epoch=1,writes=0,complete;
   const backend={request:async method=>{if(method==='session.pause'){writes++;await new Promise(r=>complete=r)};return {protocol:1,id:'native',session:'launch'+epoch,epoch:1,ok:true,result:{paused:true,system:'Fixture',synthetic:true,capabilities:['session.status']}}}};
-  const a=new LocalServiceHost(backend),b=new LocalServiceHost(backend),duplicate=new LocalServiceHost(backend),client=LocalServiceClient.named(directory,'kirby',1000);
+  const a=new LocalServiceHost(backend,async p=>{assert.equal(p.operation,'app_status');return {ready:true};}),b=new LocalServiceHost(backend),duplicate=new LocalServiceHost(backend),client=LocalServiceClient.named(directory,'kirby',1000);
   try {
     await a.listen(directory,'kirby',binary);const old={...a.info};
     assert.equal((await client.request('session.status')).session,'launch1');

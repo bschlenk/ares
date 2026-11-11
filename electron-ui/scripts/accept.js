@@ -117,6 +117,8 @@ async function main() {
     ['electron-workspace', 'electron-workspace.js', []],
     ['electron-settings', 'electron-settings.js', []],
     ['electron-save-states', 'electron-checkpoints.js', []],
+    ['electron-session-selection', 'electron-session-selection.js', []],
+    ['electron-session-selection-personal', 'electron-session-selection.js', ['--personal-test']],
     ['electron-session-recovery', 'electron-session-recovery.js', []],
     ['electron-session-recovery-no-services', 'electron-session-recovery.js', ['--no-services-test']],
     ['electron-agent', 'electron-agent-integration.js', []],
@@ -124,6 +126,7 @@ async function main() {
     ['electron-agent-forced-off', 'electron-agent-integration.js', ['--no-services']],
     ['electron-recovery', 'electron-recovery.js', ['--disable-plugins']],
   ]) await gate(name, electron, [`tests/${file}`, ...args])
+  await gate('session-selection-live', process.execPath, ['tests/session-selection-live.js']);
   await gate('personal-windows', process.execPath, ['tests/personal-windows-live.js']);
   await gate('profile-ownership', process.execPath, ['tests/profile-live.cjs'])
   await gate('session-context', process.execPath, ['tests/session-context-live.js'])

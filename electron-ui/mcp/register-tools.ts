@@ -1,3 +1,5 @@
+import {registerScopedTools} from './scoped-tools.js';
+import {Targets} from '../sessions/targets.js';
 import {registerSessionDataTools} from './session-data-tools.js';
 import {registerCoreTools} from './core-tools.js';
 import { registerDemonstrationTools } from './demonstration-tools.js';
@@ -30,7 +32,12 @@ import { AutomaticServiceClient } from '../services/automatic-client.js';
 import { defaultServiceDirectory, LocalServiceClient } from '../services/local-endpoint.js';
 import { MemoryClient, hexToBytes, type RegionHandle } from '../services/memory.js';
 
-export function registerTools(server: ToolRegistrar, local: LocalServiceClient) {
+export function registerTools(server: ToolRegistrar, local: LocalServiceClient, targets?: Targets) {
+  if(targets) return registerScopedTools(server,targets,local);
+  registerUnscopedTools(server,local);
+  return ()=>local.close();
+}
+export function registerUnscopedTools(server: ToolRegistrar, local: LocalServiceClient) {
 const memory = new MemoryClient(local);
 let regions: RegionHandle[] | undefined;
 // Retain identity with recent operation handles, just as region handles do.

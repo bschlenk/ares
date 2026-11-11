@@ -21,22 +21,25 @@ product requirements.
   (`feat(sessions): coordinate personal windows and shared settings`).
 - Task 4 implementation commit: **`e89674814`**
   (`feat(sessions): add managed state overlays and recoverable reset`).
-- Next work: **[task 5 — discovery and scoped selection](05-discovery-scoped-selection.md)**.
+- Task 5 implementation commit: **pending final commit**.
+- Next work: **[task 6 — approval, cancellation, and revocation](06-approval-cancellation-revocation.md)**.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
   [repository acceptance documentation](../../electron-ui/ACCEPTANCE.md).
 
-Tasks 1–4 are complete within their scopes. Named game loads now use native
-preparation, resource ownership and recoverable inheritance. Personal windows
-now share coordinated preferences and mutable stores, with per-process runtimes
-and File → New Window. Save-root changes still require exclusive personal
-ownership. Managed states now expose read-only personal inheritance, and
-whole-session reset/restore retains recovery generations. Approvals,
-revocation and full spec acceptance remain outstanding. `--session-name` opens
-persistent named storage; `--instance-name` still means the legacy endpoint label
-pending task 5. Full acceptance now passes 338 fixture tests and stops at an
-unrelated stale MCP Game Boy video-clock assertion;
-see the implementation report for exact results and validation limits.
+Tasks 1–5 are complete within their scopes. Named game loads use native
+preparation, storage ownership and recoverable inheritance. Personal windows share
+coordinated settings and mutable stores. Managed states expose read-only personal
+inheritance, and reset/restore retains recovery generations. Discovery now lists
+persisted names and live metadata, with earliest-personal default targeting and
+scoped CLI/MCP selection. `--session-name` opens persistent storage;
+`--instance-name` remains a documented legacy endpoint-label compatibility route.
+Personal protected external access remains closed until task 6 supplies approval
+and revocation. Final task 5 validation passes nine selection tests and three independent desktop
+checks. Full acceptance passes 346/347 fixtures and stops at an unchanged recovery
+scheduler timing assertion; its isolated rerun passes. The separate MCP desktop
+check still reaches the known Game Boy video-clock mismatch. Full feature
+acceptance remains outstanding; see the implementation report for exact limits.
 
 ## Task list and status
 
@@ -51,19 +54,18 @@ second execution order.
 | 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Complete** | `164e91973` |
 | 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Complete** | `9be56e5f1` |
 | 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Complete** | `e89674814` |
-| 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Next** | — |
-| 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | Not started | — |
+| 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Complete (selection; personal access gated)** | pending final commit |
+| 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | **Next** | — |
 | 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | Not started | — |
 
-No task is currently in progress. Task 4 adds scoped managed-state references,
-read-only inherited libraries, offline reset/archive/restore tools and a Sessions
-settings view. Native/TypeScript builds, 60 focused tests and three separate
-desktop checks pass. The full rerun passes 338 fixture tests, native smoke and
-three Electron gates, then fails at the existing MCP Game Boy recording clock
-assertion; later full-suite gates remain unrun. Preserve generation lifecycle
-locks, personal checkpoint transactions and connection/lease ownership when
-adding task 5 selection. Approval/revocation and final presentation remain tasks
-6–7.
+No task is currently in progress. Task 5 adds authenticated typed discovery,
+namespace-locked open order, opaque name/instance targets, an eight-entry client
+pool, request-local native identities/cancellation, scoped references, shell
+selection and offline recovery namespaces. Task 6 must replace the fail-closed
+personal endpoint gate with window-wide approval/revocation, including all queued
+work, owners and leases. `access_request/status/wait` currently return
+`approval_controller_pending`, without prompts or delayed gameplay work. Preserve
+lifecycle locks, personal checkpoint transactions and native/lease ownership.
 
 ## Working agreement for each agent
 

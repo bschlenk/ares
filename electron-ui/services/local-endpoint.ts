@@ -1,3 +1,4 @@
+import type {InstanceMetadata, ManagementRequest} from './management-contracts.js';
 import { buildInfo } from './build-info.js';
 import { OwnerLeases } from './owner-leases.js';
 import {readWatchdog} from './watchdog.js';
@@ -132,6 +133,7 @@ export class LocalServiceHost {
     private client: SessionClient,
     private manage?: (params: any, guard: () => void, owner: string) => Promise<unknown>,
     readonly instance: string = randomUUID(),
+    private authorize?: (operation?: string) => void,
   ) {this.leases=new OwnerLeases(client);}
   async listen(directory = defaultServiceDirectory(), name?: string, lockExecutable?: string): Promise<string> {
     if (process.platform === 'win32')
@@ -154,7 +156,7 @@ export class LocalServiceHost {
           const instance = await connectionInstance(claimFile);
           await readConnection(claimFile, instance);
           const probe = new LocalServiceClient(claimFile, instance, 1000);
-          try { await probe.request('session.status'); return 'live'; }
+          try { await probe.manage({operation:'app_status'}); return 'live'; }
           catch (e) {
             if (e instanceof ServiceError && e.code === 'app_not_running') return 'gone';
             throw new ServiceError('instance_liveness_uncertain');
@@ -359,6 +361,8 @@ export class LocalServiceHost {
         error('request_overload')
         return
       }
+      try { this.authorize?.(message.method === 'plugin.manage' ? message.params?.operation : undefined); }
+      catch(e) { error(e instanceof ServiceError ? e.code : 'access_required'); return; }
       if (message.method === 'plugin.manage') {
         const resultReader=(this.client as SessionClient & {readScriptResult?:(p:any)=>unknown}).readScriptResult;
         const manage=message.params?.operation==='owner_lease' ? async(p:any)=>{const result=this.leases.manage(p);if(p.action==='use')selectedLease=p.lease_id;return result;} : message.params?.operation==='script_result'&&resultReader ? async(p:any)=>resultReader.call(this.client,p) : this.manage;
@@ -629,6 +633,7 @@ export class LocalServiceClient implements SessionClient {
       this.connecting = undefined
     }
   }
+  management(params: ManagementRequest): Promise<InstanceMetadata> { return this.manage(params); }
   async manage(params: unknown): Promise<any> {
     if((params as any)?.operation==='app_health'){
       const cached=await this.healthSnapshot();
