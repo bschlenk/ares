@@ -432,6 +432,8 @@ checkpoint UI pass remains relevant: no native sources changed in this task.
 
 ## Task 5 — discovery and scoped selection
 
+Implementation commit: **`3f358202e`**.
+
 Implementation extends the task 1 launch/readiness helpers and task 4 lifecycle
 repository. The shared public CLI/MCP registry now exposes persisted/live session
 listing, runtime named open/select, scoped recovery operations and optional opaque

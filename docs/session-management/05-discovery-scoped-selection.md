@@ -1,7 +1,7 @@
 # Task 5: Discovery and scoped selection
 
-Status: **Complete (selection; personal access gated)**. Implementation commit is
-recorded in [the handoff](README.md); evidence is in
+Status: **Complete (selection; personal access gated)**. Implementation:
+**`3f358202e`**. See [the handoff](README.md); evidence is in
 [the implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-5--discovery-and-scoped-selection).
 Personal protected operations remain closed pending task 6.
 

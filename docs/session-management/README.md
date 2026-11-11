@@ -21,7 +21,8 @@ product requirements.
   (`feat(sessions): coordinate personal windows and shared settings`).
 - Task 4 implementation commit: **`e89674814`**
   (`feat(sessions): add managed state overlays and recoverable reset`).
-- Task 5 implementation commit: **pending final commit**.
+- Task 5 implementation commit: **`3f358202e`**
+  (`feat(sessions): add discovery and scoped CLI/MCP selection`).
 - Next work: **[task 6 — approval, cancellation, and revocation](06-approval-cancellation-revocation.md)**.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
@@ -35,8 +36,8 @@ persisted names and live metadata, with earliest-personal default targeting and
 scoped CLI/MCP selection. `--session-name` opens persistent storage;
 `--instance-name` remains a documented legacy endpoint-label compatibility route.
 Personal protected external access remains closed until task 6 supplies approval
-and revocation. Final task 5 validation passes nine selection tests and three independent desktop
-checks. Full acceptance passes 346/347 fixtures and stops at an unchanged recovery
+and revocation. Final task 5 validation passes nine selection tests and three
+independent desktop checks. Full acceptance passes 346/347 fixtures and stops at an unchanged recovery
 scheduler timing assertion; its isolated rerun passes. The separate MCP desktop
 check still reaches the known Game Boy video-clock mismatch. Full feature
 acceptance remains outstanding; see the implementation report for exact limits.
@@ -54,7 +55,7 @@ second execution order.
 | 2 | [Actual storage ownership and inheritance](02-storage-ownership-inheritance.md) | **Complete** | `164e91973` |
 | 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Complete** | `9be56e5f1` |
 | 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Complete** | `e89674814` |
-| 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Complete (selection; personal access gated)** | pending final commit |
+| 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Complete (selection; personal access gated)** | `3f358202e` |
 | 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | **Next** | — |
 | 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | Not started | — |
 
