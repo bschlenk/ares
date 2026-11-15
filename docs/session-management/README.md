@@ -23,7 +23,8 @@ product requirements.
   (`feat(sessions): add managed state overlays and recoverable reset`).
 - Task 5 implementation commit: **`3f358202e`**
   (`feat(sessions): add discovery and scoped CLI/MCP selection`).
-- Task 6 implementation commit: recorded in the completion handoff.
+- Task 6 implementation commit: **`9d0b7ada2`**
+  (`feat(sessions): add personal approval and native revocation barrier`).
 - Next work: **[task 7 — identification, toolbar, and captures](07-identification-toolbar-captures.md)**.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
@@ -59,7 +60,7 @@ second execution order.
 | 3 | [Personal windows and shared settings](03-personal-windows-shared-settings.md) | **Complete** | `9be56e5f1` |
 | 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Complete** | `e89674814` |
 | 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Complete** | `3f358202e` |
-| 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | **Complete (renderer plugin management gated)** | completion handoff |
+| 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | **Complete (renderer plugin management gated)** | `9d0b7ada2` |
 | 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | **Next** | — |
 
 No task is currently in progress. Task 6 adds five access-specific fixture tests,

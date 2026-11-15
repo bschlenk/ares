@@ -255,8 +255,8 @@ the implementation report. Task 6 is next; full issue acceptance remains open.
 
 ## Task 6: personal access and native revocation
 
-Task 6 is implemented on `feat/session-management` after `25c02f655`; the completion
-handoff records its commit. Coverage advances spec criteria 9–10: nonmodal pending
+Task 6 is implemented in **`9d0b7ada2`** on `feat/session-management` after
+`25c02f655`. Coverage advances spec criteria 9–10: nonmodal pending
 approval during gameplay, short and simultaneous clients, Deny/cancel/timeout,
 window-wide grants/reload, generation invalidation, management/native cancellation,
 no replay, disconnected durable leases and held inputs, scripts, batch children,

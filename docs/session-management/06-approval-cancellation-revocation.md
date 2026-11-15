@@ -1,7 +1,7 @@
 # Task 6: Approval, cancellation, and revocation
 
 Status: **Complete (renderer plugin management gated)**. Depends on tasks 1–5.
-Implementation commit: recorded in the completion handoff.
+Implementation commit: **`9d0b7ada2`** (`feat(sessions): add personal approval and native revocation barrier`).
 
 Read [the shared preamble](README.md) first. Audit both transport management and
 native routing; transport authentication, ownership and approval are separate.

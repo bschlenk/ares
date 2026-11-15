@@ -549,8 +549,7 @@ video-clock expectation. These limits prevent claiming full spec acceptance.
 
 ## Task 6 — personal approval, cancellation and native revocation
 
-Implemented on `feat/session-management` after `25c02f655` (task commit recorded in
-the completion handoff). The main-owned `ExternalAccessController` keeps grants
+Implemented in **`9d0b7ada2`** on `feat/session-management` after `25c02f655`. The main-owned `ExternalAccessController` keeps grants
 only in memory, deduplicates one nonmodal prompt for up to 32 bounded requesters,
 and carries a monotonically increasing grant guard through local transport,
 queued lifecycle/settings/checkpoint operations, native dispatch and artifact
