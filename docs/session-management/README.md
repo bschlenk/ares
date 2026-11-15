@@ -27,6 +27,7 @@ product requirements.
   (`feat(sessions): add personal approval and native revocation barrier`).
 - Task 7 implementation commit: **`6c7f6fb12`**
   (`feat(sessions): identify windows and exclude app chrome from captures`).
+- Agent + human runbook: **[manual session/access test](MANUAL-TEST.md)**.
 - Next work: **[manual release acceptance](ACCEPTANCE.md)** — packaged macOS Dock
   hover/activation and human gameplay/toolbar checks; issue #37 remains open.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
