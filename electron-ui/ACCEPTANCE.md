@@ -251,3 +251,51 @@ gates remain unrun after this failure. Independent desktop runs report
 its known Game Boy video-clock mismatch (`primary-screen-frame` versus
 `unavailable`, now line 103). Exact commands and revision/coverage limits are in
 the implementation report. Task 6 is next; full issue acceptance remains open.
+
+
+## Task 6: personal access and native revocation
+
+Task 6 is implemented on `feat/session-management` after `25c02f655`; the completion
+handoff records its commit. Coverage advances spec criteria 9–10: nonmodal pending
+approval during gameplay, short and simultaneous clients, Deny/cancel/timeout,
+window-wide grants/reload, generation invalidation, management/native cancellation,
+no replay, disconnected durable leases and held inputs, scripts, batch children,
+observers, recordings, artifact/checkpoint commits, a native paused barrier and
+human-owned observer preservation. Named services remain implicit even with copied
+integration-disabled settings. New access tests and two desktop gates are wired
+into `scripts/accept.js`; the MCP inventory/parity record includes `access_cancel`.
+
+Personal external renderer plugin mutation/delegation remains closed with
+`plugin_management_requires_named_session`; use named sessions for
+`add/enable/reload/resetStartup/open/command`. Those callbacks currently share the
+human SDK scope, so their per-invocation provenance is not claimed. Task 7 owns
+persistent named identification, final toolbar presentation and capture pixel
+exclusion. Packaged Dock behavior and physical-controller/manual approval tests
+remain unrun. Issue #37 is not complete.
+
+Native build and all three TypeScript targets pass. The focused boundary,
+controller, native barrier, selection, cancellation, settings, checkpoints,
+artifacts and schema lane passes **60/60 tests**, no skips. Separate native
+script/observer checks pass, and the N64 batch test passes with desktop/graphics
+access after its sandboxed run reported `renderer_unavailable`. Independent
+Electron checks pass for named selection, personal selection, inherited-disabled
+named startup, and `EXTERNAL_ACCESS_PASS` (including actual CLI wait cancellation
+and proof that a cancelled ROM load does not execute on later Allow).
+
+The first full `mise exec node@24.22.0 -- npm run accept` run is
+[run-kyGeKd](artifacts/acceptance/run-kyGeKd/summary.json): **351/351 fixtures**,
+native smoke, electron-local-ai, electron-session and electron-shutdown pass; the
+MCP gate stops at the existing Game Boy frame-kind mismatch at
+`tests/electron-mcp.js:103`. Later gates are unrun in that full command. Exact
+commands, final-run evidence and remaining limits are in the
+[implementation report](sessions/IMPLEMENTATION.md#task-6--personal-approval-cancellation-and-native-revocation).
+
+
+Final task 6 full run: [run-nH9w7f](artifacts/acceptance/run-nH9w7f/summary.json)
+passes **352/352 fixtures**, zero skips/failures, native smoke and the same three
+initial Electron checks, then fails only at the documented MCP video-clock
+assertion. Subsequent full-command gates remain unrun; independent access and
+selection checks passed separately. The access desktop check additionally proves
+that a settings write queued behind the actual preferences lock cannot commit
+after Revoke. An intermediate run overlapped a rebuild and had missing compiled
+modules; it is explicitly invalidated in the implementation report.

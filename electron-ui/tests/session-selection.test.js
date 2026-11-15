@@ -69,7 +69,7 @@ test('stopped names select without launching and offline lifecycle uses handle n
   const reset=value(await registry.call('session_reset',{target:selected.target,mode:'fresh'}));assert.equal(reset.archives.length,1);
   assert.equal(value(await registry.call('session_recovery_list',{target:selected.target})).length,1);
   assert.equal((await registry.call('session_reset',{target:selected.target,name:'other',mode:'fresh'})).isError,true);
-  const unavailable=value(await registry.call('access_request',{target:selected.target}));assert.equal(unavailable.reason,'approval_controller_pending');
+
 });
 test('open order is monotonic across concurrent subprocesses in the same namespace',async t=>{
   const root=fixture(t),context=personalContext(path.join(root,'personal')),management=prepareManagementRoot(context.personalRoot);

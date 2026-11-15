@@ -14,7 +14,7 @@ export class OwnerLeases {
     if(p.action==='create'){
       if(this.leases.size>=8)throw new ServiceError('owner_lease_limit');
       if(typeof p.name!=='string'||!p.name.length||p.name.length>64||!Number.isInteger(p.seconds)||p.seconds<1||p.seconds>600)throw new ServiceError('invalid_request');
-      const lease_id=randomUUID(),l={owner:randomUUID(),expires:Date.now()+p.seconds*1000,name:p.name};this.leases.set(lease_id,l);
+      const lease_id=randomUUID(),l={owner:`ext-${randomUUID()}`,expires:Date.now()+p.seconds*1000,name:p.name};this.leases.set(lease_id,l);
       return {lease_id,name:l.name,expires_at:new Date(l.expires).toISOString()};
     }
     this.owner(p.lease_id);
@@ -22,5 +22,6 @@ export class OwnerLeases {
     if(p.action==='release'){this.revoke(p.lease_id);return {released:true};}
     throw new ServiceError('invalid_request');
   }
+  invalidate(){this.leases.clear();}
   close(){clearInterval(this.timer);for(const id of this.leases.keys())this.revoke(id);}
 }

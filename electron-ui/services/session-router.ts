@@ -1,3 +1,4 @@
+import {externalWork, guardExternalWork} from './external-access.js';
 import {FocusPause} from './focus-pause.js';
 import { heldButtons, InputClips } from './input-clips.js';
 import { startScript, ScriptJobs } from './scripts.js';
@@ -56,11 +57,12 @@ export class SessionRouter {
   private observerStartTail:Promise<unknown>=Promise.resolve();
   private observerStarts=new Map<string,{count:number;cancelled:boolean}>();
   private async startObserver(client:NativeSessionClient,identity:SessionIdentity,params:ScriptRunParams,owner:string){
+    const scope=externalWork.getStore();
     let entry=this.observerStarts.get(owner);
     if(entry?.cancelled||(entry?.count??0)>=4||[...this.observerStarts.values()].reduce((n,e)=>n+e.count,0)>=8)throw new ServiceError('observer_limit');
     if(!entry){entry={count:0,cancelled:false};this.observerStarts.set(owner,entry);}
     ++entry.count;const owned=entry;
-    const result=this.observerStartTail.then(()=>{if(owned.cancelled||this.client!==client)throw new ServiceError('disconnected');return startScript(client,identity,params,owner,()=>this.client===client&&!owned.cancelled,true);});
+    const result=this.observerStartTail.then(()=>{if(owned.cancelled||this.client!==client)throw new ServiceError('disconnected');scope?.guard();return startScript(client,identity,params,owner,()=>this.client===client&&!owned.cancelled,true);});
     this.observerStartTail=result.catch(()=>{});
     try{return await result;}finally{if(!--owned.count&&this.observerStarts.get(owner)===owned)this.observerStarts.delete(owner);}
   }
@@ -91,7 +93,7 @@ export class SessionRouter {
     // CPU break/watch hits can stop ordinary play without a request or a video
     // frame. Main observes that state independently of the renderer's lifetime.
     let pending = false;
-    this.stateTimer = setInterval(async () => {
+    this.stateTimer = setInterval(() => externalWork.exit(async () => {
       if (pending || this.client !== client) return;
       pending = true;
       try {
@@ -100,7 +102,7 @@ export class SessionRouter {
         if (this.client === client && reply.ok) this.publishState(reply);
       } catch { /* NativeSessionClient owns disconnect/timeout handling. */ }
       finally { pending = false; }
-    }, 250);
+    }), 250);
     this.stateTimer.unref();
   }
   detach(): void {
@@ -109,7 +111,15 @@ export class SessionRouter {
     clearInterval(this.stateTimer); this.stateTimer = undefined;
     this.title = undefined; this.focusPause.attach(); this.client?.close(); this.client = undefined;
   }
+  async revokeExternal(): Promise<void> {
+    await this.focusPause.barrier();
+    if(!this.client)return;
+    const reply=await this.client.request('session.pause',undefined,undefined,'access-barrier');
+    if(!reply.ok)throw new ServiceError(reply.error??'revocation_failed');
+    this.publishState(reply);
+  }
   async request<M extends ServiceMethod>(method: M, identity?: SessionIdentity, params?: ServiceParams<M>, owner = 'ui'): Promise<SessionReply<ServiceResult<M>>> {
+    guardExternalWork();
     if (method === 'checkpoint.commit') {
       // A toolbar/browser load is an explicit UI resume, so later focus loss
       // must retain the user's focus-pause policy rather than automation ownership.
@@ -127,34 +137,37 @@ export class SessionRouter {
     return method.startsWith('session.') ? this.decorateState(reply as SessionReply) as SessionReply<ServiceResult<M>> : reply;
   }
   private async dispatchRequest<M extends ServiceMethod>(method: M, identity?: SessionIdentity, params?: ServiceParams<M>, owner = 'ui'): Promise<SessionReply<ServiceResult<M>>> {
+    guardExternalWork();
     if(method.startsWith('n64.demo.'))owner=this.inputClips.ownerFor(owner);
     if (!METHODS.includes(method)) throw new ServiceError('invalid_request');
     if (method === 'execution.release') { const start=this.observerStarts.get(owner);if(start)start.cancelled=true; this.scripts.release(owner); this.memoryArtifacts.release(owner); this.memoryDumps.release(owner); this.rdpArtifacts.release(owner); this.batches.release(owner); this.artifacts.release(owner); this.screenshots.release(owner); this.audio.release(owner); this.recording.release(owner); this.states.release(owner); this.stateArtifacts.release(owner); this.stateLoading.release(owner); }
     if (!this.client) throw new ServiceError('native_host_disconnected');
     const client = this.client;
+    const scope = externalWork.getStore();
+    const current = () => {try {scope?.guard();return this.client===client;}catch{return false;}};
     if (method.startsWith('artifact.') || method.startsWith('state.') || method.startsWith('experiment.') || (method === 'scripts.run' || method === 'scripts.observe')) {
       const startingIdentity = { ...(identity ?? client.identity) };
       encodeRequest('validation', startingIdentity, method, params, owner);
       const envelope = { protocol: PROTOCOL, id: `artifact${++this.nextArtifactId}`, ...startingIdentity };
       try {
         let result;
-        if(method==='artifact.inputRetry'||method==='artifact.inputRequest'||method==='artifact.inputExport'||method==='artifact.inputImport')result=await this.inputClips.run(this,startingIdentity,method,params,owner,()=>this.client===client);
-        else if (method === 'scripts.run') result = await this.scripts.start(client, this, startingIdentity, params as ScriptRunParams, owner, () => this.client === client);
+        if(method==='artifact.inputRetry'||method==='artifact.inputRequest'||method==='artifact.inputExport'||method==='artifact.inputImport')result=await this.inputClips.run(this,startingIdentity,method,params,owner,current);
+        else if (method === 'scripts.run') result = await this.scripts.start(client, this, startingIdentity, params as ScriptRunParams, owner, current);
         else if (method === 'scripts.observe') result = await this.startObserver(client,startingIdentity,params as ScriptRunParams,owner);
         else if (method === 'experiment.cancelBatch') {
           if(startingIdentity.session !== client.identity.session) throw new ServiceError('wrong_session');
           result={cancelled:this.batches.cancel(owner,(params as {token:string}).token)};
-        } else if (method === 'experiment.batch') result = await this.batches.run(client, this, startingIdentity, params as BatchParams, owner, () => this.client === client, child => { this.stateLoading.release(child); this.screenshots.release(child); });
-        else if (method === 'state.load') {result = await this.stateLoading.load(client, startingIdentity, params as { path: string; resume: boolean; keepOverrides: boolean }, owner, () => this.client === client);this.scripts.ownedEpoch(owner,{session:client.identity.session,epoch:result.epoch});}
-        else if (method === 'state.save') result = await this.stateArtifacts.save(client, startingIdentity, params as { path: string; overwrite: boolean; metadata: boolean }, owner, () => this.client === client);
-        else if (method === 'state.info' || method === 'state.list' || method === 'state.peek') result = await this.states.inspect(client, startingIdentity, method, params, owner, () => this.client === client);
-        else if (method === 'artifact.memoryExport') result = await this.memoryArtifacts.export(client, startingIdentity, params as MemoryExportParams, owner, () => this.client === client);
-        else if (method === 'artifact.dump') result = await this.memoryDumps.save(client, startingIdentity, params as DumpParams, owner, () => this.client === client);
-        else if (method === 'artifact.rdpExport') result = await this.rdpArtifacts.export(client, startingIdentity, params as TraceExportParams, owner, () => this.client === client);
-        else if (method === 'artifact.traceExport') result = await this.artifacts.export(client, startingIdentity, params as TraceExportParams, owner, () => this.client === client);
-        else if (method === 'artifact.videoStop') { const p = params as { path: string; overwrite: boolean }; result = await this.recording.stop(client, startingIdentity, p.path, p.overwrite, owner, () => this.client === client); }
-        else if (method === 'artifact.audioSave') result = await this.audio.save(client, startingIdentity, (params as { path: string }).path, owner, () => this.client === client);
-        else if (method === 'artifact.screenshot') result = await this.screenshots.capture(client, startingIdentity, params as ScreenshotParams, owner, () => this.client === client);
+        } else if (method === 'experiment.batch') result = await this.batches.run(client, this, startingIdentity, params as BatchParams, owner, current, child => { this.stateLoading.release(child); this.screenshots.release(child); });
+        else if (method === 'state.load') {result = await this.stateLoading.load(client, startingIdentity, params as { path: string; resume: boolean; keepOverrides: boolean }, owner, current);this.scripts.ownedEpoch(owner,{session:client.identity.session,epoch:result.epoch});}
+        else if (method === 'state.save') result = await this.stateArtifacts.save(client, startingIdentity, params as { path: string; overwrite: boolean; metadata: boolean }, owner, current);
+        else if (method === 'state.info' || method === 'state.list' || method === 'state.peek') result = await this.states.inspect(client, startingIdentity, method, params, owner, current);
+        else if (method === 'artifact.memoryExport') result = await this.memoryArtifacts.export(client, startingIdentity, params as MemoryExportParams, owner, current);
+        else if (method === 'artifact.dump') result = await this.memoryDumps.save(client, startingIdentity, params as DumpParams, owner, current);
+        else if (method === 'artifact.rdpExport') result = await this.rdpArtifacts.export(client, startingIdentity, params as TraceExportParams, owner, current);
+        else if (method === 'artifact.traceExport') result = await this.artifacts.export(client, startingIdentity, params as TraceExportParams, owner, current);
+        else if (method === 'artifact.videoStop') { const p = params as { path: string; overwrite: boolean }; result = await this.recording.stop(client, startingIdentity, p.path, p.overwrite, owner, current); }
+        else if (method === 'artifact.audioSave') result = await this.audio.save(client, startingIdentity, (params as { path: string }).path, owner, current);
+        else if (method === 'artifact.screenshot') result = await this.screenshots.capture(client, startingIdentity, params as ScreenshotParams, owner, current);
         else {
           if (startingIdentity.session !== client.identity.session || startingIdentity.epoch !== client.identity.epoch) throw new ServiceError('stale_epoch');
           const p = params as { imageId: string; offset: number; length: number };

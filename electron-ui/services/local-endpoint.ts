@@ -1,3 +1,5 @@
+import {AsyncLocalStorage} from 'node:async_hooks';
+import {externalWork, type ExternalAccessController} from './external-access.js';
 import type {InstanceMetadata, ManagementRequest} from './management-contracts.js';
 import { buildInfo } from './build-info.js';
 import { OwnerLeases } from './owner-leases.js';
@@ -22,6 +24,7 @@ import {
   type ServiceResult,
   type SessionReply,
 } from './contracts.js'
+export const localRequestContext=new AsyncLocalStorage<{signal?:AbortSignal;timeoutMs?:number}>();
 const MAX_LINE = 196608
 const token = (v: unknown): v is string =>
   typeof v === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v)
@@ -125,6 +128,7 @@ export class LocalServiceHost {
   private leases:OwnerLeases
   private server = net.createServer((socket) => this.accept(socket))
   private sockets = new Set<net.Socket>()
+  private protectedSockets = new Set<net.Socket>()
   private claimLock?: ChildProcess
   private claimFile?: string
   info?: ConnectionInfo
@@ -134,6 +138,7 @@ export class LocalServiceHost {
     private manage?: (params: any, guard: () => void, owner: string) => Promise<unknown>,
     readonly instance: string = randomUUID(),
     private authorize?: (operation?: string) => void,
+    private access?: ExternalAccessController,
   ) {this.leases=new OwnerLeases(client);}
   async listen(directory = defaultServiceDirectory(), name?: string, lockExecutable?: string): Promise<string> {
     if (process.platform === 'win32')
@@ -231,6 +236,7 @@ export class LocalServiceHost {
     return this.metadataFile
     } catch (e) { await this.close(); throw e; }
   }
+  invalidateExternal(): void {this.leases.invalidate();}
   async close(): Promise<void> {
     this.leases.close();
     if (this.claimFile && this.claimLock) {
@@ -256,13 +262,13 @@ export class LocalServiceHost {
     this.claimFile = undefined
   }
   private accept(socket: net.Socket): void {
-    if (this.sockets.size >= 8) {
+    if (this.sockets.size >= 40) {
       socket.destroy()
       return
     }
     this.sockets.add(socket)
-    const connection = randomUUID(),
-      seen = new Set<string>()
+    const connection = `ext-${randomUUID()}`,
+      seen = new Set<string>(), cancelled = new Set<string>(), activeRequests = new Set<string>()
     let selectedLease:string|undefined;
     let authenticated = false,
       inFlight = 0,
@@ -272,7 +278,9 @@ export class LocalServiceHost {
     socket.once('close', () => {
       clearTimeout(helloTimeout)
       this.sockets.delete(socket)
-      if (authenticated)
+      const owned=this.protectedSockets.delete(socket);
+      this.access?.disconnect(connection);
+      if (authenticated && owned)
         void this.client
           .request('execution.release', undefined, undefined, connection)
           .catch(() => {})
@@ -331,6 +339,10 @@ export class LocalServiceHost {
         error('stale_connection')
         return
       }
+      if(message.type==='request' && message.method==='transport.cancel'){
+        if(activeRequests.has(message.params?.request_id))cancelled.add(message.params.request_id);
+        return;
+      }
       // Our clients use monotonically increasing localN IDs. A high-water mark
       // rejects replays with constant storage, permitting long operation polling.
       // Arbitrary third-party IDs retain the bounded deduplication quota.
@@ -361,9 +373,23 @@ export class LocalServiceHost {
         error('request_overload')
         return
       }
-      try { this.authorize?.(message.method === 'plugin.manage' ? message.params?.operation : undefined); }
+      const preapproval=message.method==='plugin.manage' && ['app_status','access_request','access_status','access_wait','access_cancel'].includes(message.params?.operation);
+      let grant:()=>void=()=>{};
+      try { if(!preapproval)grant=this.access?.capture()??grant; this.authorize?.(message.method === 'plugin.manage' ? message.params?.operation : undefined); }
       catch(e) { error(e instanceof ServiceError ? e.code : 'access_required'); return; }
+      if(!preapproval && !this.protectedSockets.has(socket)){
+        if(this.protectedSockets.size>=8){error('owner_connection_limit');return;}
+        this.protectedSockets.add(socket);
+      }
       if (message.method === 'plugin.manage') {
+        const accessOperation=message.params?.operation;
+        if(this.access && ['access_request','access_status','access_wait','access_cancel'].includes(accessOperation)){
+          try {
+            const result=accessOperation==='access_request'?this.access.request(connection,message.params.timeout_ms,message.params.waiter!==true):accessOperation==='access_cancel'?this.access.cancel(message.params.request_id,connection):this.access.snapshot();
+            send(socket,{protocol:1,type:'reply',id:message.id,connection,ok:true,result});
+          }catch(e){error((e as ServiceError).code);}
+          return;
+        }
         const resultReader=(this.client as SessionClient & {readScriptResult?:(p:any)=>unknown}).readScriptResult;
         const manage=message.params?.operation==='owner_lease' ? async(p:any)=>{const result=this.leases.manage(p);if(p.action==='use')selectedLease=p.lease_id;return result;} : message.params?.operation==='script_result'&&resultReader ? async(p:any)=>resultReader.call(this.client,p) : this.manage;
         if (!manage) {
@@ -373,11 +399,16 @@ export class LocalServiceHost {
         const managementLease=message.params?.operation==='managed_states'?selectedLease:undefined;
         let manageOwner:string=connection;
         try {if(managementLease)manageOwner=this.leases.owner(managementLease);}catch(e){error((e as ServiceError).code);return;}
-        ++inFlight
-        void manage(message.params, () => {
+        ++inFlight;activeRequests.add(message.id);
+        let completed=false;
+        const guard=() => {
+          grant();if(completed)return;
+          if(cancelled.has(message.id))throw new ServiceError('cancelled');
+          if(message.deadline && Date.now()>=message.deadline)throw new ServiceError('cancelled');
           if (!authenticated || socket.destroyed || !this.sockets.has(socket)) throw new ServiceError('stale_connection');
           if(managementLease && this.leases.owner(managementLease)!==manageOwner)throw new ServiceError('stale_connection');
-        }, manageOwner)
+        };
+        void externalWork.run({guard},async()=>{guard();const result=await manage(message.params,guard,manageOwner);guard();completed=true;return result;})
           .then(
             (result) => {
               if (Buffer.byteLength(JSON.stringify(result)) > 48000) {
@@ -401,7 +432,7 @@ export class LocalServiceHost {
                 ).slice(0, 2048),false,failure instanceof ServiceError?failure.context:undefined,
               ),
           )
-          .finally(() => --inFlight)
+          .finally(() => {--inFlight;activeRequests.delete(message.id);cancelled.delete(message.id);})
         return
       }
       // Reset and owner-release stay main-owned actions. Owners come from this
@@ -437,9 +468,20 @@ export class LocalServiceHost {
       }
       let owner:string=connection;
       try{if(selectedLease)owner=this.leases.owner(selectedLease);}catch(e){error((e as ServiceError).code);return;}
-      ++inFlight
-      void this.client
-        .request(message.method, message.identity, message.params, owner)
+      ++inFlight;activeRequests.add(message.id);
+      let completed=false;
+      const guard=()=>{grant();if(completed)return;if(cancelled.has(message.id))throw new ServiceError('cancelled');if(socket.destroyed || message.deadline && Date.now()>=message.deadline)throw new ServiceError('cancelled');};
+      void externalWork.run({guard},async()=>{guard();const result=await this.client.request(message.method, message.identity, message.params, owner);
+        // A cancelled start may have reached native before its acknowledgement.
+        // Cancel that exact operation internally; never cancel an unrelated poll.
+        let abandoned:unknown;try{guard();}catch(error){abandoned=error;}
+        if(abandoned && result.ok && result.result){
+          const op=result.result as {operation_id?:number};
+          if(op.operation_id && ['execution.runFrames','execution.runUntilFrame','execution.stepInstructions','scripts.run','script.start','n64.input.tap','n64.cpu.call','n64.rsp.run','n64.rsp.step'].includes(message.method))
+            await externalWork.exit(()=>this.client.request('execution.cancel',{session:result.session,epoch:result.epoch},{operationId:op.operation_id!},owner)).catch(()=>{});
+          if(message.method==='artifact.inputRequest')await externalWork.exit(()=>this.client.request('n64.demo.cancel',{session:result.session,epoch:result.epoch},undefined,owner)).catch(()=>{});
+        }
+        if(abandoned)throw abandoned;completed=true;return result;})
         .then(
           (reply) => {
             if (!socket.destroyed)
@@ -459,7 +501,7 @@ export class LocalServiceHost {
                 : 'native_host_disconnected',false,failure instanceof ServiceError?failure.context:undefined,
             ),
         )
-        .finally(() => --inFlight)
+        .finally(() => {--inFlight;activeRequests.delete(message.id);cancelled.delete(message.id);})
     })
   }
 }
@@ -646,8 +688,15 @@ export class LocalServiceClient implements SessionClient {
     }
     return this.manageRequest(params);
   }
+  private cancellation(id:string, reject:(e:Error)=>void):()=>void {
+    const signal=localRequestContext.getStore()?.signal;
+    const abort=()=>{if(this.socket&&this.connection)send(this.socket,{protocol:1,type:'request',connection:this.connection,id:'cancel',method:'transport.cancel',params:{request_id:id}});reject(new ServiceError('cancelled'));};
+    signal?.addEventListener('abort',abort,{once:true});
+    return ()=>signal?.removeEventListener('abort',abort);
+  }
   private async manageRequest(params:unknown):Promise<any>{
     await this.connect()
+    if(localRequestContext.getStore()?.signal?.aborted)throw new ServiceError('cancelled');
     if (this.pending.size >= 16) throw new ServiceError('request_overload')
     const socket = this.socket,
       connection = this.connection
@@ -657,15 +706,17 @@ export class LocalServiceClient implements SessionClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => this.drop(new ServiceError('request_timeout',{component:'app',method:'plugin.manage',request_id:id,reason:'response_deadline_exceeded',observation:'no_response'})),
-        this.timeoutMs,
+        localRequestContext.getStore()?.timeoutMs??this.timeoutMs,
       )
-      this.pending.set(id, { method: 'plugin.manage', resolve, reject, timer })
+      const detach=this.cancellation(id,reject);
+      this.pending.set(id, { method: 'plugin.manage', resolve:r=>{detach();resolve(r);}, reject:e=>{detach();reject(e);}, timer })
       send(socket, {
         protocol: 1,
         type: 'request',
         connection,
         id,
         method: 'plugin.manage',
+        deadline:Date.now()+(localRequestContext.getStore()?.timeoutMs??this.timeoutMs),
         params,
       })
     })
@@ -676,6 +727,7 @@ export class LocalServiceClient implements SessionClient {
     params?: ServiceParams<M>,
   ): Promise<SessionReply<ServiceResult<M>>> {
     await this.connect()
+    if(localRequestContext.getStore()?.signal?.aborted)throw new ServiceError('cancelled');
     if (this.pending.size >= 16) throw new ServiceError('request_overload')
     if (!['session.status', 'memory.regions'].includes(method))
       identity ??= this.identity
@@ -693,24 +745,26 @@ export class LocalServiceClient implements SessionClient {
       throw new ServiceError('app_disconnected')
     const id = `local${++this.nextId}`
     return new Promise((resolve, reject) => {
-      const timeout =
+      const timeout = localRequestContext.getStore()?.timeoutMs ?? (
         method === 'experiment.batch'
           ? Math.max(
               this.timeoutMs,
               (params as { timeoutMs: number }).timeoutMs + 5000,
             )
-          : this.timeoutMs
+          : this.timeoutMs)
       const timer = setTimeout(
         () => this.drop(new ServiceError('request_timeout',{component:'app',method,request_id:id,reason:'response_deadline_exceeded',observation:'no_response'})),
         timeout,
       )
-      this.pending.set(id, { method, resolve, reject, timer })
+      const detach=this.cancellation(id,reject);
+      this.pending.set(id, { method, resolve:r=>{detach();resolve(r);}, reject:e=>{detach();reject(e);}, timer })
       send(socket, {
         protocol: 1,
         type: 'request',
         connection,
         id,
         method,
+        deadline:Date.now()+timeout,
         identity,
         params,
       })

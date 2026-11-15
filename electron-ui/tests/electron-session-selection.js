@@ -9,9 +9,10 @@ import {registerTools} from '../dist/mcp/register-tools.js';
 import {LocalServiceClient} from '../dist/services/local-endpoint.js';
 const root=fs.mkdtempSync('/tmp/ares-selection-ui-'),personal=path.join(root,'personal'),directory=path.join(root,'ipc'),rom=path.join(root,'fixture.gb');
 fs.mkdirSync(personal);fs.writeFileSync(rom,makeFixture());
+if(process.argv.includes('--disabled-named-test'))fs.writeFileSync(path.join(personal,'preferences.json'),JSON.stringify({version:1,revision:1,values:{'agent.enabled':false}}));
 Object.assign(process.env,{ARES_PROFILE_DIR:personal,ARES_SERVICE_DIR:directory,ARES_DEFAULT_PLUGINS:'0',ARES_SILENT:'1',ARES_BACKGROUND_TEST:'1'});
 const named=!process.argv.includes('--personal-test');
-process.argv.push('--services',...(named?['--session-name','work']:[]));
+process.argv.push(...(process.argv.includes('--disabled-named-test')?[]:['--services']),...(named?['--session-name','work']:[]));
 const {serviceHost,sessions}=await import('../dist/main.js');
 const timer=setTimeout(()=>{console.error('selection deadline');app.exit(1)},45000);
 app.on('will-quit',()=>{clearTimeout(timer);fs.rmSync(root,{recursive:true,force:true});});
@@ -32,7 +33,7 @@ app.whenReady().then(async()=>{
     await tool('close_rom',{target});
   }else{
     const denied=await tools.call('emu_status',{target});assert.equal(denied.isError,true);assert.match(denied.content[0].text,/access_required/);
-    assert(sessions.identity);assert.equal((await tool('access_status',{target})).state,'unavailable');
+    assert(sessions.identity);assert.equal((await tool('access_status',{target})).state,'unapproved');
   }
   console.log(named?'SESSION_SELECTION_NAMED_PASS':'SESSION_SELECTION_PERSONAL_PASS');close();app.quit();
  }catch(error){console.error(error);close?.();app.exit(1);}

@@ -545,3 +545,105 @@ Electron, launch and packaged gates are **unrun**, not passes. The three task 5
 desktop checks were run separately and passed as recorded above. The separate
 existing MCP desktop check still fails at its previously documented Game Boy
 video-clock expectation. These limits prevent claiming full spec acceptance.
+
+
+## Task 6 — personal approval, cancellation and native revocation
+
+Implemented on `feat/session-management` after `25c02f655` (task commit recorded in
+the completion handoff). The main-owned `ExternalAccessController` keeps grants
+only in memory, deduplicates one nonmodal prompt for up to 32 bounded requesters,
+and carries a monotonically increasing grant guard through local transport,
+queued lifecycle/settings/checkpoint operations, native dispatch and artifact
+publication. Short explicit requests survive socket close until their deadline;
+waiters detach on cancel/disconnect. CLI `--wait-access` retains intent locally.
+MCP adds real access tools, including `access_cancel`, without global selection.
+
+Revoke synchronously closes the gate and invalidates leases, drains focus-pause
+continuations, acknowledges an aggregate native external-owner cleanup, drains
+main lifecycle work and checks the current host again. The native barrier stops
+scripts and batch children, releases observers/recordings/input/state transfers,
+clears external held inputs and pauses. Detached input demonstration owners keep
+external classification. Background guards reject old generations even after
+reapproval. An aborted native start is cancelled by its exact operation ID when
+its acknowledgement arrives; cancellation/expiry cannot silently leave it running.
+Native cleanup bypasses contention and the revoked external grant. An unresponsive
+host follows the existing terminate-on-native-failure path, and failed cleanup
+leaves the access state `revoking` rather than reporting success.
+
+Human UI/plugin owners are separate and preserved (the native regression keeps a
+human-owned observer alive). Because renderer plugin commands reuse their human
+SDK callback closure, external `add/enable/reload/resetStartup/open/command`
+management in personal windows is deliberately still closed with
+`plugin_management_requires_named_session`. Named sessions retain that interface.
+This is a documented compatibility limit; per-invocation renderer plugin
+provenance has not been implemented. Named instances always provide their
+implicitly authorized service despite a copied disabled personal integration
+setting. Session identity, epochs, storage ownership and contention remain enforced.
+
+Validation uses generated media and disposable profile/service/save roots only:
+
+- Repository root: `cmake --build build_macos/workbench --target ares-electron-host -j 8`
+  — passed with the modified native barrier.
+- `electron-ui/`: `mise exec node@24.22.0 -- node scripts/build.js`
+  — all three TypeScript targets, preload bundling and SDK/build metadata passed.
+- `electron-ui/`, with `ARES_HOST=/Users/bschlenk/Developer/forks/ares/build_macos/workbench/bin/ares-electron-host`:
+  `mise exec node@24.22.0 -- node --test tests/external-access.test.js tests/external-access-native.test.js tests/session-selection.test.js tests/focus-pause.test.js tests/local-endpoint.test.cjs tests/client.test.cjs tests/batches.test.cjs tests/artifacts.test.cjs tests/plugin-settings.test.cjs tests/checkpoint-library.test.js tests/schema-parity.test.cjs`
+  — **60/60 passed**, no skips. Covers bounded requesters, Deny/cancel/expiry,
+  reconnect/nonreplay, late artifact publication across a new grant, failed barriers,
+  queued management cancellation, cancelled-start acknowledgements, disconnected
+  leases, scripts/batch children/observers/recordings, human owner preservation,
+  target concurrency, settings/checkpoint guards and schema inventory.
+- The additional native/script/observer lane passed 16/17 under the sandbox;
+  `batch-live.test.cjs` reported `renderer_unavailable`. Its exact separate rerun,
+  `ARES_HOST=... mise exec node@24.22.0 -- node --test tests/batch-live.test.cjs`,
+  with desktop/graphics access passed **1/1**, including real N64 input preparation,
+  detached demonstration, baseline/load/write/run/crop and revocation. The sandbox
+  failure is not counted as a pass.
+- Independent desktop runs (same `ARES_HOST`, `mise exec node@24.22.0 -- npx electron`):
+  `tests/electron-session-selection.js`, the same file with `--personal-test`,
+  the same file with `--disabled-named-test`, and `tests/electron-external-access.js`
+  all passed. The access check exercises pending gameplay progression, a nonmodal
+  renderer Allow/Deny prompt, window-wide short-client approval, reload survival,
+  a disconnected durable input lease, post-barrier paused/frame stability,
+  native bounded execution, expired lease rejection after reapproval, MCP waiter
+  abort, and actual CLI `--wait-access` cancel/allow. A cancelled CLI ROM load is
+  proven absent after a subsequent Allow. The named-disabled fixture writes an
+  actual disabled personal preference and starts without `--services`.
+  Initial sandboxed Electron startup SIGABRT required rerunning with desktop access.
+
+The first full `mise exec node@24.22.0 -- npm run accept` run,
+[run-kyGeKd](../artifacts/acceptance/run-kyGeKd/summary.json), passed configure,
+native/TypeScript build, **351/351 fixtures**, native smoke, electron-local-ai,
+electron-session and electron-shutdown. It stopped at the unchanged MCP Game Boy
+video-clock assertion at `tests/electron-mcp.js:103` (`primary-screen-frame` versus
+`unavailable`). Later gates in that full run were unrun. The final focused 60-test
+run above additionally includes the cancellation-acknowledgement regression added
+after those first full-run fixture workers started.
+
+Final full command, with no overlapping rebuilds:
+`mise exec node@24.22.0 -- npm run accept` (desktop access).
+[run-nH9w7f summary](../artifacts/acceptance/run-nH9w7f/summary.json) and
+[fixture log](../artifacts/acceptance/run-nH9w7f/fixture-regressions.log) record
+**352/352 fixtures passed**, zero failures/skips/cancellations, followed by passing
+native smoke, electron-local-ai, electron-session and electron-shutdown. The run
+then stops at the same unchanged MCP assertion at line 103. All subsequent gates
+(including the new access desktop gates) are unrun within that full command;
+the separate access/selection desktop passes above provide their evidence.
+The final access desktop check also holds the actual personal preferences lock,
+queues a provenance settings write, revokes, releases the lock and verifies that
+the preferences file remains byte-identical.
+
+An intermediate full run, `run-w4tbRS`, is invalidated by an overlapping rebuild
+that removed `dist` while five workers imported modules (five missing-module
+failures); it also hit the previously documented recovery-scheduler timing
+assertion. Its 329/335 fixture result is not a pass. The final clean run above
+supersedes it. An initial focused invocation without the rebuilt `ARES_HOST`
+selected a stale lock helper, and initially exposed the cancellation-polling
+regression fixed before the final focused and full runs.
+
+Required new access
+fixture tests are automatically in the fixture lane; explicit access and inherited
+integration-disabled desktop gates were also added to `scripts/accept.js`.
+Packaged/manual Dock, physical controller interaction with a pending nonmodal
+prompt, title/banner/capture pixel evidence and full spec acceptance are **not
+claimed**. Task 7 remains next; issue #37 remains open.

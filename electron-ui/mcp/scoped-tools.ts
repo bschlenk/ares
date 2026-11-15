@@ -1,3 +1,4 @@
+import {localRequestContext} from '../services/local-endpoint.js';
 import {requestIdentity} from '../services/request-identity.js';
 import {scopeReferences, inputReferences, referenceInputs} from './target-references.js';
 import {AutomaticServiceClient} from '../services/automatic-client.js';
@@ -76,6 +77,31 @@ export function registerScopedTools(server:ToolRegistrar, targets:Targets, fallb
   for(const tool of ['session_archives','session_recovery_list'])server.registerTool(tool,{description:'List retained generations offline in the selected named namespace.',inputSchema:z.object(lifecycle).strict()},p=>call(async()=>{const n=namespace(p);return n.repository.archives(n.name);}));
   server.registerTool('session_reset',{description:'Reset a closed named session; archive previous data and return recovery information.',inputSchema:z.object({...lifecycle,mode:z.enum(['inherit-personal','fresh'])}).strict()},p=>call(async()=>{const n=namespace(p);const session=await n.repository.replace(n.name,p.mode);const archives=await n.repository.archives(n.name);return {...session,recovery_id:archives[0]?.id,archives};}));
   server.registerTool('session_restore',{description:'Restore an archived closed named session, retaining displaced data.',inputSchema:z.object({...lifecycle,archive_id:z.string().uuid()}).strict()},p=>call(async()=>{const n=namespace(p);return n.repository.replace(n.name,'restore',p.archive_id);}));
-  for(const operation of ['access_request','access_status','access_wait'])server.registerTool(operation,{description:'Personal approval controller is pending task 6; protected operations remain closed.',inputSchema:z.object({target}).strict()},p=>call(async()=>({state:'unavailable',reason:'approval_controller_pending',target:p.target??targets.startupTarget})));
+  for(const operation of ['access_request','access_status','access_wait','access_cancel'])server.registerTool(operation,{
+    description:'Request window-wide personal approval, inspect it, wait without retaining a gameplay command, or cancel a pending request. Named sessions have implicit access.',
+    inputSchema:z.object({target,request_id:z.string().uuid().optional(),timeout_ms:z.number().int().min(1).max(60000).default(30000)}).strict()
+  },(p,ctx)=>call(async()=>{
+    const selected=await targets.client(p.target,ctx.mcpReq.signal),client=selected.client;
+    let requestId:string|undefined;
+    try {
+      return await localRequestContext.run({signal:ctx.mcpReq.signal},async()=>{
+        if(operation==='access_status')return {...await client.manage({operation}),target:selected.target};
+        if(operation==='access_cancel')return {...await client.manage({operation,request_id:p.request_id}),target:selected.target};
+        const requested=await client.manage({operation:'access_request',timeout_ms:p.timeout_ms,waiter:operation==='access_wait'});requestId=requested.request_id;
+        if(operation==='access_request' || requested.state==='authorized')return {...requested,target:selected.target};
+        const deadline=Date.now()+p.timeout_ms;
+        while(Date.now()<deadline){
+          ctx.mcpReq.signal.throwIfAborted();
+          const status=await client.manage({operation:'access_wait'});
+          if(status.state!=='pending')return {...status,target:selected.target};
+          await new Promise<void>((resolve,reject)=>{const abort=()=>{clearTimeout(timer);reject(new Error('cancelled'));};const timer=setTimeout(()=>{ctx.mcpReq.signal.removeEventListener('abort',abort);resolve();},100);ctx.mcpReq.signal.addEventListener('abort',abort,{once:true});});
+        }
+        throw new Error('access_timeout');
+      });
+    } finally {
+      if(operation==='access_wait'&&requestId)await client.manage({operation:'access_cancel',request_id:requestId}).catch(()=>{});
+      client.close();
+    }
+  }));
   return ()=>{for(const entry of pool.values())entry.client.close();pool.clear();fallback.close();};
 }

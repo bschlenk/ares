@@ -24,6 +24,8 @@ let exportGesture=false;
 for(const kind of ['click','keydown'])window.addEventListener(kind,event=>{if(event.isTrusted){exportGesture=true;setTimeout(()=>{exportGesture=false;},0);}},true);
 function takeExportGesture(){const allowed=exportGesture&&navigator.userActivation.isActive;exportGesture=false;return allowed;}
 const api: AresBridge = {
+  externalAccess:action=>ipcRenderer.invoke('external-access',action),
+  onExternalAccess:callback=>{const listener=(_event:unknown,state:any)=>callback(state);ipcRenderer.on('external-access',listener);return ()=>ipcRenderer.removeListener('external-access',listener);},
   checkpoints:request=>ipcRenderer.invoke('checkpoints',request),
   onCheckpointsChanged:callback=>{const listener=()=>callback();ipcRenderer.on('checkpoint-changed',listener);return ()=>ipcRenderer.removeListener('checkpoint-changed',listener)},
   agentAction: action => ipcRenderer.invoke('agent.action', action),

@@ -5,6 +5,7 @@
 #include <deque>
 #include <mutex>
 #include <sstream>
+#include <set>
 #include <string>
 #include <utility>
 #include <functional>
@@ -16,6 +17,7 @@
 // Host-only protocol v1. Requests are bounded ASCII tokens; responses are JSON lines
 // on fd 3. Execution uses extracted fork semantics, without legacy transport.
 struct SessionService {
+  std::set<std::string> externalOwners;
   std::string session;
   uint64_t epoch = 1;
   uint64_t sampleId = 0;
@@ -99,11 +101,26 @@ struct SessionService {
       else if(revision != std::to_string(epoch)) error = "stale_epoch";
       else if(method.starts_with("session.") && !arguments.empty() && !((method == "session.resume" || method == "session.reset") && arguments.size() == 1 && (arguments[0] == "0" || arguments[0] == "1"))) error = "invalid_request";
       else if(method != "session.status" && method != "session.pause" && method != "session.resume" && method != "session.reset" && !method.starts_with("input.") && !method.starts_with("clock.") && !method.starts_with("memory.") && !method.starts_with("execution.") && !method.starts_with("checkpoint.") && !method.starts_with("n64.") && !method.starts_with("video.") && !method.starts_with("audio.") && !method.starts_with("script.") && method != "runtime.settings" && method != "runtime.configure" && method != "runtime.provenance") error = "unavailable";
+      // Main alone issues this reserved owner. Cleanup is one safe-point
+      // transaction and bypasses contention from the owners being revoked.
+      const bool revoke = error.empty() && method == "session.pause" && owner == "access-barrier";
+      if(revoke) {
+        for(const auto& external : externalOwners) {
+          execution.execute("execution.release", {}, external, epoch, paused);
+          clock.releaseOwner(external); memoryTools.releaseOwner(external);
+          if(onReleaseOwner) onReleaseOwner(external);
+        }
+        externalOwners.clear();
+      } else if(error.empty() && owner.starts_with("ext-")) {
+        if(method == "execution.release") externalOwners.erase(owner);
+        else if(externalOwners.size() < 256 || externalOwners.count(owner)) externalOwners.insert(owner);
+        else error = "owner_limit";
+      }
       if(error.empty() && method == "session.resume" && arguments == std::vector<std::string>{"1"} && !onResume) error = "unavailable";
-      if(error.empty() && !execution.permitted(method, owner)) error = "busy";
-      if(error.empty() && beforeRequest) error = beforeRequest(method, owner);
+      if(error.empty() && !revoke && !execution.permitted(method, owner)) error = "busy";
+      if(error.empty() && !revoke && beforeRequest) error = beforeRequest(method, owner);
       ControlResult memoryResult;
-      if(error.empty() && execution.active && (method == "session.resume" || method == "memory.write" ||
+      if(error.empty() && !revoke && execution.active && (method == "session.resume" || method == "memory.write" ||
           (method == "session.pause" && owner != "ui" && owner != execution.active->owner))) error = "busy";
       if(error.empty() && (method == "runtime.settings" || method == "runtime.configure" || method == "runtime.provenance")) {
         memoryResult = runtimeRequest ? runtimeRequest(method, arguments) : ControlResult{"unavailable", {}};
@@ -143,6 +160,7 @@ struct SessionService {
         else memoryResult = memory.execute(method, arguments);
         error = memoryResult.error;
       }
+      if(error.empty() && method == "n64.demo.handoff" && arguments.size()==1 && arguments[0].starts_with("ext-")) externalOwners.insert(arguments[0]);
       if(error.empty() && (method == "memory.readMany" || method == "n64.memory.readMany")) {
           memoryResult.json.pop_back();
           memoryResult.json += ",\"epoch\":" + std::to_string(epoch) + ",\"sample_id\":" + std::to_string(++sampleId) + ",\"frame\":" + std::to_string(execution.frame) + ",\"frame_kind\":" + controlQuote(execution.frameKind) + ",\"at_frame_boundary\":" + (execution.atBoundary ? "true" : "false") + "}";

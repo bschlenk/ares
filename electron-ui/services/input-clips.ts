@@ -33,7 +33,7 @@ export class InputClips {
     const inputs=await request('n64.input.state');if(inputs.ports?.some((port:any)=>port.pending?.overridden||port.latched?.overridden))throw new ServiceError('input_owned');
     await request('state.info',{path:p.initialStatePath});
     await fs.mkdir(directory,{mode:0o700});
-    const durableOwner='human-'+randomUUID();
+    const durableOwner=(owner.startsWith('ext-')?'ext-':'human-')+randomUUID();
     try {
      if(!scriptPreparation)await request('session.pause');
      await request('state.load',{path:p.initialStatePath,resume:false,keepOverrides:false});

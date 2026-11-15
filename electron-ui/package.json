@@ -56,6 +56,7 @@
     "test:paired-recovery": "node scripts/build.js && node --test --test-concurrency=1 tests/paired-recovery.test.js tests/paired-recovery-native.test.js tests/paired-recovery-electron.test.js",
     "test:network": "node scripts/build.js && node --test --test-concurrency=1 tests/plugin-network.test.js tests/plugin-network-electron.test.js",
     "test:video": "node scripts/build.js && node --test tests/video-source.test.js && electron tests/electron-native-video.js",
+    "test:external-access": "node scripts/build.js && node --test tests/external-access.test.js tests/external-access-native.test.js && electron tests/electron-external-access.js",
     "test:session-selection": "node scripts/build.js && node --test tests/session-selection.test.js && electron tests/electron-session-selection.js && electron tests/electron-session-selection.js --personal-test"
   },
   "devDependencies": {

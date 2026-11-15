@@ -1,3 +1,4 @@
+import {installExternalAccess} from './ui/external-access.js';
 import {beginVideoCapture,endVideoCapture,captureHeld,onCaptureReleased} from './video/capture.js';
 import {VideoCanvas} from './video/canvas.js';
 import {videoSource} from './video/source.js';
@@ -25,6 +26,7 @@ const $ = <K extends keyof Elements>(id: K): Elements[K] => {
   return element as Elements[K];
 };
 window.addEventListener('error', event => notify(event.message));
+installExternalAccess();
 const canvas = $('screen'), videoRenderer = new VideoCanvas(canvas), gl = videoRenderer.gl;
 let demonstrationActive=false;
 let system = 'Synthetic', aspect = 4 / 3;

@@ -1,6 +1,7 @@
 # Task 6: Approval, cancellation, and revocation
 
-Status: **Not started**. Depends on tasks 1–5, especially native cleanup and target scoping.
+Status: **Complete (renderer plugin management gated)**. Depends on tasks 1–5.
+Implementation commit: recorded in the completion handoff.
 
 Read [the shared preamble](README.md) first. Audit both transport management and
 native routing; transport authentication, ownership and approval are separate.
@@ -66,3 +67,37 @@ and contention checks after approval; authorization does not override ownership.
 ---
 
 Previous: [Task 5: Discovery and scoped selection](05-discovery-scoped-selection.md) · Next: [Task 7: Identification, toolbar, and captures](07-identification-toolbar-captures.md)
+
+## Implementation and deliberate limits
+
+`ExternalAccessController` owns memory-only window grants, bounded explicit
+requesters, deadlines, Deny/cancel, monotonic generations and serialized revocation.
+The authenticated boundary carries its guard through main queues, native helpers,
+script/batch descendants and file/checkpoint commit points. Allow/Deny is nonmodal;
+the personal authorization indicator exposes Revoke. Named services bypass prompts
+by session kind, including when copied settings disabled integration.
+
+The native aggregate barrier uses a reserved main-only owner on `session.pause`.
+It releases every registered external owner at one safe point, stops execution and
+pauses without depending on the revoked grant. Native child owners and detached
+input jobs retain external classification. Focus-pause continuations drain before
+the barrier and lose their resume entitlement. Barrier failure keeps access closed.
+
+Personal renderer plugin mutation/delegation remains deliberately gated with
+`plugin_management_requires_named_session`: `add`, `enable`, `reload`,
+`resetStartup`, `open`, and `command` can otherwise escape into the human plugin's
+shared SDK callbacks. Named sessions retain the complete interface. This is a
+compatibility limit, not a claim that per-invocation plugin provenance is solved.
+Human-owned plugins and observers are preserved by the external cleanup barrier.
+
+CLI/MCP expose real `access_request/status/wait/cancel`. Explicit short requests
+remain pending until Allow/Deny, cancellation or deadline; waiting callers detach
+on disconnect/abort. `--wait-access` keeps CLI intent client-side. A cancelled
+native start is cancelled by its exact operation ID even if cancellation precedes
+its acknowledgement. No command is queued for execution on Allow.
+
+Evidence and exact commands: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md)
+and [acceptance record](../../electron-ui/ACCEPTANCE.md). Task 7 still owns persistent
+named identification and final toolbar/capture presentation. Packaged/manual Dock,
+physical-controller approval interaction and final full-spec acceptance remain
+unrun; issue #37 remains open.

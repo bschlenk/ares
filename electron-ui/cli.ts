@@ -12,6 +12,7 @@ import { AutomaticServiceClient } from './services/automatic-client.js';
 import { defaultServiceDirectory } from './services/local-endpoint.js';
 
 export async function main(argv = process.argv.slice(2)) {
+  const waitAccess=argv.includes('--wait-access');argv=argv.filter(arg=>arg!=='--wait-access');
   if(process.env.ARES_TARGET && process.env.ARES_INSTANCE_NAME)throw new Error('contradictory_target_flags');
   const leaseReference=readReference(process.env.ARES_OWNER_LEASE);
   const targets=new Targets(undefined,undefined,process.env.ARES_TARGET,process.env.ARES_INSTANCE_NAME);
@@ -29,6 +30,13 @@ export async function main(argv = process.argv.slice(2)) {
     if(command==='call'&&!process.env.ARES_OWNER_LEASE&&['audio_capture','memory_snapshot','memory_sample','memory_query_start','video_start','memory_record_start','controller_set','input_set','script_observe','demonstration_request','demonstration_start','demonstration_replay'].includes(tool))throw new Error('This resource ends on CLI disconnect. Create an owner_lease and set ARES_OWNER_LEASE for start/run/stop commands.');
     if (command === 'tools' && !tool) {
       process.stdout.write(JSON.stringify(registry.list()) + '\n'); return;
+    }
+    if(command==='run'&&waitAccess){
+      const deadline=Date.now()+30000;
+      const requested=await client.manage({operation:'access_request',waiter:true});
+      let state=requested.state;
+      try{while(state==='pending'&&Date.now()<deadline){abort.signal.throwIfAborted();await new Promise(r=>setTimeout(r,100));state=(await client.manage({operation:'access_status'})).state;}if(state!=='authorized')throw new Error('access_denied_or_timeout');}
+      finally{if(requested.request_id)await client.manage({operation:'access_cancel',request_id:requested.request_id}).catch(()=>{});}
     }
     if(command==='run'&&process.env.ARES_OWNER_LEASE)await client.manage({operation:'owner_lease',action:'use',lease_id:leaseReference?.value??process.env.ARES_OWNER_LEASE});
     if (command === 'run' && tool) {
@@ -87,6 +95,12 @@ export async function main(argv = process.argv.slice(2)) {
       }
     }
     if(leaseReference && args.target===undefined)args.target=process.env.ARES_TARGET??leaseReference.target;
+    if(waitAccess && !tool.startsWith('access_')){
+      const pending=await registry.call('access_wait',{target:args.target},abort.signal);
+      const access=JSON.parse(pending.content[0].text);
+      if(pending.isError || access.state!=='authorized')throw new Error(access.error??'access_denied');
+      args.target=access.target||args.target;
+    }
     if(process.env.ARES_OWNER_LEASE&&!['build_info','owner_lease'].includes(tool)){const lease=await registry.call('owner_lease',{action:'use',lease_id:process.env.ARES_OWNER_LEASE,target:args.target},abort.signal);if(lease.isError)throw new Error(lease.content[0].text);}
     const result = await registry.call(tool, args, abort.signal);
     // Preserve images and other structured content; ordinary JSON tools emit their value directly.

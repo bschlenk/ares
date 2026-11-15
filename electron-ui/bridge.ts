@@ -31,6 +31,8 @@ export interface AresBridge {
   sessionData(request: {operation: 'list' | 'archives' | 'reset' | 'restore'; name?: string; mode?: 'fresh' | 'inherit-personal'; archiveId?: string}): Promise<any>;
   checkpoints(request:{operation:'status'|'list'|'save'|'load'|'rename'|'delete'|'reveal';session?:string;id?:string;name?:string}):Promise<any>;
   onCheckpointsChanged(callback:()=>void):()=>void;
+  externalAccess(action?:'allow'|'deny'|'revoke'):Promise<{state:string;implicit:boolean;instance:string;game_title?:string}>;
+  onExternalAccess(callback:(state:{state:string;implicit:boolean;instance:string;game_title?:string})=>void):()=>void;
   agentAction(action: 'copy' | 'install' | 'preview'): Promise<string>;
   workspace: WorkspaceBridge;
   onAction(callback: (action: 'settings' | 'open' | 'pause' | 'reset' | 'edit-workspace' | 'reset-workspace') => void): () => void;

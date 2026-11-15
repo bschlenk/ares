@@ -1,3 +1,4 @@
+import {guardExternalWork} from './external-access.js';
 import { validObserverSample, type ObserverSample } from './observer-contracts.js';
 import type { Readable, Writable } from 'node:stream';
 import { decodeReply, encodeRequest, ServiceError, type SessionClient, type SessionIdentity, type ServiceMethod, type ServiceParams, type ServiceResult, type SessionReply } from './contracts.js';
@@ -43,11 +44,12 @@ export class NativeSessionClient implements SessionClient {
     input.on('error', () => this.fail(new ServiceError('native_host_disconnected')));
   }
   request<M extends ServiceMethod>(method: M, identity = this.identity, params?: ServiceParams<M>, owner = 'ui'): Promise<SessionReply<ServiceResult<M>>> {
+    try { guardExternalWork(); } catch(error) { return Promise.reject(error); }
     if (this.closed) return Promise.reject(new ServiceError('native_host_disconnected'));
-    // Reserve capacity for the endpoint's eight owner revocations. If even the
+    // Reserve capacity for connection, durable lease and child-owner cleanup. If even the
     // bounded reserve is exhausted, fail closed: main terminates the host rather
     // than leaving disconnected execution running until its deadline.
-    const release = method === 'execution.release';
+    const release = method === 'execution.release' || method === 'session.pause' && owner === 'access-barrier';
     if (this.pending.size >= (release ? 40 : 32) || this.input.writableLength > (release ? 49152 : 16384)) {
       if (release) this.fail(new ServiceError('owner_revocation_failed'));
       return Promise.reject(new ServiceError(release ? 'owner_revocation_failed' : 'request_overload'));

@@ -1,3 +1,4 @@
+import {guardExternalWork} from '../services/external-access.js';
 import {storeTransaction} from '../sessions/transactions.js';
 import {publishJson, readJson} from '../sessions/files.js';
 import {PluginNetwork} from './network.js'
@@ -511,6 +512,7 @@ export class PluginRegistry {
     const addedDirectories = [...directories].filter(dir => !this.persistedDirectories.has(dir));
     if (!reset && !edit && !add.length && !remove.length && !addedDirectories.length) return;
     await storeTransaction(this.configFile(), lock => {
+      guardExternalWork();
       let data: {[key: string]: unknown} = {};
       try {
         data = readJson(this.configFile(), 32768);
@@ -810,6 +812,7 @@ export class PluginRegistry {
         r.state = 'waiting'
         try {
           const built = await this.capture(r.source)
+          guardExternalWork();
           this.pins.delete(built.hash)
           if (built.manifest.id !== id)
             throw new Error('Plugin id changed; add it as a new plugin')
@@ -853,6 +856,7 @@ export class PluginRegistry {
       if (this.directories.length >= 64)
         throw new Error('At most 64 local plugin directories')
       source = await fs.realpath(source)
+      guardExternalWork();
       if (!this.directories.includes(source)) this.directories.push(source)
       await this.scan()
       return this.catalog()
@@ -862,7 +866,7 @@ export class PluginRegistry {
     return this.serial(() => this.scan())
   }
   private serial<T>(fn: () => Promise<T>) {
-    const job = this.mutation.then(fn)
+    const job = this.mutation.then(()=>{guardExternalWork();return fn();})
     this.mutation = job.then(
       () => {},
       () => {},

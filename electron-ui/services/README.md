@@ -448,8 +448,34 @@ Additional `operation_ref`, `lease_ref` and `result_ref` fields returned by scop
 Retain them verbatim; references reject another target or changed native epoch.
 Legacy numeric IDs remain supported for explicit low-level use.
 
-Personal external operations fail with `access_required` until task 6 implements
-the grant controller. Only authenticated minimal app metadata is available before
-approval. `access_request/status/wait` currently report
-`{state:'unavailable',reason:'approval_controller_pending'}` without prompting or
-queueing gameplay work. Named sessions retain implicit external access.
+Personal windows require an in-memory window-wide grant. Before approval the
+explicit allowlist is authenticated `app_status`, `access_request`,
+`access_status`, `access_wait`, `access_cancel` and transport negotiation/cancel.
+Native status, reads, captures, artifacts, settings, ROM changes and owner leases
+remain closed. The watchdog's personal cache contains only minimal metadata.
+
+`access_request` returns an opaque `request_id` and leaves one nonmodal Allow/Deny
+prompt pending for its bounded deadline (default 30 seconds, maximum 60), even
+when the short requesting CLI disconnects. Cancel that request with
+`access_cancel({request_id})`. `access_wait` in CLI/MCP polls approval and holds no
+gameplay command on the host; abort, disconnect, Deny and timeout remove its
+requester. Up to 32 requesters share one prompt. The endpoint reserves room for
+these probes/waiters separately from its eight protected connection owners.
+
+Allow applies to every authenticated client of that window. Renderer reload does
+not remove it; app close does. Revoke closes the gate and increments its generation
+before cleanup, invalidates all leases, guards queued main/native/file work, and
+waits for a privileged native safe-point barrier. The barrier releases external
+owners (including batch children, detached input demonstrations and disconnected
+leases), stops scripts/observers/recordings, clears external inputs and pauses.
+Focus-pause loses its resume entitlement. A failed barrier leaves access closed
+in `revoking`; the native client's failure handling terminates an unresponsive
+host. Reapproval cannot revive work from a previous generation.
+
+Personal renderer plugin mutations/delegation (`add`, `enable`, `reload`,
+`resetStartup`, `open`, `command`) return
+`plugin_management_requires_named_session` even with a grant: their shared human
+SDK callbacks cannot yet carry separate external invocation ownership. Use a named
+session for that interface. Human plugin ownership is preserved by revocation.
+Named instances have implicit authorization and keep their service available even
+when the copied personal `agent.enabled` setting was disabled.

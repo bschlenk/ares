@@ -1,3 +1,4 @@
+import {guardExternalWork} from './external-access.js';
 import {storeTransaction} from '../sessions/transactions.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -27,7 +28,7 @@ export class CheckpointLibrary {
   private tail: Promise<unknown> = Promise.resolve();
   constructor(readonly root: string, private trash: (file: string) => Promise<void>, private warn: (message:string)=>void = ()=>{}) {if(!path.isAbsolute(root))throw new Error('invalid_storage_root')}
   private serial<T>(run: () => Promise<T>): Promise<T> {
-    const result = this.tail.then(() => storeTransaction(path.join(this.root, 'library'), run)); this.tail = result.catch(() => {}); return result;
+    const result = this.tail.then(() => storeTransaction(path.join(this.root, 'library'), ()=>{guardExternalWork();return run();})); this.tail = result.catch(() => {}); return result;
   }
   private async folder(game: CheckpointGame, create = false): Promise<string | null> {
     validateGame(game);
@@ -97,7 +98,7 @@ export class CheckpointLibrary {
         }
         try {
           for(const [from,to] of [['capture.state',`${id}.state`],['screenshot.png',`${id}.png`],['metadata.json',`${id}.json`]])await fs.rename(path.join(temporary,from!),path.join(temporary,to!));
-          guard(); await fs.rename(temporary, path.join(folder, id)); published = true;
+          guard(); guardExternalWork(); await fs.rename(temporary, path.join(folder, id)); published = true;
         }
         catch (error) { await fs.rmdir(path.join(folder, id)).catch(() => {}); throw error; }
         // The checkpoint is committed. Retention failures cannot reclassify a
@@ -116,6 +117,7 @@ export class CheckpointLibrary {
       try {
         const file = await fs.open(temporary, 'wx', 0o600);
         try { await file.writeFile(JSON.stringify(metadata)); await file.sync(); } finally { await file.close(); }
+        guardExternalWork();
         await fs.rename(temporary, path.join(directory, `${id}.json`));
       } finally { await fs.rm(temporary, {force: true}); }
     });
@@ -130,7 +132,8 @@ export class CheckpointLibrary {
     });
   }
   async revealPath(game: CheckpointGame, id: string): Promise<string> { return (await this.entry(game, id)).directory; }
-  delete(game: CheckpointGame, id: string): Promise<void> { return this.serial(async () => this.trash((await this.entry(game, id)).directory)); }
+  delete(game: CheckpointGame, id: string): Promise<void> { return this.serial(async () => this.guardedTrash((await this.entry(game, id)).directory)); }
+  private guardedTrash(file:string){guardExternalWork();return this.trash(file);}
   private async prune(game: CheckpointGame) {
     const autosaves = (await this.listUnlocked(game)).filter(e => !e.permanent);
     for (const entry of autosaves.slice(10)) await this.trash((await this.entry(game, entry.id)).directory);

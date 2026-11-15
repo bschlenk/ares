@@ -1,3 +1,5 @@
+import {ExternalAccessController, externalWork, guardExternalWork} from './services/external-access.js';
+import {publishArtifact} from './services/artifact-writer.js';
 import {nextOpenSequence} from './sessions/discovery.js';
 import {prepareManagementRoot} from './sessions/context.js';
 import {RendererRecovery} from './services/renderer-recovery.js';
@@ -259,6 +261,16 @@ async function pluginAction(
   })
   return { completed: true }
 }
+export const externalAccess=new ExternalAccessController(appContext.instanceId,appContext.kind==='named',()=>{
+  if(window&&!window.isDestroyed())window.webContents.send('external-access',externalAccess.snapshot());
+},()=>discoveryState.title);
+export function revokeExternalAccess(){return externalAccess.revoke(async()=>{
+  serviceHost.invalidateExternal();
+  // First stop execution promptly; then drain any main lifecycle transition and
+  // confirm the current host has acknowledged cleanup too.
+  await sessions.revokeExternal();
+  await queueOperation(()=>sessions.revokeExternal());
+});}
 export const serviceHost = new LocalServiceHost(sessions, async (params, guard, owner) => {
   if (
     !params ||
@@ -291,6 +303,10 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard, 
     )
   )
     throw new Error('invalid_plugin_request')
+  // Renderer plugin commands share their human plugin's SDK closure and cannot
+  // carry per-invocation external ownership. Keep that delegation closed in
+  // personal windows; named sessions provide the complete plugin interface.
+  if(appContext.kind==='personal' && ['open','command','add','enable','reload','resetStartup'].includes(params.operation))throw new ServiceError('plugin_management_requires_named_session');
   switch (params.operation) {
     case 'managed_states': return queueOperation(async()=>{
       guard();
@@ -327,13 +343,15 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard, 
       if(Object.keys(params).some(key=>key!=='operation'))throw new Error('invalid_request');
       return await rendererRecovery.recover();
     case 'app_health': return appHealth()
-    case 'app_status': return { ready: !!window && !window.isDestroyed(), pid: process.pid, instance: appContext.instanceId, kind: appContext.kind, session_id: appContext.sessionId, session_name: appContext.sessionName, opened_order: openedOrder, loaded: !!active?.romHash, game_title: discoveryState.title, system: active?.system, running: discoveryState.running === true, paused: discoveryState.paused === true, approval: appContext.kind === 'named' ? 'implicit' : 'required' }
+    case 'app_status': return { ready: !!window && !window.isDestroyed(), pid: process.pid, instance: appContext.instanceId, kind: appContext.kind, session_id: appContext.sessionId, session_name: appContext.sessionName, opened_order: openedOrder, loaded: !!active?.romHash, game_title: discoveryState.title, system: active?.system, running: discoveryState.running === true, paused: discoveryState.paused === true, approval: appContext.kind === 'named' ? 'implicit' : externalAccess.snapshot().state==='authorized'?'authorized':'required' }
     case 'load_rom': {
       if (Object.keys(params).some(key => !['operation', 'path', 'system'].includes(key)) || typeof params.path !== 'string' || !path.isAbsolute(params.path) || params.path.includes('\0') || (params.system !== undefined && typeof params.system !== 'string')) throw new Error('invalid_rom_request')
       return queueOperation(async () => {
         const stat = await fs.promises.stat(params.path)
+        guard();
         if (!stat.isFile()) throw new Error('rom_requires_file')
         const romHash = await hashRom(params.path)
+        guard();
         const alreadyLoaded = !!active?.romHash && active.romHash === romHash
         if (!alreadyLoaded) await start({ rom: params.path, system: params.system, agent: true, romHash })
         const reply = await sessions.request('session.status')
@@ -343,7 +361,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard, 
     }
     case 'close_rom': {
       if (Object.keys(params).join(',') !== 'operation') throw new Error('invalid_rom_request')
-      await queueOperation(() => start({ agent: true }))
+      await queueOperation(() => {guard();return start({ agent: true });})
       return { loaded: false, session: sessions.identity?.session, epoch: sessions.identity?.epoch }
     }
 
@@ -378,7 +396,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard, 
           const stable=surface.frame&&JSON.stringify(previous)===JSON.stringify(surface)
           return {...surface,frame:stable?surface.frame:null,frame_match:stable?'renderer_submit':'unavailable_or_changed',rect_coordinate_space:'window_css',capture_rect:rect??null}
         })
-        await fs.promises.writeFile(params.path, image.toPNG(), { flag: 'wx' })
+        await publishArtifact(params.path,false,async write=>{await write(image.toPNG());},guard)
         return { frame_reference,overlay_geometry,video_surfaces,frame_match:frame_reference?'renderer_submit':'unavailable_or_changed',path: params.path, source: params.panel === undefined ? 'window' : 'panel', panel: params.panel ?? null, ...image.getSize() }
       } finally {
         if(!window.webContents.isDestroyed())await window.webContents.executeJavaScript(`window.endVideoCapture(${JSON.stringify(captureLease)})`).catch(()=>{})
@@ -410,9 +428,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard, 
     default:
       throw new Error('unknown_plugin_operation')
   }
-}, appContext.instanceId, operation => {
-  if(appContext.kind === 'personal' && operation !== 'app_status') throw new ServiceError('access_required');
-})
+}, appContext.instanceId, undefined, externalAccess)
 export { stop as stopNative }
 const installedHost = path.join(
   process.resourcesPath,
@@ -504,6 +520,7 @@ function serviceLaunchOverride(): boolean | undefined {
   return undefined
 }
 async function configureServices(enabled: boolean) {
+  if(appContext.kind==='named')enabled=true;
   if (!enabled) { await mainWatchdog.close(); await serviceHost.close(); return }
   if (serviceHost.info) return
   const index = process.argv.indexOf('--instance-name')
@@ -651,6 +668,7 @@ async function autosaveBeforeStop(old:NativeSession) {
       if(!state.result?.checkpoint_eligible)return
       await saveCheckpoint(false);return
     }catch(error) {
+      guardExternalWork();
       const choice=await dialog.showMessageBox(window,{type:'error',title:'Could not save your game',message:'The game is still open.',detail:String(error),buttons:['Retry','Stay in game','Leave without saving'],defaultId:0,cancelId:1,noLink:true})
       if(choice.response===1)throw new Error('checkpoint_stay_in_game')
       if(choice.response===2)return
@@ -662,6 +680,7 @@ async function stop() {
   if (!old) return
   recoveryTransition=true
   try{await pairedRecovery.idle();await autosaveBeforeStop(old);if(old.checkpointHash)await pairedRecovery.disarmGame(old.checkpointHash)}finally{recoveryTransition=false}
+  guardExternalWork();
   active = null
   plugins.disconnect()
   sessions.detach()
@@ -677,10 +696,12 @@ async function hashRom(file: string) {
   return hash.digest('hex')
 }
 async function start(options: StartOptions & { agent?: boolean; romHash?: string; title?: string }) {
+  guardExternalWork();
   nativeStartupRequested = true
   const romHash = options.rom ? options.romHash ?? await hashRom(options.rom) : undefined
   let system = 'Synthetic'
   await refreshNativeSettings()
+  guardExternalWork();
   const startupSettings = preferences.catalog()
   const selectedSettingsFile = String(startupSettings.entries.find(entry => entry.descriptor.id === 'paths.importBml')!.value)
   const identity = { session: randomUUID(), epoch: 1 }
@@ -741,10 +762,14 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     if (settingsFile) prepareArgs.push('--settings', settingsFile)
     for (const media of options.media || []) prepareArgs.push('--media', media)
     const inventory = JSON.parse(await probe(prepareArgs)) as StorageInventory
+    guardExternalWork();
     reservation = await storageCoordinator.reserve(inventory, appContext, gameTitle || system)
+    guardExternalWork();
     await storageCoordinator.initialize(reservation, appContext)
   }
+  guardExternalWork();
   await stop()
+  guardExternalWork();
   const args = options.rom ? ['--rom', options.rom] : ['--synthetic']
   if (options.rom) args.push('--system', system)
   if (options.rom||options.agent) args.push('--paused')
@@ -894,7 +919,8 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   }
 }
 function queueOperation<T>(task: () => Promise<T>) {
-  const result = operation.then(task)
+  const scope=externalWork.getStore();
+  const result = operation.then(()=>{scope?.guard();return task();})
   operation = result.then(() => {}, () => {})
   return result
 }
@@ -1181,6 +1207,14 @@ app
         }
       },
     )
+    ipcMain.handle('external-access', (event,action) => {
+      if(event.sender!==window.webContents || event.senderFrame!==window.webContents.mainFrame)throw new Error('invalid_sender');
+      if(action==='allow')externalAccess.decide(true);
+      else if(action==='deny')externalAccess.decide(false);
+      else if(action==='revoke')return revokeExternalAccess().then(()=>externalAccess.snapshot());
+      else if(action!==undefined)throw new Error('invalid_request');
+      return externalAccess.snapshot();
+    });
     ipcMain.handle('agent.action', async (event, action: unknown) => {
       if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('invalid_sender')
       const bundled = isBundledCliRuntime(appRoot, process.execPath)

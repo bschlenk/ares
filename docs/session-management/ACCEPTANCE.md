@@ -84,8 +84,12 @@ closed pending the task 6 controller. Nine selection tests and three independent
 desktop checks pass. Final full acceptance passes 346/347 fixtures, with an
 unchanged scheduler timing assertion failing (isolated rerun passes); later gates
 are unrun. The separate MCP desktop check still reaches its known video-clock
-mismatch. Exact validation is in the implementation report. Tasks 6–7, full integration
-acceptance and the final
+mismatch. Exact validation is in the implementation report. Task 6 now implements personal
+approval/cancellation and the native revoke barrier, with renderer plugin management
+deliberately restricted to named sessions. Its focused 60-test lane and independent
+desktop approval/CLI checks pass. The final full run passes 352 fixtures and reaches
+the previously documented MCP video-clock mismatch. Final task 6 evidence is in
+the implementation report. Task 7, full integration acceptance and the final
 map to the spec's eleven criteria remain outstanding.
 
 The original planning-only document recorded source review and no builds/tests.

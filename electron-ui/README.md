@@ -718,3 +718,17 @@ are incomplete.
 See [managed-library tools and reset/restore recipes](sessions/RECOVERY.md). Named states
 include explicit Personal/Session origin and read-only inherited references.
 Whole-session reset/restore requires a closed target; previous data is retained.
+
+### Personal external access
+
+Personal CLI/MCP gameplay access requires window-wide Allow/Deny approval.
+`ares call emu_status --wait-access` waits locally before issuing the command;
+`access_request`, `access_status`, `access_wait` and `access_cancel` expose the
+same flow explicitly. Revoke in the playback controls invalidates every client
+and lease, cancels external work and pauses at an acknowledged native barrier.
+Grants survive renderer reload but never app restart. Named sessions remain
+implicitly authorized even if their initial copy of personal settings disabled
+integration. External renderer plugin mutations/delegation remain restricted to
+named sessions so they cannot acquire the human plugin's ownership in a personal
+window. See [service access semantics](services/README.md) and
+[CLI/MCP examples](mcp/README.md#personal-approval-and-cancellation).

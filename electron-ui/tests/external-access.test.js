@@ -1,0 +1,50 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {ExternalAccessController,externalWork} from '../dist/services/external-access.js';
+import {LocalServiceHost,LocalServiceClient,localRequestContext} from '../dist/services/local-endpoint.js';
+import {publishArtifact} from '../dist/services/artifact-writer.js';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+test('approval is window-wide, bounded, memory-only; deny, cancel and expiry never grant',async t=>{
+ const c=new ExternalAccessController('one',false);t.after(()=>c.close());
+ assert.throws(()=>c.capture(),/access_required/);
+ const a=c.request('a'),b=c.request('b');assert.equal(c.request('a').request_id,a.request_id);
+ c.cancel(a.request_id,'a');assert.equal(c.snapshot().state,'pending');c.decide(false);assert.equal(c.snapshot().state,'unapproved');
+ c.request('short',10);await sleep(20);assert.equal(c.snapshot().state,'unapproved');
+ for(let i=0;i<32;i++)c.request('r'+i);assert.throws(()=>c.request('overflow'),/access_waiter_limit/);
+ c.decide(true);assert.equal(c.snapshot().state,'authorized');const guard=c.capture();guard();
+ let finish;const revoke=c.revoke(()=>new Promise(r=>finish=r));assert.equal(c.snapshot().state,'revoking');assert.throws(guard,/access_required/);assert.throws(()=>c.request('new'),/access_revoking/);
+ finish();await revoke;c.request('new');c.decide(true);assert.throws(guard,/access_required/);
+ const reopened=new ExternalAccessController('two',false);assert.equal(reopened.snapshot().state,'unapproved');reopened.close();
+ const named=new ExternalAccessController('named',true);named.capture()();await assert.rejects(named.revoke(async()=>{}),/implicit_access/);named.close();
+});
+test('failed revoke stays closed and late artifact publication cannot cross a new grant',async t=>{
+ const root=fs.mkdtempSync('/tmp/ares-access-artifact-');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const c=new ExternalAccessController('one',false);t.after(()=>c.close());c.request('one');c.decide(true);
+ let finish;const guard=c.capture(),output=path.join(root,'late.txt');
+ const pending=externalWork.run({guard},()=>publishArtifact(output,false,async write=>{await write('old');await new Promise(r=>finish=r);},()=>{}));
+ while(!finish)await sleep(1);await assert.rejects(c.revoke(async()=>{throw Error('barrier_failed');}),/barrier_failed/);assert.equal(c.snapshot().state,'revoking');
+ await c.revoke(async()=>{});c.request('new');c.decide(true);finish();await assert.rejects(pending,/access_required/);assert.equal(fs.existsSync(output),false);
+});
+test('transport blocks all protected paths, preserves explicit requests across sockets and cancels queued management',async t=>{
+ const directory=fs.mkdtempSync('/tmp/ares-access-ipc-');t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));const c=new ExternalAccessController('one',false);t.after(()=>c.close());let calls=0,commit=false,release;
+ const native={request:async()=>{calls++;return {protocol:1,id:'test',session:'test',epoch:1,ok:true,result:{released:true}};}};
+ const host=new LocalServiceHost(native,async(p,guard)=>{if(p.operation==='queued'){await new Promise(r=>release=r);guard();commit=true;}return {};},'one',undefined,c);await host.listen(directory);t.after(()=>host.close());
+ const client=()=>new LocalServiceClient(host.metadataFile,'one');const a=client();t.after(()=>a.close());
+ for(const operation of ['app_logs','build_info','load_rom','screenshot','owner_lease','script_result','enable'])await assert.rejects(a.manage({operation}),/access_required/);
+ await assert.rejects(a.request('session.status'),/access_required/);assert.equal(calls,0);
+ const requested=await a.manage({operation:'access_request'});a.close();await sleep(10);assert.equal(c.snapshot().state,'pending');
+ const b=client();t.after(()=>b.close());await b.manage({operation:'access_cancel',request_id:requested.request_id});assert.equal(c.snapshot().state,'unapproved');
+ await b.manage({operation:'access_request'});c.decide(true);
+ const abort=new AbortController();const pending=localRequestContext.run({signal:abort.signal},()=>b.manage({operation:'queued'}));while(!release)await sleep(1);abort.abort();await assert.rejects(pending,/cancelled/);await sleep(10);release();await sleep(10);assert.equal(commit,false);
+ const status=await b.manage({operation:'access_status'});assert.equal(status.state,'authorized');
+ const grant=c.capture();const old=externalWork.run({guard:grant},()=>sleep(20).then(()=>grant()));await c.revoke(async()=>{});c.request('retry');c.decide(true);await assert.rejects(old,/access_required/);
+});
+test('aborting a start before its acknowledgement cancels that exact native operation',async t=>{
+ const directory=fs.mkdtempSync('/tmp/ares-access-start-');t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));let acknowledge;const calls=[];
+ const backend={async request(method,identity,params,owner){calls.push({method,params,owner});if(method==='execution.runFrames')await new Promise(r=>acknowledge=r);return {protocol:1,id:'native',session:'fixture',epoch:1,ok:true,result:method==='execution.runFrames'?{operation_id:91}: {released:true}};}};
+ const host=new LocalServiceHost(backend);await host.listen(directory);t.after(()=>host.close());const client=new LocalServiceClient(host.metadataFile,host.instance);t.after(()=>client.close());const abort=new AbortController();
+ const pending=localRequestContext.run({signal:abort.signal},()=>client.request('execution.runFrames',{session:'fixture',epoch:1},{count:1000,timeoutMs:1000}));while(!acknowledge)await sleep(1);abort.abort();await assert.rejects(pending,/cancelled/);await sleep(10);acknowledge();
+ for(let i=0;i<100&&!calls.some(c=>c.method==='execution.cancel');i++)await sleep(2);
+ assert.deepEqual(calls.filter(c=>c.method==='execution.cancel').map(c=>c.params),[{operationId:91}]);
+});

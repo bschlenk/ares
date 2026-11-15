@@ -34,7 +34,7 @@ open another window or quit an existing app.
 Default targeting chooses the earliest-opened live **personal** window, ignoring
 named windows and focus. If none is open, the first target-dependent call launches
 a personal window. Personal gameplay access is closed with `access_required`
-pending the task 6 approval controller; automatic launch does not grant access.
+until the user clicks Allow in that window; automatic launch does not grant access.
 Discovery (`sessions_list`) never launches, prompts or reads native game state.
 `--service-dir /absolute/path` or `ARES_SERVICE_DIR` selects the private service
 directory. Private endpoint validation and schema/build negotiation apply.
@@ -1242,3 +1242,34 @@ or the plugin SDK. See [recovery diagnostics](../services/RENDERER-RECOVERY.md).
 See [managed-library tools and reset/restore recipes](../sessions/RECOVERY.md). Named states
 include explicit Personal/Session origin and read-only inherited references.
 Whole-session reset/restore requires a closed target; previous data is retained.
+
+## Personal approval and cancellation
+
+Use `access_request` for a short request that leaves a bounded nonmodal prompt,
+`access_status` to inspect it, or `access_wait` to await Allow. Each accepts the
+same optional `target`; `timeout_ms` defaults to 30000 and is bounded to 60000.
+Cancel an explicit request with `access_cancel({request_id,target})`. Deny and
+expired/aborted waits execute no gameplay command. Approval applies to all clients
+of that window and survives renderer reload; Revoke and app exit remove it.
+
+CLI convenience holds the command locally until access is authorized:
+
+```sh
+ares call emu_status --wait-access
+ares call access_request
+ares call access_cancel --request_id 'REQUEST_UUID'
+ares run ./script.js --wait-access
+```
+
+MCP callers should await `access_wait`, then issue the intended tool call with the
+returned target. There is no server-side queue that replays intent on Allow or
+reconnect. Cancellation is request-local across shared adapter calls and also
+reaches queued management work. Revocation invalidates every durable owner lease;
+a fresh grant requires creating a new lease.
+
+Personal external renderer plugin mutations and command delegation require a
+named session (`plugin_management_requires_named_session`) because those callbacks
+share the human plugin's SDK scope. Native controls, managed states, captures and
+read-only plugin inspection use the personal grant. Named sessions retain the
+complete plugin interface and implicit access, including when personal integration
+was disabled before the session was created.
