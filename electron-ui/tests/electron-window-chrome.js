@@ -15,9 +15,9 @@ const deadline=setTimeout(()=>app.exit(1),30000);
 app.on('will-quit',()=>{clearTimeout(deadline);fs.rmSync(temporary,{recursive:true,force:true});});
 app.whenReady().then(async()=>{try{
   const window=await until(()=>BrowserWindow.getAllWindows()[0]), js=code=>window.webContents.executeJavaScript(code);
-  window.show();window.focus();await until(()=>js("window.stats?.().system==='Game Boy' && !document.querySelector('#video-controls').hidden"));
+  window.show();window.focus();app.focus({steal:true});window.webContents.focus();await until(()=>js("window.stats?.().system==='Game Boy' && !document.querySelector('#video-controls').hidden"));
   await until(()=>js('document.hasFocus()'));
-  await until(()=>js("document.querySelector('#window-game-title').textContent==='fixture'"));
+  await until(()=>js("document.querySelector('#window-game-title').textContent==='fixture — ares'"));
   await js("(async()=>{window.testWorkspace = (await import('./dist/browser/workspace/shell.js')).workspace})()");
   await js('window.testWorkspace.ready');
   assert.equal(await js('document.body.dataset.titlebar'),'overlay');

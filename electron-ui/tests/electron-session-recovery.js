@@ -23,6 +23,8 @@ app.whenReady().then(async()=>{
   const window=await until(()=>BrowserWindow.getAllWindows()[0]),js=code=>window.webContents.executeJavaScript(code);
   await until(()=>(noServices || serviceHost.info) && js("window.ares.checkpoints({operation:'status'}).then(s=>s.available)"));
   if(noServices){
+    // Named services are implicit; remove the endpoint to test lifecycle ownership independently.
+    await serviceHost.close();
     assert.equal(serviceHost.info,undefined);
     for(const mode of ['fresh','inherit-personal','restore'])await assert.rejects(new SessionRepository(personal).replace('work',mode),/session_running/);
     assert.equal((await new SessionRepository(personal).archives('work')).length,0);

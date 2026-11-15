@@ -27,6 +27,6 @@ test('capture leases coalesce, bound admission and release presentation without 
   for(const id of ids)endVideoCapture(id);assert.equal(captureHeld(),false);
 });
 
-test('capture leases expire even if a client or renderer request disappears',async()=>{
-  beginVideoCapture();assert(captureHeld());await new Promise(r=>setTimeout(r,2050));assert.equal(captureHeld(),false);
+test('capture scope remains held for a slow capture until its final release',async()=>{
+  const id=beginVideoCapture();try{await new Promise(r=>setTimeout(r,2050));assert(captureHeld());}finally{endVideoCapture(id);}assert.equal(captureHeld(),false);
 });

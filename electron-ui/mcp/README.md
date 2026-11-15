@@ -1273,3 +1273,20 @@ share the human plugin's SDK scope. Native controls, managed states, captures an
 read-only plugin inspection use the personal grant. Named sessions retain the
 complete plugin interface and implicit access, including when personal integration
 was disabled before the session was created.
+
+
+Session identity is shown in both the native window title and the custom header.
+Named sessions keep a `Session: <name>` indicator whenever playback controls are
+revealed, including empty views; it has no dismiss or Revoke action. Authorized
+personal windows show that external clients can access real settings and saves,
+with keyboard-reachable **Revoke** in the same toolbar. Pointer inactivity hides
+these with the controls; keyboard focus reveals them. Reloading the interface
+reconstructs identity and access from main-process state.
+
+Game captures exclude this app chrome. Presented UI captures hold a common scope
+for the entire capture, including panel rectangles and nested captures; game and
+plugin overlays remain. Native screenshots, recordings and checkpoint previews
+use native pixels. A renderer reload during UI capture fails that capture without
+publishing it. Per-process `app.setName` is applied before readiness for named
+sessions; this alone does not establish macOS packaged Dock hover behavior. See
+[acceptance evidence](../ACCEPTANCE.md) for verification and remaining limits.

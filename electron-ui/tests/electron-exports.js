@@ -12,7 +12,7 @@ fs.writeFileSync(path.join(source,'plugin.js'),`export function activate(ctx){
 }`);
 fs.writeFileSync(path.join(profile,'workspace.json'),JSON.stringify({version:1,root:{id:'root',axis:'x',ratio:0.6,children:[{id:'video',panel:'video'},{id:'exports',panel:'plugin:test.exports:exports'}]},floating:[]}));
 app.setPath('userData',profile);Object.assign(process.env,{ARES_PROFILE_DIR:profile,ARES_PLUGIN_DIRS:source,ARES_SILENT:'1',ARES_BACKGROUND_TEST:'1',ARES_DEFAULT_PLUGINS:'0',ARES_ENABLE_SERVICES:'1',ARES_SERVICE_DIR:path.join(dir,'ipc')});delete process.env.ARES_ROM;delete process.env.ARES_AUTOTEST;delete process.env.ARES_DISABLE_PLUGINS;
-const {sessions,serviceHost}=await import('../dist/main.js');
+const {sessions,serviceHost,externalAccess}=await import('../dist/main.js');
 const until=async check=>{for(let n=0;n<300;n++){try{const value=await check();if(value)return value;}catch{}await new Promise(r=>setTimeout(r,20));}throw Error('export check timed out');};
 const timer=setTimeout(()=>{console.error('EXPORT_TIMEOUT');app.exit(1);},30000);app.on('will-quit',()=>{clearTimeout(timer);fs.rmSync(dir,{recursive:true,force:true});});
 let destination=path.join(dir,'frame.json'),cancel=false,hold=false,release,choices=0,copied=[];
@@ -20,6 +20,7 @@ let destination=path.join(dir,'frame.json'),cancel=false,hold=false,release,choi
 clipboard.writeText=text=>copied.push(text);
 dialog.showSaveDialog=async()=>{++choices;if(hold)return new Promise(r=>release=r);return cancel?{canceled:true}:{canceled:false,filePath:destination};};
 app.whenReady().then(async()=>{try{
+ externalAccess.request('exports-fixture');externalAccess.decide(true);
  const win=await until(()=>BrowserWindow.getAllWindows()[0]),js=code=>win.webContents.executeJavaScript(code);
  await until(()=>js('!!document.querySelector("[data-export-action=copy]")'));
  await js('document.querySelector("[data-export-action=copy]").click()');await until(()=>js('window.exportErrors.length'));assert.match(await js('window.exportErrors[0]'),/user_gesture_required/);assert.equal(copied.length,0);

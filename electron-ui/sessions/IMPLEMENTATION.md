@@ -646,3 +646,178 @@ integration-disabled desktop gates were also added to `scripts/accept.js`.
 Packaged/manual Dock, physical controller interaction with a pending nonmodal
 prompt, title/banner/capture pixel evidence and full spec acceptance are **not
 claimed**. Task 7 remains next; issue #37 remains open.
+
+## Task 7 — identification, toolbar and captures
+
+Implemented in **`TASK7_COMMIT`** on `feat/session-management` after `8540c98cd` (task 6 handoff).
+Main owns a revisioned identity/title/access snapshot and one title formatter.
+The sandbox subscribes before its initial snapshot request and ignores older
+revisions. Both native and custom titles retain named identity through startup,
+ROM changes, empty views, native disconnect and renderer recovery. Supported
+`app.setName` is attempted before readiness without changing signed bundle data.
+Named/access banners share the existing playback toolbar; the recording-controls
+callback no longer hides identity in empty views. Personal text explicitly warns
+of access to real settings/saves, with keyboard-reachable Revoke. Approval remains
+nonmodal and the task 6 named-only external plugin delegation boundary remains.
+
+The common presentation lease hides explicit app chrome via `data-capture-exclude`
+for the complete capture interval, waiting for compositor style submission before
+capture. The arbitrary panel rectangle and full window paths share this scope.
+Last-release restoration handles nesting, errors and cancellation. Navigation
+clears renderer leases; main rejects images whose exact lease did not survive
+renderer recovery, before atomic artifact publication. Removing the old two-second
+lease expiry prevents slow captures from including newly revealed chrome.
+Game/plugin overlays are not marked and remain captured. The source audit found
+only one Chromium `capturePage` caller in production (`main.ts`). Native presented
+and framebuffer PNGs use `Screenshots`/native snapshots, managed previews use
+`checkpoint.capture` pixels in `Checkpoints`, AVI uses native recording snapshots,
+and plugin `recordFrames` streams native observer JSON. None reads DOM pixels.
+
+Two presentation Electron gates and an npm focused command were added; the fixture
+lane automatically includes the title regression. Existing capture-lease expiry
+and custom-header expectations were updated to the new contracts. The stale MCP
+Game Boy AVI assertion now expects its established `primary-screen-frame` clock,
+which lets final acceptance progress beyond the earlier task's known blocker.
+The video fixture performing external plugin management uses an explicit named
+session. The human export fixture retains its personal workspace and explicitly
+approves external status queries, preserving the personal provenance gate.
+
+Validation and remaining limits are recorded below. All fixtures use generated
+media and disposable roots; no personal saves are read. See the final eleven-row
+criterion map in [acceptance](../ACCEPTANCE.md#task-7-identity-toolbar-and-capture-integration).
+
+Commands from `electron-ui/` unless stated otherwise:
+
+- `mise exec node@24.22.0 -- node scripts/build.js` — all three TypeScript targets,
+  preload and SDK metadata passed. No native source changed in task 7.
+- `mise exec node@24.22.0 -- node --test tests/session-presentation.test.js tests/video-source.test.js`
+  — **5/5 passed**, including leases held beyond the former two-second expiry.
+- With `ARES_HOST=/Users/bschlenk/Developer/forks/ares/build_macos/workbench/bin/ares-electron-host`,
+  `mise exec node@24.22.0 -- npx electron tests/electron-session-presentation.js`
+  and the same command with `--personal-test` — both passed independently with
+  desktop access. Named was rerun after adding native AVI sentinel pixel checks;
+  final full-command evidence below includes both modes. Covers actual native
+  titles/custom header/app name, reload and native SIGKILL, empty views, keyboard
+  reveal/Revoke, PNG sentinels and legitimate overlay preservation, native cropped
+  screenshot/AVI/checkpoint pixels, nested leases, capture errors, cancellation
+  without publication and stale-document rejection. Initial sandbox startup
+  aborted with SIGABRT; only the desktop executions count as passes. Intermediate
+  test corrections handled CSS transition completion, the transformed toolbar's
+  fixed-position coordinate system, display-profile PNG conversion, and generating
+  native frames before capture. None of those failed attempts is counted as a pass.
+- Same `ARES_HOST` and Node/Electron command prefix:
+  `tests/electron-native-video.js` — `NATIVE_VIDEO_PASS`, actual GB/NES pixels,
+  independent video surfaces, full-rate submission, overlay/capture provenance,
+  reload/graphics-context recovery and native disconnect. Electron reported disposed
+  render-frame warnings during the intentional crash; the assertions passed.
+  Its first named run rejected a personal `ARES_SAVE_DIR`; the corrected fixture
+  uses named storage defaults.
+- Same prefix: `tests/electron-exports.js` — `PLUGIN_EXPORT_UI_PASS`, native frozen
+  observer sequences, bounded recording and publication, stale/reset cleanup,
+  user-gesture enforcement and stubbed clipboard/pickers. An initial named variant
+  could not find its personal workspace; the final fixture retains that personal
+  workspace and explicitly approves external status queries.
+- First full `mise exec node@24.22.0 -- npm run accept` (desktop access):
+  [run-T6EMhg](../artifacts/acceptance/run-T6EMhg/summary.json) passed configure,
+  native build and TypeScript; **352/353** fixture tests passed. It stopped because
+  `script-observer-consumer.test.cjs` provides a partial `window` mock without
+  `addEventListener`. The capture import cleanup hook now checks that capability.
+  Later gates were unrun in that attempt. The final full run below supersedes it;
+  no rebuild overlapped its fixture workers.
+- After the partial-window import fix, `mise exec node@24.22.0 -- node --test tests/script-observer-consumer.test.cjs tests/session-presentation.test.js tests/video-source.test.js`
+  — **6/6 passed**, no skips/failures.
+- Second full `mise exec node@24.22.0 -- npm run accept`:
+  [run-n3W1lc](../artifacts/acceptance/run-n3W1lc/summary.json) passed configure,
+  native/TypeScript builds, **353/353 fixtures** with zero skips/failures, native
+  smoke and electron-local-ai/session/shutdown. MCP passed the corrected AVI clock
+  assertion, then stopped at its old wrong-instance expectation: task 5's explicit
+  unavailable target returns `app_not_running`. That expectation is now updated;
+  later gates in this attempt were unrun.
+- With `ARES_HOST=/Users/bschlenk/Developer/forks/ares/build-electron-acceptance/bin/ares-electron-host`,
+  independent desktop commands (`mise exec node@24.22.0 -- npx electron`) passed:
+  `tests/electron-mcp.js`, `tests/electron-plugin-tools.js`,
+  `tests/electron-reload.js`, `tests/electron-agent-integration.js`, and
+  `tests/electron-recovery.js --disable-plugins`. Legacy external integration
+  fixtures now use named sessions for renderer plugin management or explicitly
+  Allow personal access before protected operations. Recovery preseeds a named
+  generation and verifies its exact data; the copied-package fixture likewise
+  follows its named generation rather than assuming personal plugin paths.
+  Personal runtime-setting and packaged-helper fixtures retain personal mode and
+  perform in-app Allow. Launch isolation explicitly requests a named session.
+  These are fixture adaptations, not changes to authorization policy. The reload
+  check intentionally produces stale-scope diagnostics during invalid candidates;
+  all assertions passed.
+- Third full `mise exec node@24.22.0 -- npm run accept`:
+  [run-60PpBg](../artifacts/acceptance/run-60PpBg/summary.json) passed **353/353
+  fixtures**, native smoke and every desktop gate through named managed recovery,
+  including MCP, reload/plugin tools, both presentation pixel modes, external
+  access and three selection modes (**24 gates passed**). The endpoint-independent
+  recovery variant then assumed `--no-services` disabled a named endpoint, contrary
+  to task 6's implicit named-service contract. It now explicitly closes the endpoint
+  before asserting reset/restore remains refused by lifecycle ownership. Its
+  separate rerun passed, as did all three personal agent-setting modes and the
+  named CLI recovery fixture. This failed full command is not counted as a pass;
+  the final run below records the combined result.
+- Remaining live checks (same acceptance host, `ARES_BACKGROUND_TEST=1`,
+  `ARES_SILENT=1`, pinned Node) passed sequentially:
+  `node tests/session-selection-live.js`, `node tests/personal-windows-live.js`,
+  `node tests/profile-live.cjs`, `node tests/session-context-live.js`,
+  `node tests/session-storage-live.js`, `node tests/launch-live.cjs`.
+  The first personal-windows continuation correctly rejected old preapproval-era
+  external loads with `access_required`. Storage fixtures now simulate Allow in
+  disposable processes. For production New Window copies, the personal-windows
+  harness appends that simulation only to its disposable copied installation;
+  **no production auto-approval flag or startup hook was added**. The final passes
+  cover actual independent battery bytes and persistent reopen, named-only startup
+  opening multiple personal windows, save conflicts without replacing games,
+  shared settings and child installation survival, crash recovery and checkout
+  rebuild isolation.
+- `ARES_HOST=.../build-electron-acceptance/bin/ares-electron-host mise exec node@24.22.0 -- node scripts/package-macos.js /tmp/ares-task7-package-1794710128632/Ares.app`
+  passed. Same host/pinned Node: `node tests/package-live.cjs /tmp/ares-task7-package-1794710128632/Ares.app`
+  — `PACKAGE_MCP_PASS`; `node tests/packaged-agent-ui.cjs /tmp/ares-task7-package-1794710128632/Ares.app`
+  — `PACKAGED_AGENT_UI_PASS`. The schema inventory now registers scoped tools as
+  the real MCP adapter does. Copied-package evidence includes real stdio, native
+  generated-media captures/recording, TSX reload and journal/recovery data in the
+  named generation, local HTTP/WebSocket fixture traffic, confined helper/loader
+  access, signal recovery/fresh credentials/no mutation replay, and helper install
+  in a temporary home with personal Allow. The existing Seatbelt helper warning
+  was reported; all assertions passed. These automated checks do **not** measure
+  Dock hover strings or human icon activation.
+- Fourth full command:
+  [run-MClIlH](../artifacts/acceptance/run-MClIlH/summary.json) again passed
+  **353/353 fixtures**, native smoke and desktop gates through save states
+  (**17 gates passed**). The named presentation gate then exposed a fixture focus
+  assumption: showing a window did not guarantee keyboard focus after previous
+  desktop apps exited, so `:focus-visible` never activated. The fixture now focuses
+  the native app/window/web contents and verifies `document.hasFocus()` before
+  keyboard reveal. Both named and personal presentation modes then passed twice
+  each sequentially against the acceptance host. This failed command is not
+  counted as a pass; no product behavior or timing threshold was weakened.
+- Independent acceptance-host desktop checks also passed:
+  `tests/electron-window-chrome.js` (custom game/system title, editing/split layouts,
+  title-bar safe area and fullscreen) and `tests/electron-playback-controls.js`
+  (native fast-forward, release/remap/pointer hold, focus/manual/MCP pause precedence
+  and badge). The title-chrome fixture also needed explicit native application
+  focus before its pre-existing `document.hasFocus()` assertion; its initial
+  unfocused attempt timed out and is not counted as a pass.
+
+
+Final full command (no overlapping rebuilds):
+`mise exec node@24.22.0 -- npm run accept`, desktop access, from `electron-ui/`.
+[run-hJ1Kfw summary](../artifacts/acceptance/run-hJ1Kfw/summary.json) and
+[fixture log](../artifacts/acceptance/run-hJ1Kfw/fixture-regressions.log) record
+**ACCEPTANCE_PASS: 38/38 gates and 353/353 fixtures**, zero failures/skips/cancellations.
+All configure/build/smoke, Electron, session/approval/presentation pixel, native
+storage/profile/launch, copied-package and packaged-helper gates passed together.
+The run metadata records base `8540c98cd0798c11454aef700364fe6f385a0a3b` with a dirty
+task 7 tree; the implementation commit above captures the final sources.
+
+The eleven-criterion mapping is in `electron-ui/ACCEPTANCE.md`. Packaged Dock hover
+names and per-icon activation, human packaged title/banner/toolbar reveal, and
+physical-controller gameplay with pending nonmodal approval remain **manual/unrun**.
+Development `app.getName()` and automated copied-package passes do not measure OS
+Dock naming. No supported/unsupported Dock hover behavior is claimed without that
+measurement, and signed bundle metadata is never rewritten at runtime. External
+renderer plugin mutations remain deliberately named-only. Tasks 1–7 are implemented
+within their recorded scopes; **issue #37 remains open** for release acceptance
+and the documented compatibility limit.

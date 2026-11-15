@@ -100,7 +100,7 @@ app.whenReady().then(async () => {
   assert.equal(fs.readFileSync(wavPath).toString('ascii', 0, 4), 'RIFF');
   const moviePath = path.join(temporary, 'electron recording.avi');
   const movie = await mcp.tool('video_stop', { path: moviePath });
-  assert.equal(movie.frames, 2); assert.equal(movie.frame_kind, 'unavailable');
+  assert.equal(movie.frames, 2); assert.equal(movie.frame_kind, 'primary-screen-frame');
   assert.equal(fs.readFileSync(moviePath).toString('ascii', 8, 12), 'AVI ');
   enter('paused reload');
   const loaded = once(window.webContents, 'did-finish-load'); window.webContents.reload(); await loaded;
@@ -108,7 +108,7 @@ app.whenReady().then(async () => {
   assert.equal((await mcp.tool('read_memory', { region: ram.id, addr: 240, length: 4 })).hex, 'deadbeef');
   assert.equal((await mcp.tool('write_memory', { region: ram.id, addr: 240, hex_bytes: baseline.hex })).written, 4);
   enter('wrong instance and reconnect');
-  const wrong = peer('wrong-instance'); await wrong.initialize(); assert.equal((await wrong.tool('emu_status')).error, 'wrong_instance');
+  const wrong = peer('wrong-instance'); await wrong.initialize(); assert.equal((await wrong.tool('emu_status')).error, 'app_not_running');
   assert.equal((await mcp.tool('resume', { keep_overrides: true })).error, 'unavailable');
   assert.equal((await mcp.tool('step')).error, 'unavailable');
   const reconnect = new LocalServiceClient(serviceHost.metadataFile, serviceHost.instance);

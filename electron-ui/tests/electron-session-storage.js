@@ -1,12 +1,13 @@
 import {app,BrowserWindow} from 'electron';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import {appContext,sessions,serviceHost,preferences} from '../dist/main.js';
+import {appContext,sessions,serviceHost,preferences,externalAccess} from '../dist/main.js';
 
 app.whenReady().then(async()=>{
   try{
     for(let attempt=0;attempt<500&&(!serviceHost.metadataFile||!fs.existsSync(serviceHost.metadataFile)||!BrowserWindow.getAllWindows().length);attempt++)await new Promise(resolve=>setTimeout(resolve,20));
     const {LocalServiceClient}=await import('../dist/services/local-endpoint.js');
+    if(appContext.kind==='personal'){externalAccess.request('storage-fixture');externalAccess.decide(true);}
     const client=new LocalServiceClient(serviceHost.metadataFile,serviceHost.instance);
     await preferences.set('emulation.pauseOnFocusLoss',false);
     await client.manage({operation:'load_rom',path:process.env.ARES_STORAGE_ROM,system:'Game Boy'});client.close();

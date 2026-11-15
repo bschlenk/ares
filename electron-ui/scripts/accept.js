@@ -117,6 +117,8 @@ async function main() {
     ['electron-workspace', 'electron-workspace.js', []],
     ['electron-settings', 'electron-settings.js', []],
     ['electron-save-states', 'electron-checkpoints.js', []],
+    ['electron-session-presentation', 'electron-session-presentation.js', []],
+    ['electron-personal-presentation', 'electron-session-presentation.js', ['--personal-test']],
     ['electron-external-access', 'electron-external-access.js', []],
     ['electron-session-selection', 'electron-session-selection.js', []],
     ['electron-session-selection-disabled-named', 'electron-session-selection.js', ['--disabled-named-test']],

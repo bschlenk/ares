@@ -155,3 +155,12 @@ details > summary { cursor:default; font-weight:550; padding:12px 0; }
 .state-preview {display:grid;place-items:center;}
 .state-preview {position:relative;}
 .state-preview img {position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);}
+
+/* Exclude app chrome for any presented capture rectangle; game/plugin overlays remain. */
+html[data-game-capture] [data-capture-exclude],
+html[data-game-capture] [data-capture-exclude] * { visibility:hidden !important; }
+#external-access-prompt { position:fixed; top:42px; right:16px; z-index:10000; background:var(--panel); color:var(--text); padding:12px; border-radius:8px; max-width:360px; }
+#external-access-banner { display:flex; align-items:center; gap:6px; max-width:340px; font-size:12px; }
+#video-controls #external-access-banner button { width:auto; flex-shrink:0; }
+#named-session-banner { max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; padding:0 6px; }
+#video-controls { max-width:calc(100% - 24px); height:auto; min-height:48px; flex-wrap:wrap; justify-content:center; }

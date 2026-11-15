@@ -28,6 +28,8 @@ export type NativeCommand =
   | { type: 'clear' }
   | { type: 'report'; report: RendererStats };
 export interface AresBridge {
+  windowPresentation(): Promise<import('./sessions/presentation.js').WindowPresentation>;
+  onWindowPresentation(callback:(snapshot:import('./sessions/presentation.js').WindowPresentation)=>void):()=>void;
   sessionData(request: {operation: 'list' | 'archives' | 'reset' | 'restore'; name?: string; mode?: 'fresh' | 'inherit-personal'; archiveId?: string}): Promise<any>;
   checkpoints(request:{operation:'status'|'list'|'save'|'load'|'rename'|'delete'|'reveal';session?:string;id?:string;name?:string}):Promise<any>;
   onCheckpointsChanged(callback:()=>void):()=>void;

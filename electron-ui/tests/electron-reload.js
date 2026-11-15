@@ -60,7 +60,7 @@ const entry = path.join(source, 'plugin.js')
 fs.writeFileSync(entry, plugin(1))
 process.env.ARES_DEFAULT_PLUGINS = '0'
 let peer
-const { sessions, plugins, serviceHost, stopNative, appContext } =
+const { sessions, plugins, serviceHost, stopNative, appContext, externalAccess } =
   await import('../dist/main.js')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const until = async (fn, label) => {
@@ -298,6 +298,7 @@ app.whenReady().then(async () => {
     await version(6)
     assert.deepEqual(await counts(), before)
     enter('external MCP owner survives replacement')
+    externalAccess.request('reload-fixture');externalAccess.decide(true)
     peer = new StdioPeer(
       process.execPath,
       [

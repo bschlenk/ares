@@ -299,3 +299,68 @@ selection checks passed separately. The access desktop check additionally proves
 that a settings write queued behind the actual preferences lock cannot commit
 after Revoke. An intermediate run overlapped a rebuild and had missing compiled
 modules; it is explicitly invalidated in the implementation report.
+
+## Task 7: identity, toolbar and capture integration
+
+Implemented in **`TASK7_COMMIT`**. Task 7 extends main-owned state with a revisioned window presentation snapshot.
+The same title formatter feeds startup application naming, BrowserWindow titles
+and the custom header. Session names survive empty games, ROM switches, native
+disconnect and renderer reload. Named banners have no action; personal banners
+explain real-data access and expose Revoke. All toolbar visibility writers,
+including demonstration polling, preserve identification in empty windows.
+
+Presented UI captures hide explicit app chrome through the common video capture
+lease, regardless of capture rectangle. Nested captures restore only on the last
+release. Errors and client cancellation release in `finally`; renderer navigation
+invalidates the lease and prevents publication. The prior two-second expiry was
+removed because it could reveal chrome during a slow capture. Legitimate overlays
+remain. Native screenshot/AVI/checkpoint paths use native pixels; plugin frame
+exports serialize native observer data and never sample DOM chrome.
+
+`electron-session-presentation.js` runs separately for named and personal windows,
+with generated Game Boy media, private service directories and disposable data.
+It checks titles/reload/disconnect, toolbar idle/keyboard focus, personal Revoke,
+magenta banner exclusion and green overlay preservation in panel/full-window PNGs,
+native presented crops/AVI pixels, managed preview pixels, nested leases lasting beyond two
+seconds, injected capture failure, client cancellation and reload during capture.
+The small pixel tolerance accounts for PNG/display color-profile conversion.
+Exact command outcomes and the final full-suite result are in the
+[implementation report](sessions/IMPLEMENTATION.md#task-7--identification-toolbar-and-captures).
+
+Final mapping to the eleven spec criteria (prior task evidence remains linked in
+that report; a row is not a claim of packaged/manual completion):
+
+| Criterion | Automated evidence | Remaining release limits |
+| --- | --- | --- |
+| 1: New personal windows from named startup | `personal-windows-live.js`, `electron-personal-windows.js`, task 3 | Packaged Dock click/activation manual check unrun |
+| 2: Shared personal stores and ownership | `personal-windows.test.js`, `session-storage.test.js`, `session-storage-live.js`, tasks 2–3 | Generated Game Boy, PlayStation, N64 and ZX Spectrum storage fixtures; not every firmware/peripheral combination |
+| 3: Independent persisted named data | `session-context-live.js`, `session-storage-live.js`, tasks 1–2 | Private media and every supported core not exercised |
+| 4: Lazy inheritance, including absent saves | `session-storage.test.js`, `session-storage-live.js`, task 2 | Same peripheral/core coverage limits |
+| 5: Initial settings clone then divergence | `session-repository.test.js`, `personal-windows.test.js`, tasks 1–3 | No outstanding implemented-scope limit |
+| 6: Managed overlay, protected origins, file tools | `session-recovery.test.js`, `electron-session-recovery.js`, `electron-mcp.js`, task 4 | Existing serializer support limits apply |
+| 7: Reset, archive and nondestructive restore | `session-recovery.test.js`, `electron-session-recovery.js`, task 4 | No automatic archive deletion; cross-core serializer matrix not exhaustive |
+| 8: Deterministic scoped selection | `session-selection.test.js`, `session-selection-live.js`, `electron-session-selection.js`, task 5 | No machine-global selection |
+| 9: Nonblocking approval and no delayed execution | `external-access.test.js`, `electron-external-access.js`, task 6 | Physical-controller gameplay/manual packaged approval unrun |
+| 10: Revoke, cleanup, fresh grants | `external-access-native.test.js`, `electron-external-access.js`, task 6; personal presentation test | External renderer plugin mutations remain deliberately named-only |
+| 11: Durable identity, toolbar and clean captures | `session-presentation.test.js`, `video-source.test.js`, both presentation desktop modes; existing video/export lanes | Packaged Dock hover naming and human UI checks unrun |
+
+macOS: supported `app.setName(<session> — ares)` runs before readiness and after
+logical data-root selection. The development regression verifies the Electron
+application name, not the OS Dock hover string. Bundle display metadata is never
+rewritten at runtime. **Copied-packaged Dock hover names and independent icon
+activation have not been manually measured in this task.** No claim is made that
+macOS honors per-process names over the fixed bundle display name. These checks,
+physical-controller approval gameplay and packaged title/banner/toolbar reveal
+remain explicit release limits; issue #37 remains open until they are accounted
+for. The automated copied-package passes do not substitute for those checks.
+
+
+Final task 7 full command: `mise exec node@24.22.0 -- npm run accept` (desktop access)
+— **ACCEPTANCE_PASS: 38/38 gates, 353/353 fixtures**, zero skipped/failed/cancelled
+fixtures. [run-hJ1Kfw](artifacts/acceptance/run-hJ1Kfw/summary.json) records configure,
+native/TypeScript builds, smoke, every Electron gate including both presentation
+modes and access/recovery checks, live multiwindow/storage/profile/launch checks,
+packaging, copied-package MCP and packaged helper UI. Earlier failed attempts and
+their fixture/import fixes are documented in the implementation report; none is
+counted as a pass. This run used the dirty task 7 tree based on `8540c98cd`; the
+implementation commit records its final sources. Manual release limits above remain.

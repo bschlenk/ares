@@ -1,3 +1,4 @@
+import {formatWindowTitle, type WindowPresentation} from './sessions/presentation.js';
 import {ExternalAccessController, externalWork, guardExternalWork} from './services/external-access.js';
 import {publishArtifact} from './services/artifact-writer.js';
 import {nextOpenSequence} from './sessions/discovery.js';
@@ -99,7 +100,7 @@ export const appContext: AppContext = (() => {
     app.exit(1)
     throw error
   }
-  app.setName('ares')
+  app.setName(formatWindowTitle(context.sessionName))
   app.setPath('userData', context.runtimeRoot)
   app.setPath('sessionData', path.join(context.runtimeRoot, 'browser'))
   fs.mkdirSync(app.getPath('sessionData'), {recursive: true, mode: 0o700})
@@ -111,6 +112,25 @@ sessionRepository?.advertise(appContext, profileLock!, false, process.env.ARES_S
 fs.writeFileSync(path.join(appContext.runtimeRoot, 'lock-holder.json'), JSON.stringify({pid:process.pid,instance:appContext.instanceId,kind:appContext.kind,session:appContext.sessionId,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600})
 const openedOrder = nextOpenSequence(prepareManagementRoot(appContext.personalRoot))
 let discoveryState: {title?: string; running?: boolean; paused?: boolean} = {}
+let presentationRevision = 0
+let presentationGame: {title?: string; system: string} = {system: ''}
+function windowPresentation(): WindowPresentation {
+  return {revision:presentationRevision,instance:appContext.instanceId,kind:appContext.kind,
+    sessionName:appContext.sessionName,title:formatWindowTitle(appContext.sessionName,presentationGame.title),
+    gameTitle:presentationGame.title,system:presentationGame.system,access:externalAccess.snapshot()}
+}
+function publishPresentation() {
+  ++presentationRevision
+  if(window && !window.isDestroyed() && !window.webContents.isDestroyed()) {
+    const snapshot=windowPresentation()
+    window.setTitle(snapshot.title)
+    window.webContents.send('window-presentation',snapshot)
+  }
+}
+function setPresentationGame(title?: string, system = '') {
+  if(presentationGame.title===title && presentationGame.system===system)return
+  presentationGame={title,system};publishPresentation()
+}
 const storageCoordinator = new StorageCoordinator()
 const requestedSaveDirectory = process.env.ARES_SAVE_DIR ? profileSaves(appContext.dataRoot, process.env.ARES_SAVE_DIR) : undefined
 const personalSaveDirectory = personalStorageDirectory(appContext, requestedSaveDirectory, lock => {profileLock = lock})
@@ -155,7 +175,7 @@ protocol.registerSchemesAsPrivileged([
 ])
 let recoveryStarting=false,recoveryTransition=false
 export const sessions = new SessionRouter((reply) => {
-  if(reply.ok && reply.result) { const state=reply.result as any; discoveryState={title:state.title, running:state.paused === false, paused:state.paused}; }
+  if(reply.ok && reply.result) { const state=reply.result as any; discoveryState={title:state.title, running:state.paused === false, paused:state.paused}; setPresentationGame(state.title,state.system); }
   if(recoveryStarting)return
   if(!active?.recoveryFailure)plugins.observe(reply)
   if (window && !window.isDestroyed() && !window.webContents.isDestroyed())
@@ -263,6 +283,7 @@ async function pluginAction(
 }
 export const externalAccess=new ExternalAccessController(appContext.instanceId,appContext.kind==='named',()=>{
   if(window&&!window.isDestroyed())window.webContents.send('external-access',externalAccess.snapshot());
+  publishPresentation();
 },()=>discoveryState.title);
 export function revokeExternalAccess(){return externalAccess.revoke(async()=>{
   serviceHost.invalidateExternal();
@@ -384,11 +405,12 @@ export const serviceHost = new LocalServiceHost(sessions, async (params, guard, 
         rect = await window.webContents.executeJavaScript(`(() => {const all=[...document.querySelectorAll('[data-plugin-panel]')];const e=all.find(e=>e.dataset.pluginPanel===${selector} && e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0);if(!e)return;const r=e.getBoundingClientRect();return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)}})()`)
         if (!rect) throw new Error('panel_not_open')
       }
-      const captureLease = await window.webContents.executeJavaScript('window.beginVideoCapture()') as string
+      const captureLease = await window.webContents.executeJavaScript('window.beginVideoCaptureReady()') as string
       try {
         const before=await window.webContents.executeJavaScript('({overlay:window.overlaySnapshot?.()??null,surfaces:window.videoSnapshot?.()??[]})')
         const image = await window.webContents.capturePage(rect)
         const after=await window.webContents.executeJavaScript('({overlay:window.overlaySnapshot?.()??null,surfaces:window.videoSnapshot?.()??[]})')
+        if(!await window.webContents.executeJavaScript(`window.hasVideoCapture?.(${JSON.stringify(captureLease)})===true`))throw new Error('capture_renderer_changed')
         const frame_reference=before.overlay?.frame&&after.overlay?.frame&&JSON.stringify(before.overlay)===JSON.stringify(after.overlay)?after.overlay.frame:null
         const overlay_geometry=frame_reference?{coordinate_space:'overlay_css',rect_coordinate_space:'window_css',...after.overlay.size,rect:after.overlay.rect,capture_rect:rect??null}:null
         const video_surfaces=after.surfaces.filter((surface:any)=>surface.visible&&(!rect||surface.rect.x<rect.x+rect.width&&surface.rect.x+surface.rect.width>rect.x&&surface.rect.y<rect.y+rect.height&&surface.rect.y+surface.rect.height>rect.y)).map((surface:any)=>{
@@ -682,6 +704,7 @@ async function stop() {
   try{await pairedRecovery.idle();await autosaveBeforeStop(old);if(old.checkpointHash)await pairedRecovery.disarmGame(old.checkpointHash)}finally{recoveryTransition=false}
   guardExternalWork();
   active = null
+  discoveryState={};setPresentationGame()
   plugins.disconnect()
   sessions.detach()
   // EOF also releases the native command reader. Escalate only for a stuck host.
@@ -811,6 +834,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
         port?.postMessage({reset:true,system:session.system,reason:'native_disconnected'});
         if(window&&!window.isDestroyed()&&!window.webContents.isDestroyed())window.webContents.send('session-state',{protocol:1,id:'native-disconnected',...(sessions.identity??identity),ok:false,error:'native_host_disconnected'});
         active = null
+        discoveryState={};setPresentationGame()
         plugins.disconnect()
         sessions.detach()
         status(
@@ -863,7 +887,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     await sessions.request('session.status');
     if(startupError)throw startupError;
   })();
-  if (window && !window.isDestroyed()) window.setTitle(gameTitle ? `${gameTitle} — ares` : 'ares')
+  setPresentationGame(gameTitle,system)
   void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window?.isFocused() ?? false).catch(error => appLogs.write('focus-pause', 'error', error))
   void startup.then(()=>client.request('session.status')).then(reply => {
     removeConfiguration()
@@ -974,6 +998,7 @@ app
       minWidth: 650,
       minHeight: 480,
       backgroundColor: '#000000',
+      title: formatWindowTitle(appContext.sessionName),
       ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),
       webPreferences: {
         preload: path.join(appRoot, 'dist/preload.js'),
@@ -991,6 +1016,10 @@ app
     window.webContents.on('render-process-gone', () => command('fastforward 0'));
     window.on('enter-full-screen', () => window.webContents.send('window-fullscreen', true));
     window.on('leave-full-screen', () => window.webContents.send('window-fullscreen', false));
+    ipcMain.handle('window.presentation', event => {
+      if(event.sender!==window.webContents || event.senderFrame!==window.webContents.mainFrame)throw new Error('invalid_sender');
+      return windowPresentation();
+    });
     ipcMain.handle('window.fullscreen', event => {
       if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('invalid_sender');
       return window.isFullScreen();

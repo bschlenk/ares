@@ -38,6 +38,9 @@ try {
   const sourceDirectory=path.join(root,'source-launch');fs.mkdirSync(sourceDirectory);
   const installation={appRoot:new URL('../',import.meta.url).pathname,executable:electron,packaged:false};
   const sourcePlan=launchPlan(installation,profile);snapshotCheckout(installation,sourcePlan,sourceDirectory);
+  // Simulate Allow in this disposable installation and its New Window copies.
+  // Production startup has no auto-approval switch or fixture hook.
+  fs.appendFileSync(path.join(sourcePlan.args[0],'dist/main.js'),`\napp.whenReady().then(()=>{if(appContext.kind==='personal'){externalAccess.request('personal-windows-fixture');externalAccess.decide(true);}});\n`);
   fs.mkdirSync(path.join(sourcePlan.args[0],'tests'));fs.copyFileSync(new URL('./electron-personal-windows.js',import.meta.url),path.join(sourcePlan.args[0],'tests/electron-personal-windows.js'));
   const named=launch('parent',sourcePlan);await until(()=>named.log.includes('PERSONAL_READY'));
   assert.equal((await connections()).filter(c=>c.kind==='personal').length,0);

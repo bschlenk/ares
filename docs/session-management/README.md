@@ -25,12 +25,15 @@ product requirements.
   (`feat(sessions): add discovery and scoped CLI/MCP selection`).
 - Task 6 implementation commit: **`9d0b7ada2`**
   (`feat(sessions): add personal approval and native revocation barrier`).
-- Next work: **[task 7 — identification, toolbar, and captures](07-identification-toolbar-captures.md)**.
+- Task 7 implementation commit: **`TASK7_COMMIT`**
+  (`feat(sessions): identify windows and exclude app chrome from captures`).
+- Next work: **[manual release acceptance](ACCEPTANCE.md)** — packaged macOS Dock
+  hover/activation and human gameplay/toolbar checks; issue #37 remains open.
 - Evidence: [implementation report](../../electron-ui/sessions/IMPLEMENTATION.md),
   [data-root audit](../../electron-ui/sessions/DATA-ROOT-AUDIT.md), and
   [repository acceptance documentation](../../electron-ui/ACCEPTANCE.md).
 
-Tasks 1–6 are implemented within their documented scopes. Named sessions persist
+Tasks 1–7 are implemented within their documented scopes. Named sessions persist
 independent storage/settings, personal windows coordinate shared stores, and scoped
 CLI/MCP targeting uses typed discovery. Personal windows now have a main-owned
 memory-only approval controller, nonmodal Allow/Deny, window-wide grants,
@@ -44,7 +47,7 @@ authorized even when copied personal settings disabled integration.
 session. Their shared human SDK callbacks cannot carry independent external
 invocation ownership; personal requests fail closed with
 `plugin_management_requires_named_session`. Human plugins are preserved by Revoke.
-Task 7 must retain this boundary unless it implements and verifies that provenance.
+Task 7 retains this boundary; lifting it requires verified per-invocation provenance.
 
 ## Task list and status
 
@@ -61,15 +64,20 @@ second execution order.
 | 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Complete** | `e89674814` |
 | 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Complete** | `3f358202e` |
 | 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | **Complete (renderer plugin management gated)** | `9d0b7ada2` |
-| 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | **Next** | — |
+| 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | **Complete (manual release limits recorded)** | `TASK7_COMMIT` |
 
-No task is currently in progress. Task 6 adds five access-specific fixture tests,
-a 60-test focused pass and independent Electron approval/CLI cancellation checks.
-The final full acceptance run passed 352/352 fixtures, native smoke and three
-desktop checks, then stopped at the previously documented MCP Game Boy video-clock
-assertion. Exact commands and validation limits are recorded in the implementation
-report. Full feature acceptance, packaged/manual approval and Dock
-checks, and task 7 presentation/capture acceptance remain outstanding.
+Task 7 adds main-owned persistent titles, toolbar identity/access banners and common
+capture-scope chrome exclusion. The final full `npm run accept` under Node 24.22.0
+passes **38/38 gates and 353/353 fixtures**, including both presentation pixel modes,
+approval/revocation, live multiwindow/storage/launch checks and copied-package gates.
+See [the implementation report](../../electron-ui/sessions/IMPLEMENTATION.md#task-7--identification-toolbar-and-captures)
+for exact commands, earlier failed attempts and the final
+[run-hJ1Kfw evidence](../../electron-ui/artifacts/acceptance/run-hJ1Kfw/summary.json).
+The eleven-criterion evidence map is in [repository acceptance](../../electron-ui/ACCEPTANCE.md#task-7-identity-toolbar-and-capture-integration).
+No numbered implementation task remains. Packaged manual Dock hover/activation,
+physical-controller pending approval and human title/banner/toolbar reveal checks
+remain unrun; no packaged Dock naming support or limitation is inferred from the
+automated passes. The named-only external renderer plugin boundary remains explicit.
 
 ## Working agreement for each agent
 

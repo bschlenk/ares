@@ -1,6 +1,8 @@
 import type { AresBridge, RendererStats } from './bridge.js';
 declare global {
   interface Window {
+    beginVideoCaptureReady:typeof import('./video/capture.js').beginVideoCaptureReady;
+    hasVideoCapture:typeof import('./video/capture.js').hasVideoCapture;
     beginVideoCapture:typeof import('./video/capture.js').beginVideoCapture;
     endVideoCapture:typeof import('./video/capture.js').endVideoCapture;
     videoSnapshot:typeof import('./video/surfaces.js').videoSnapshot;

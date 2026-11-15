@@ -7,7 +7,7 @@ const { StdioPeer } = require('./stdio-peer.cjs')
 const root = path.resolve(__dirname, '..')
 const temporary = fs.mkdtempSync('/tmp/ares-launch-')
 const report = path.join(temporary, 'renderer.json')
-const child = spawn(process.execPath, [path.join(root, 'scripts/start.js')], {
+const child = spawn(process.execPath, [path.join(root, 'scripts/start.js'), '--session-name', 'launch-fixture'], {
   cwd: root,
   env: { ...process.env, ARES_PROFILE_DIR: path.join(temporary, 'profile'), ARES_SAVE_DIR: '', ARES_ROM: '', ARES_BACKGROUND_TEST: '1', ARES_DEFAULT_PLUGINS: '0', ARES_SILENT: '1', ARES_ENABLE_SERVICES: '1', ARES_SERVICE_DIR: path.join(temporary, 'ipc'), ARES_AUTOTEST: '1', ARES_TEST_SECONDS: '12', ARES_REPORT: report },
   stdio: ['ignore', 'pipe', 'pipe'],
