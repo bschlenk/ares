@@ -649,7 +649,7 @@ claimed**. Task 7 remains next; issue #37 remains open.
 
 ## Task 7 — identification, toolbar and captures
 
-Implemented in **`TASK7_COMMIT`** on `feat/session-management` after `8540c98cd` (task 6 handoff).
+Implemented in **`6c7f6fb12`** on `feat/session-management` after `8540c98cd` (task 6 handoff).
 Main owns a revisioned identity/title/access snapshot and one title formatter.
 The sandbox subscribes before its initial snapshot request and ignores older
 revisions. Both native and custom titles retain named identity through startup,

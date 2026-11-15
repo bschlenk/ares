@@ -25,7 +25,7 @@ product requirements.
   (`feat(sessions): add discovery and scoped CLI/MCP selection`).
 - Task 6 implementation commit: **`9d0b7ada2`**
   (`feat(sessions): add personal approval and native revocation barrier`).
-- Task 7 implementation commit: **`TASK7_COMMIT`**
+- Task 7 implementation commit: **`6c7f6fb12`**
   (`feat(sessions): identify windows and exclude app chrome from captures`).
 - Next work: **[manual release acceptance](ACCEPTANCE.md)** — packaged macOS Dock
   hover/activation and human gameplay/toolbar checks; issue #37 remains open.
@@ -64,7 +64,7 @@ second execution order.
 | 4 | [Managed states and recovery](04-managed-states-recovery.md) | **Complete** | `e89674814` |
 | 5 | [Discovery and scoped selection](05-discovery-scoped-selection.md) | **Complete** | `3f358202e` |
 | 6 | [Approval, cancellation, and revocation](06-approval-cancellation-revocation.md) | **Complete (renderer plugin management gated)** | `9d0b7ada2` |
-| 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | **Complete (manual release limits recorded)** | `TASK7_COMMIT` |
+| 7 | [Identification, toolbar, and captures](07-identification-toolbar-captures.md) | **Complete (manual release limits recorded)** | `6c7f6fb12` |
 
 Task 7 adds main-owned persistent titles, toolbar identity/access banners and common
 capture-scope chrome exclusion. The final full `npm run accept` under Node 24.22.0

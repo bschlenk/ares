@@ -1,7 +1,7 @@
 # Task 7: Identification, toolbar, and captures
 
 Status: **Complete (implemented and automated integration verified; manual release limits recorded)**.
-Implementation commit: **`TASK7_COMMIT`**. Depends on tasks 1–6.
+Implementation commit: **`6c7f6fb12`**. Depends on tasks 1–6.
 
 Read [the shared preamble](README.md) and
 [shared acceptance requirements](ACCEPTANCE.md) first. This task includes the

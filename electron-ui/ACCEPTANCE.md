@@ -302,7 +302,7 @@ modules; it is explicitly invalidated in the implementation report.
 
 ## Task 7: identity, toolbar and capture integration
 
-Implemented in **`TASK7_COMMIT`**. Task 7 extends main-owned state with a revisioned window presentation snapshot.
+Implemented in **`6c7f6fb12`**. Task 7 extends main-owned state with a revisioned window presentation snapshot.
 The same title formatter feeds startup application naming, BrowserWindow titles
 and the custom header. Session names survive empty games, ROM switches, native
 disconnect and renderer reload. Named banners have no action; personal banners

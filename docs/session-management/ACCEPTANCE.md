@@ -89,7 +89,7 @@ approval/cancellation and the native revoke barrier, with renderer plugin manage
 deliberately restricted to named sessions. Its focused 60-test lane and independent
 desktop approval/CLI checks pass. The final full run passes 352 fixtures and reaches
 the previously documented MCP video-clock mismatch. Final task 6 evidence is in
-the implementation report. Task 7 is now implemented in `TASK7_COMMIT`. Its final full lane passes 38/38 gates
+the implementation report. Task 7 is now implemented in `6c7f6fb12`. Its final full lane passes 38/38 gates
 and 353/353 fixtures, with an eleven-criterion evidence map in
 [repository acceptance](../../electron-ui/ACCEPTANCE.md#task-7-identity-toolbar-and-capture-integration).
 Manual packaged Dock/gameplay checks and the named-only renderer plugin boundary
