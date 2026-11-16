@@ -4,3 +4,5 @@ export interface CheckpointMetadata {
   state: {bytes: number; sha256: string}; screenshot: {bytes: number; sha256: string; width?: number; height?: number; aspect?: number}; compatibility: Record<string, unknown>;
 }
 export interface CheckpointEntry extends CheckpointMetadata { id: string; screenshotUrl?: string }
+
+export type ScopedCheckpointEntry = CheckpointEntry & {origin: 'personal' | 'session'; reference: string; writable: boolean};

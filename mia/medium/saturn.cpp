@@ -29,6 +29,7 @@ auto Saturn::load(string location) -> LoadResult {
 }
 
 auto Saturn::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   return true;

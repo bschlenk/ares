@@ -14,7 +14,7 @@ export const panelKey = (plugin: string, panel: string) => `plugin:${plugin}:${p
 export function validPanel(value: unknown): value is string {
   return typeof value === 'string' && (value === 'video' || value === 'empty' || /^plugin:[a-z][a-z0-9.-]{0,95}:[a-z][a-z0-9.-]{0,63}$/.test(value));
 }
-export const validShortcut = (value: unknown): value is string => typeof value === 'string' && (value === '' || !['Mod+KeyO', 'Mod+KeyP', 'Mod+Shift+KeyR', 'Mod+Shift+KeyL', 'Mod+KeyQ', 'Mod+KeyW', 'Mod+KeyH', 'Mod+KeyM', 'Mod+KeyC', 'Mod+KeyV', 'Mod+KeyX', 'Mod+KeyA', 'Mod+KeyZ', 'Mod+Shift+KeyZ'].includes(value) && /^(?:Mod|Alt)(?:\+Shift)?\+(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2]))$/.test(value));
+export const validShortcut = (value: unknown): value is string => typeof value === 'string' && (value === '' || !['Mod+KeyN', 'Mod+KeyO', 'Mod+KeyP', 'Mod+Shift+KeyR', 'Mod+Shift+KeyL', 'Mod+KeyQ', 'Mod+KeyW', 'Mod+KeyH', 'Mod+KeyM', 'Mod+KeyC', 'Mod+KeyV', 'Mod+KeyX', 'Mod+KeyA', 'Mod+KeyZ', 'Mod+Shift+KeyZ'].includes(value) && /^(?:Mod|Alt)(?:\+Shift)?\+(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2]))$/.test(value));
 export function validateLayout(input: unknown): WorkspaceLayout {
   const value = input as Record<string, unknown>;
   if (!object(value, ['version', 'root', 'floating']) || value.version !== 1 || !Array.isArray(value.floating) || value.floating.length > 8) throw new Error('invalid_workspace');

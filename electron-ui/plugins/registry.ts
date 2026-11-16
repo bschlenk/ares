@@ -1,3 +1,6 @@
+import {guardExternalWork} from '../services/external-access.js';
+import {storeTransaction} from '../sessions/transactions.js';
+import {publishJson, readJson} from '../sessions/files.js';
 import {PluginNetwork} from './network.js'
 import {PairedRecovery,type RecoveryAccess} from '../services/paired-recovery.js'
 import {PluginJournals} from './journal.js'
@@ -124,7 +127,7 @@ export class PluginRegistry {
     }
   }
   private cache() {
-    return path.join(this.dataRoot, 'artifacts')
+    return this.artifactCache ?? path.join(this.dataRoot, 'artifacts')
   }
   private notify() {
     this.changed(this.catalog())
@@ -456,7 +459,10 @@ export class PluginRegistry {
     private client: SessionClient,
     private currentIdentity: () => SessionIdentity | undefined,
     private changed: (catalog: PluginCatalog) => void = () => {},
+    private artifactCache?: string,
   ) {}
+  private persistedEnabled = new Set<string>();
+  private persistedDirectories = new Set<string>();
   private configFile() {
     return path.join(this.dataRoot, 'enabled.json')
   }
@@ -489,28 +495,43 @@ export class PluginRegistry {
       else if (!startupDisabled)
         for (const id of defaults) this.enabled.add(id)
     }
+    this.persistedEnabled = new Set(this.enabled);
+    this.persistedDirectories = new Set(this.directories);
+    // Defaults are published only by an explicit edit; startup is read-only.
     if (!startupDisabled)
       for (const dir of extra)
         if (!this.directories.includes(dir)) this.directories.push(dir)
     await this.scan(startupDisabled ? [] : extra)
     return this.catalog()
   }
-  private async persist() {
-    const file = this.configFile(),
-      temp = file + '.' + randomUUID()
-    try {
-      await fs.writeFile(
-        temp,
-        JSON.stringify({
-          directories: this.directories,
-          enabled: [...this.enabled],
-        }),
-        { flag: 'wx', mode: 0o600 },
-      )
-      await fs.rename(temp, file)
-    } finally {
-      await fs.rm(temp, { force: true })
-    }
+  private async persist(reset = false, edit?: {id:string; enabled:boolean}) {
+    if (this.configurationError) throw new Error(this.configurationError);
+    const enabled = new Set(this.enabled), directories = new Set(this.directories);
+    const add = [...enabled].filter(id => !this.persistedEnabled.has(id));
+    const remove = [...this.persistedEnabled].filter(id => !enabled.has(id));
+    const addedDirectories = [...directories].filter(dir => !this.persistedDirectories.has(dir));
+    if (!reset && !edit && !add.length && !remove.length && !addedDirectories.length) return;
+    await storeTransaction(this.configFile(), lock => {
+      guardExternalWork();
+      let data: {[key: string]: unknown} = {};
+      try {
+        data = readJson(this.configFile(), 32768);
+        if (!data || typeof data !== 'object' || Array.isArray(data) ||
+          !Array.isArray(data.enabled) || !data.enabled.every(id => typeof id === 'string') ||
+          !Array.isArray(data.directories) || !data.directories.every(dir => typeof dir === 'string')) throw new Error('invalid_plugin_configuration');
+      } catch (error) { if (!reset && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        data = {enabled:[...this.persistedEnabled],directories:[...this.persistedDirectories]};
+      }
+      const latest = new Set(reset ? [] : data.enabled as string[] ?? []);
+      for (const id of add) latest.add(id);
+      for (const id of remove) latest.delete(id);
+      if (edit) { if (edit.enabled) latest.add(edit.id); else latest.delete(edit.id); }
+      data.enabled = [...latest];
+      data.directories = reset ? [] : [...new Set([...(data.directories as string[] ?? []), ...addedDirectories])];
+      if (Buffer.byteLength(JSON.stringify(data)) > 32768) throw new Error('plugin_configuration_too_large');
+      lock.assertHeld(); publishJson(this.configFile(), data);
+    });
+    this.persistedEnabled = enabled; this.persistedDirectories = directories;
   }
   private async within(root: string, relative: string) {
     const file = await fs.realpath(path.join(root, relative))
@@ -778,7 +799,7 @@ export class PluginRegistry {
         !r && this.startupDisabled && enabled === false && this.enabled.has(id)
       ) {
         this.enabled.delete(id)
-        await this.persist()
+        await this.persist(false, {id, enabled})
         return this.catalog()
       }
       if (!r) throw new Error('Unknown plugin')
@@ -791,6 +812,7 @@ export class PluginRegistry {
         r.state = 'waiting'
         try {
           const built = await this.capture(r.source)
+          guardExternalWork();
           this.pins.delete(built.hash)
           if (built.manifest.id !== id)
             throw new Error('Plugin id changed; add it as a new plugin')
@@ -808,7 +830,7 @@ export class PluginRegistry {
         this.enabled.delete(id)
         r.state = 'disabled'
       }
-      await this.persist()
+      await this.persist(false, {id, enabled})
       this.syncWatchers()
       this.reconcile()
       return this.catalog()
@@ -824,7 +846,7 @@ export class PluginRegistry {
       this.records = []
       this.configurationError = undefined
       await this.scan()
-      await this.persist()
+      await this.persist(true)
       return this.catalog()
     })
   }
@@ -834,6 +856,7 @@ export class PluginRegistry {
       if (this.directories.length >= 64)
         throw new Error('At most 64 local plugin directories')
       source = await fs.realpath(source)
+      guardExternalWork();
       if (!this.directories.includes(source)) this.directories.push(source)
       await this.scan()
       return this.catalog()
@@ -843,7 +866,7 @@ export class PluginRegistry {
     return this.serial(() => this.scan())
   }
   private serial<T>(fn: () => Promise<T>) {
-    const job = this.mutation.then(fn)
+    const job = this.mutation.then(()=>{guardExternalWork();return fn();})
     this.mutation = job.then(
       () => {},
       () => {},
@@ -1039,7 +1062,7 @@ export class PluginRegistry {
       this.dataRoot,
       `${r.manifest!.id}-v${r.manifest!.storageVersion ?? 1}.json`,
     )
-    const job = r.storageQueue.then(async () => {
+    const job = r.storageQueue.then(() => storeTransaction(file, async lock => {
       this.lease(token)
       let data: { [key: string]: unknown } = {}
       try {
@@ -1065,16 +1088,11 @@ export class PluginRegistry {
       const bytes = JSON.stringify(data)
       if (Buffer.byteLength(bytes) > 16384)
         throw new Error('Plugin storage exceeds 16 KiB')
-      const temp = file + '.' + randomUUID()
-      try {
-        await fs.writeFile(temp, bytes, { flag: 'wx', mode: 0o600 })
-        this.lease(token)
-        await fs.rename(temp, file)
-      } finally {
-        await fs.rm(temp, { force: true })
-      }
+      this.lease(token)
+      lock.assertHeld()
+      publishJson(file, data)
       return undefined
-    })
+    }))
     r.storageQueue = job.catch(() => {})
     return job
   }

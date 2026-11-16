@@ -8,7 +8,7 @@ const backend = { async request() { return { protocol: 1, id: 'fixture', session
   result: { paused: true, system: 'Fixture', synthetic: true, capabilities: ['session.status'] } }; } };
 test('automatic selection attaches to an existing unnamed app, ignores stale records and reconnects', async t => {
   const directory = fs.mkdtempSync('/tmp/ares-auto-');
-  const host = new LocalServiceHost(backend, async () => ({ ready: true }));
+  const host = new LocalServiceHost(backend, async () => ({ ready: true, kind:'personal', opened_order:1 }));
   const client = new AutomaticServiceClient(directory);
   t.after(async () => { client.close(); await host.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   await host.listen(directory);
@@ -21,17 +21,17 @@ test('automatic selection attaches to an existing unnamed app, ignores stale rec
   client.close();
   assert.equal((await backend.request()).ok, true);
 });
-test('automatic selection reports multiple live apps without choosing one', async t => {
+test('automatic selection chooses the earliest personal among multiple live apps', async t => {
   const directory = fs.mkdtempSync('/tmp/ares-auto-');
-  const hosts = [new LocalServiceHost(backend, async () => ({ ready: true })), new LocalServiceHost(backend, async () => ({ ready: true }))];
+  const hosts = [new LocalServiceHost(backend, async () => ({ ready: true, kind:'personal', opened_order:1 })), new LocalServiceHost(backend, async () => ({ ready: true, kind:'personal', opened_order:1 }))];
   const client = new AutomaticServiceClient(directory);
   t.after(async () => { client.close(); for (const host of hosts) await host.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   for (const host of hosts) await host.listen(directory);
-  await assert.rejects(client.request('session.status'), /multiple_apps_running/);
+  assert.equal((await client.request('session.status')).session,'automatic');
 });
 test('automatic selection waits for an existing app to initialize without launching another', async t => {
   const directory = fs.mkdtempSync('/tmp/ares-auto-'); let polls = 0;
-  const host = new LocalServiceHost(backend, async () => ({ ready: ++polls >= 3 }));
+  const host = new LocalServiceHost(backend, async () => ({ ready: ++polls >= 3, kind:'personal', opened_order:1 }));
   const client = new AutomaticServiceClient(directory);
   t.after(async () => { client.close(); await host.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   await host.listen(directory);

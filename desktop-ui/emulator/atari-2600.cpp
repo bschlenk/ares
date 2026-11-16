@@ -191,6 +191,7 @@ auto Atari2600::load() -> LoadResult {
 }
 
 auto Atari2600::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

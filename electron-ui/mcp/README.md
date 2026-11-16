@@ -31,14 +31,66 @@ and `--no-services` override the saved setting for a launch. Automatic startup u
 lock, the adapter reports `profile_in_use`; enable access in that app. It does not
 open another window or quit an existing app.
 
-The adapter discovers the single live app in the private service directory
-(`/tmp/ares-services-UID` on macOS). `--service-dir /absolute/path` or
-`ARES_SERVICE_DIR` selects another directory. Stale records are ignored; multiple
-live apps produce `multiple_apps_running`. Advanced scripts may still use
-`--instance-name NAME` for a specific named app, or
-`--connection /absolute/instance.json --instance UUID` for a specific launch.
-Explicit connection-file targeting attaches only and does not launch a replacement.
-Copied configuration uses automatic discovery even if the app has a name.
+Default targeting chooses the earliest-opened live **personal** window, ignoring
+named windows and focus. If none is open, the first target-dependent call launches
+a personal window. Personal gameplay access is closed with `access_required`
+until the user clicks Allow in that window; automatic launch does not grant access.
+Discovery (`sessions_list`) never launches, prompts or reads native game state.
+`--service-dir /absolute/path` or `ARES_SERVICE_DIR` selects the private service
+directory. Private endpoint validation and schema/build negotiation apply.
+
+Use `session_open({name:"work"})` to create/reopen isolated persistent named data.
+Keep its returned `target` and pass it to subsequent tools, for example
+`load_rom({target, path:"/absolute/fixture.gb"})`. Named sessions have implicit
+external access. `session_select({name})` resolves an existing name without
+launching; `session_select({instance_id})` pins one live window UUID. Named handles
+can reopen a stopped session; instance handles never redirect to replacements.
+`sessions_list` includes persisted stopped names and running window metadata.
+
+Every target-dependent public tool accepts `target`. Precedence is call target,
+immutable startup target (`--target HANDLE`, `--session-name NAME`, or `ARES_TARGET`),
+then personal default. Runtime open/select returns handles; it never changes the
+startup default or another caller's selection. Two conversations can safely share
+one adapter. A multi-request call keeps its initial client and native identity
+through awaits and cancellation; mutations are never replayed against replacements.
+Returned `operation_ref`, `lease_ref`, and `result_ref` values are opaque scoped
+references; pass them verbatim in `operation_id`, `lease_id`, or `result_handle`.
+Legacy raw ID fields remain available. Scoped references retain the original
+instance and native identity for operations/captures; they can supply the target
+when the call omits one. Captures also return `handle_ref`, accepted in `handle`,
+`before`, `after` and `candidates` inputs.
+
+`--connection /absolute/instance.json --instance UUID` remains pinned to that
+launch. `--instance-name NAME` and `ARES_INSTANCE_NAME` retain their **legacy
+endpoint-label** meaning, with no persistent data isolation or approval bypass.
+Use `--session-name` / `session_open` for persistent named storage. Contradictory
+explicit selectors error. `--instance-name` is also still a GUI endpoint-label
+option; it does not rename personal data as authorized session data.
+
+Offline `session_reset`, `session_recovery_list` (alias `session_archives`) and
+`session_restore` accept a named `target`, or the compatibility
+`personal_root`/`name` pair. Reset returns the manifest, `recovery_id` and archives;
+restore retains displaced data. Running sessions refuse reset/restore. Existing
+`managed_states` / `managed_state_*` are the checkpoint library tools, separate
+from path-based `state_load` / `state_save` imports and exports.
+
+CLI shell-scoped selection uses the same registry and does not need a session
+name on every command:
+
+```sh
+ARES_TARGET="$(ares call session_open --name work | jq -r .target)"
+export ARES_TARGET
+ares call emu_status
+ares call load_rom --path /absolute/fixture.gb --system 'Game Boy'
+ares call session_recovery_list
+```
+
+A call's `--target HANDLE` overrides the environment. Handles are selectors, not
+credentials or grants. Keep instance handles for bounded jobs and name handles
+for intentional reopen. A CLI `run` binds its entire script/result transfer to
+the startup target. Do not set both `ARES_TARGET` and `ARES_INSTANCE_NAME`.
+Session data lives in the namespace beside the personal profile; each running
+window has private Electron/runtime data. See [recovery recipes](../sessions/RECOVERY.md).
 
 Development clients can run `node electron-ui/dist/mcp/server.js` after building.
 The development adapter launches the checkout's Electron runtime. The packaged
@@ -1184,3 +1236,57 @@ belongs to the primary view. See [video contracts](../video/README.md).
 crashed renderer while retaining the native game, with bounded timeout/retry and
 explicit identity verification. Neither operation is exposed to model scripts
 or the plugin SDK. See [recovery diagnostics](../services/RENDERER-RECOVERY.md).
+
+## Managed states and session recovery
+
+See [managed-library tools and reset/restore recipes](../sessions/RECOVERY.md). Named states
+include explicit Personal/Session origin and read-only inherited references.
+Whole-session reset/restore requires a closed target; previous data is retained.
+
+## Personal approval and cancellation
+
+Use `access_request` for a short request that leaves a bounded nonmodal prompt,
+`access_status` to inspect it, or `access_wait` to await Allow. Each accepts the
+same optional `target`; `timeout_ms` defaults to 30000 and is bounded to 60000.
+Cancel an explicit request with `access_cancel({request_id,target})`. Deny and
+expired/aborted waits execute no gameplay command. Approval applies to all clients
+of that window and survives renderer reload; Revoke and app exit remove it.
+
+CLI convenience holds the command locally until access is authorized:
+
+```sh
+ares call emu_status --wait-access
+ares call access_request
+ares call access_cancel --request_id 'REQUEST_UUID'
+ares run ./script.js --wait-access
+```
+
+MCP callers should await `access_wait`, then issue the intended tool call with the
+returned target. There is no server-side queue that replays intent on Allow or
+reconnect. Cancellation is request-local across shared adapter calls and also
+reaches queued management work. Revocation invalidates every durable owner lease;
+a fresh grant requires creating a new lease.
+
+Personal external renderer plugin mutations and command delegation require a
+named session (`plugin_management_requires_named_session`) because those callbacks
+share the human plugin's SDK scope. Native controls, managed states, captures and
+read-only plugin inspection use the personal grant. Named sessions retain the
+complete plugin interface and implicit access, including when personal integration
+was disabled before the session was created.
+
+
+Session identity is shown in both the native window title and the custom header.
+Named sessions keep a `Session: <name>` indicator whenever playback controls are
+revealed, including empty views; it has no dismiss or Revoke action. Authorized
+personal windows show that external clients can access real settings and saves,
+with keyboard-reachable **Revoke** in the same toolbar. Pointer inactivity hides
+these with the controls; keyboard focus reveals them. Reloading the interface
+reconstructs identity and access from main-process state.
+
+Game captures exclude this app chrome. Presented UI captures hold a common scope
+for the entire capture, including panel rectangles and nested captures; game and
+plugin overlays remain. Native screenshots, recordings and checkpoint previews
+use native pixels. A renderer reload during UI capture fails that capture without
+publishing it. Per-process `app.setName` is applied before readiness for named
+sessions; this alone does not establish macOS packaged Dock hover behavior. See
+[acceptance evidence](../ACCEPTANCE.md) for verification and remaining limits.

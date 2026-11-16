@@ -19,6 +19,7 @@ export async function activate(context) {
   context.ui.registerCommand('open', () => context.ui.openPanel('own'));
 }`);
 fs.writeFileSync(path.join(profile, 'plugins/enabled.json'), JSON.stringify({ directories: [source], enabled: ['ares.tools.settings', 'test.preferences'] }));
+process.env.ARES_SERVICE_DIR = path.join(temporary, 'ipc');
 app.setPath('userData', profile);
 delete process.env.ARES_SETTINGS; delete process.env.ARES_DISABLE_PLUGINS;
 Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_ROM: '', ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DEFAULT_PLUGINS: '0', ARES_ENABLE_SERVICES: '0' });

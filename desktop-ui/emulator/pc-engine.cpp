@@ -115,6 +115,7 @@ auto PCEngine::load() -> LoadResult {
 }
 
 auto PCEngine::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(game->location);
   game->save(game->location);

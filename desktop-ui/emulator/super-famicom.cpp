@@ -204,6 +204,7 @@ auto SuperFamicom::load() -> LoadResult {
 }
 
 auto SuperFamicom::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

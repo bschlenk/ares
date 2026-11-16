@@ -58,6 +58,7 @@ auto SuperGrafxCD::load() -> LoadResult {
 }
 
 auto SuperGrafxCD::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(game->location);
   bios->save(game->location);

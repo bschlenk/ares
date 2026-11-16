@@ -1,3 +1,4 @@
+import {guardExternalWork} from './external-access.js';
 import { artifactGuard } from './artifact-guard.js';
 import fs from 'node:fs/promises';
 import { linkSync, renameSync } from 'node:fs';
@@ -32,7 +33,7 @@ export async function publishArtifact(destination: string, overwrite: boolean,
     // The tiny publication step is synchronous so detach/revocation cannot
     // interleave between the final main-thread guard and publication.
     await artifactGuard.getStore()?.();
-    guard();
+    guard(); guardExternalWork();
     if (overwrite) renameSync(temporary, target);
     else linkSync(temporary, target);
     // Non-throwing local cache update; publication is now the completed action.

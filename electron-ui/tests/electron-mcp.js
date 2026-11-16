@@ -15,6 +15,8 @@ const rom = path.join(temporary, 'fixture.gb'), settings = path.join(temporary, 
 fs.writeFileSync(rom, makeFixture()); fs.writeFileSync(settings, '');
 Object.assign(process.env, { ARES_ROM: rom, ARES_SYSTEM: 'Game Boy', ARES_SILENT: '1', ARES_SETTINGS: settings, ARES_SAVE_DIR: path.join(temporary, 'profile', 'saves'), ARES_ENABLE_SERVICES: '1', ARES_SERVICE_DIR: path.join(temporary, 'ipc') });
 delete process.env.ARES_AUTOTEST;
+delete process.env.ARES_SAVE_DIR;
+process.argv.push('--session-name','mcp-fixture');
 const { sessions, serviceHost, stopNative } = await import('../dist/main.js');
 const peers = [];
 async function until(fn) { for (let i = 0; i < 200; ++i) { try { const result = await fn(); if (result) return result; } catch {} await new Promise(r => setTimeout(r, 25)); } throw new Error('Integration timed out'); }
@@ -41,7 +43,7 @@ app.whenReady().then(async () => {
   const mcp = peer(); await mcp.initialize();
   enter('MCP tools');
   const list = (await mcp.request('tools/list', {})).result.tools;
-  assert.deepEqual(list.map(t => t.name).sort(), ['app_health','app_logs','build_info','demonstration_cancel','demonstration_export','demonstration_import','demonstration_prepare','demonstration_retry','demonstration_replay','demonstration_start','demonstration_status','demonstration_stop','demonstration_request','matrix_capture','memory_capture_export','memory_sample','owner_lease','plugin_exports','rsp_last_task','run_script','script_result','script_result_release','script_results','load_rom','close_rom','provenance_control','memory_capture_freeze','memory_changes','memory_query_advance','memory_query_page','memory_query_release','memory_query_start','memory_capture_read','memory_capture_release','memory_capture_status','memory_compare','memory_record_start','memory_record_stop','memory_snapshot','plugin_logs','read_memory_many','read_memory_many_va','ui_screenshot','emu_status', 'pause', 'resume', 'memory_regions', 'read_memory', 'write_memory', 'run_frames', 'run_until_frame', 'step', 'operation_status', 'cancel_operation', 'cpu_registers', 'last_stop', 'step_instructions', 'run_until_hit', 'break_add', 'break_remove', 'break_list', 'watch_add', 'watch_remove', 'watch_list', 'read_memory_va', 'write_memory_va', 'write_memory_many', 'controller_set', 'controller_release', 'controller_state', 'controller_host_mode', 'trace_pc', 'trace_calls', 'trace_page', 'overlay_log', 'profiler_control', 'profiler_clear', 'cpu_profiler_top', 'controller_tap', 'screenshot', 'audio_capture', 'audio_status', 'audio_save', 'video_start', 'video_status', 'video_stop', 'state_info', 'state_list', 'state_peek', 'state_save', 'state_load', 'batch', 'cpu_set_registers', 'rsp_registers', 'rdp_state', 'peripheral_registers', 'disassemble', 'rsp_capture', 'capture_control', 'call_function', 'call_recover', 'stack', 'render_probe', 'dump_rdram', 'dump_range', 'rdp_capture', 'rsp_debug', 'rsp_break', 'rsp_step', 'rsp_run', 'rsp_stop'].sort());
+  assert.deepEqual(list.map(t => t.name).sort(), ["access_cancel","access_request","access_status","access_wait","app_health","app_logs","audio_capture","audio_save","audio_status","batch","break_add","break_list","break_remove","build_info","call_function","call_recover","cancel_operation","capture_control","close_rom","controller_host_mode","controller_release","controller_set","controller_state","controller_tap","cpu_profiler_top","cpu_registers","cpu_set_registers","demonstration_cancel","demonstration_export","demonstration_import","demonstration_prepare","demonstration_replay","demonstration_request","demonstration_retry","demonstration_start","demonstration_status","demonstration_stop","disassemble","dump_range","dump_rdram","emu_status","input_describe","input_release","input_set","input_state","last_stop","load_rom","managed_state_delete","managed_state_load","managed_state_rename","managed_state_save","managed_states","matrix_capture","memory_capture_export","memory_capture_freeze","memory_capture_read","memory_capture_release","memory_capture_status","memory_changes","memory_compare","memory_query_advance","memory_query_page","memory_query_release","memory_query_start","memory_record_start","memory_record_stop","memory_regions","memory_sample","memory_snapshot","operation_status","overlay_log","owner_lease","pause","peripheral_registers","plugin_exports","plugin_logs","profiler_clear","profiler_control","provenance_control","rdp_capture","rdp_state","read_memory","read_memory_many","read_memory_many_va","read_memory_va","recover_renderer","render_probe","renderer_status","resume","rsp_break","rsp_capture","rsp_debug","rsp_last_task","rsp_registers","rsp_run","rsp_step","rsp_stop","run_frames","run_script","run_until_frame","run_until_hit","screenshot","script_result","script_result_release","script_results","session_archives","session_open","session_recovery_list","session_reset","session_restore","session_select","sessions_list","stack","state_info","state_list","state_load","state_peek","state_save","step","step_instructions","trace_calls","trace_page","trace_pc","ui_screenshot","video_start","video_status","video_stop","video_surfaces","wait_frames","watch_add","watch_list","watch_remove","write_memory","write_memory_many","write_memory_va"]);
   assert.equal(list.find(t => t.name === 'read_memory').inputSchema.properties.length.default, 64);
   assert.equal(list.find(t => t.name === 'resume').inputSchema.properties.keep_overrides.default, false);
   assert.equal(list.find(t => t.name === 'emu_status').inputSchema.properties.verbose.default, false);
@@ -55,13 +57,13 @@ app.whenReady().then(async () => {
     ['cancel_operation', ['operation_id'], []],
   ]) {
     const schema = list.find(t => t.name === name).inputSchema;
-    assert.deepEqual(Object.keys(schema.properties).sort(), properties);
+    assert.deepEqual(Object.keys(schema.properties).sort(), [...properties,'target'].sort());
     assert.deepEqual((schema.required || []).sort(), required);
   }
   assert.equal(list.find(t => t.name === 'run_frames').inputSchema.properties.max_seconds.default, 60);
   assert.equal(list.find(t => t.name === 'run_frames').inputSchema.properties.screenshot_after.default, null);
   assert.equal(list.find(t => t.name === 'operation_status').inputSchema.properties.fpr.default, false);
-  assert.equal(list.find(t => t.name === 'cancel_operation').inputSchema.properties.operation_id.default, null);
+  assert.equal(list.find(t => t.name === 'cancel_operation').inputSchema.properties.operation_id.anyOf[0].default, null);
   enter('shared GB inspector memory');
   assert.equal((await mcp.tool('pause')).paused, true);
   await until(() => window.webContents.executeJavaScript("document.getElementById('pause').textContent === 'Resume'"));
@@ -98,7 +100,7 @@ app.whenReady().then(async () => {
   assert.equal(fs.readFileSync(wavPath).toString('ascii', 0, 4), 'RIFF');
   const moviePath = path.join(temporary, 'electron recording.avi');
   const movie = await mcp.tool('video_stop', { path: moviePath });
-  assert.equal(movie.frames, 2); assert.equal(movie.frame_kind, 'unavailable');
+  assert.equal(movie.frames, 2); assert.equal(movie.frame_kind, 'primary-screen-frame');
   assert.equal(fs.readFileSync(moviePath).toString('ascii', 8, 12), 'AVI ');
   enter('paused reload');
   const loaded = once(window.webContents, 'did-finish-load'); window.webContents.reload(); await loaded;
@@ -106,7 +108,7 @@ app.whenReady().then(async () => {
   assert.equal((await mcp.tool('read_memory', { region: ram.id, addr: 240, length: 4 })).hex, 'deadbeef');
   assert.equal((await mcp.tool('write_memory', { region: ram.id, addr: 240, hex_bytes: baseline.hex })).written, 4);
   enter('wrong instance and reconnect');
-  const wrong = peer('wrong-instance'); await wrong.initialize(); assert.equal((await wrong.tool('emu_status')).error, 'wrong_instance');
+  const wrong = peer('wrong-instance'); await wrong.initialize(); assert.equal((await wrong.tool('emu_status')).error, 'app_not_running');
   assert.equal((await mcp.tool('resume', { keep_overrides: true })).error, 'unavailable');
   assert.equal((await mcp.tool('step')).error, 'unavailable');
   const reconnect = new LocalServiceClient(serviceHost.metadataFile, serviceHost.instance);

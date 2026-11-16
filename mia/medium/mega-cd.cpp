@@ -30,6 +30,7 @@ auto MegaCD::load(string location) -> LoadResult {
 }
 
 auto MegaCD::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   return true;

@@ -58,6 +58,7 @@ auto Famicom::load() -> LoadResult {
 }
 
 auto Famicom::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);
@@ -185,6 +186,7 @@ auto Famicom::loadTape(ares::Node::Object node, string location) -> bool {
 }
 
 auto Famicom::unloadTape(ares::Node::Object node) -> void {
+  mia::StorageTransaction storageTransaction;
   if (node->name() == "Famicom Data Recorder") {
     famicomDataRecorder->save(famicomDataRecorder->location);
     famicomDataRecorder.reset();

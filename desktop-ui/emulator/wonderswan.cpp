@@ -53,6 +53,7 @@ auto WonderSwan::load() -> LoadResult {
 }
 
 auto WonderSwan::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

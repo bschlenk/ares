@@ -21,7 +21,8 @@ fs.writeFileSync(path.join(source,'plugin.js'),`export function activate(ctx){wi
 });}`);
 app.setPath('userData',profile);
 Object.assign(process.env,{ARES_PROFILE_DIR:profile,ARES_SAVE_DIR:path.join(profile,'saves'),ARES_PLUGIN_DIRS:[source,denied].join(path.delimiter),ARES_DEFAULT_PLUGINS:'0',ARES_ENABLE_SERVICES:'1',ARES_SERVICE_DIR:path.join(temporary,'ipc'),ARES_ROM:gb,ARES_SYSTEM:'Game Boy',ARES_SILENT:'1',ARES_AUTOTEST:'',ARES_BACKGROUND_TEST:'1'});
-delete process.env.ARES_DISABLE_PLUGINS;delete process.env.ARES_SETTINGS;
+delete process.env.ARES_DISABLE_PLUGINS;delete process.env.ARES_SETTINGS;delete process.env.ARES_SAVE_DIR;
+process.argv.push('--session-name','video-fixture');
 const {sessions,plugins,serviceHost}=await import('../dist/main.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(check,label){for(let i=0;i<400;i++){try{const value=await check();if(value)return value}catch{}await sleep(25)}throw Error('Timed out: '+label)}

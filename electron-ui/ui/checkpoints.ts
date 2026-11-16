@@ -2,7 +2,7 @@ import {styleModalClose} from './modal-close.js';
 import {dismissOnBackdrop} from './dialog-dismiss.js';
 import {notify} from '../workspace/shell.js';
 import {DEFAULT_CHECKPOINT_FORMAT,formatCheckpoint} from '../services/checkpoint-format.js';
-import type {CheckpointEntry} from '../services/checkpoint-contracts.js';
+import type {ScopedCheckpointEntry as CheckpointEntry} from '../services/checkpoint-contracts.js';
 export function installCheckpointControls() {
   const save=document.getElementById('video-save-state') as HTMLButtonElement;
   const load=document.getElementById('video-load-state') as HTMLButtonElement;
@@ -47,12 +47,13 @@ export function installCheckpointControls() {
         preview.append(image);
         const doLoad=()=>void action(async()=>{await request('load',entry.id);if(token===session)dialog.close()});
         preview.ondblclick=doLoad;preview.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();doLoad()}};
-        const label=document.createElement('strong');label.textContent=entry.name||date(entry);
+        const label=document.createElement('strong');label.textContent=`${entry.origin === 'session' ? 'Session' : 'Personal'} · ${entry.name||date(entry)}`;
         const time=document.createElement('time');time.dateTime=entry.capturedAt;time.textContent=entry.name?date(entry):'';
         const name=document.createElement('input');name.type='text';name.value=entry.name;name.maxLength=256;name.placeholder='Name this state';name.setAttribute('aria-label','State name');
         const rename=button('Rename',()=>void action(async()=>{await request('rename',entry.id,name.value);await render()}));
         const remove=button('Move to Trash',()=>void action(async()=>{await request('delete',entry.id);await render()}));
         const reveal=button(navigator.platform.toLowerCase().includes('mac')?'Reveal in Finder':'Reveal in folder',()=>void action(()=>request('reveal',entry.id)));
+        name.disabled=rename.disabled=remove.disabled=!entry.writable;
         const actions=document.createElement('div');actions.className='state-actions';actions.append(rename,reveal,remove);
         card.append(preview,label,time,name,actions);content.append(card);
       }
@@ -77,7 +78,7 @@ export function installCheckpointControls() {
     try{
       const entries:CheckpointEntry[]=await request('list');
       if(token!==session||dismissed||Date.now()-status.loadedAt>=10000)return;
-      const latest=entries.filter(e=>!e.permanent).sort((a,b)=>Date.parse(b.capturedAt)-Date.parse(a.capturedAt))[0];
+      const latest=entries.filter(e=>e.writable&&!e.permanent).sort((a,b)=>Date.parse(b.capturedAt)-Date.parse(a.capturedAt))[0];
       if(!latest)return;
       const image=document.createElement('img');image.src=latest.screenshotUrl!;image.alt='Latest autosave';
       if(latest.screenshot.aspect){const aspect=latest.screenshot.aspect;image.style.objectFit='fill';image.style.width=`${Math.min(96,72*aspect)}px`;image.style.height=`${Math.min(72,96/aspect)}px`}

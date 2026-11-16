@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import {readSettings, settingsTransaction} from './transaction.js';
 import { validateValue, type SettingDescriptor, type SettingValue, type SettingsSnapshot } from './contracts.js';
 
 /** The main process owns writes. Unknown values survive descriptor removal and readdition. */
@@ -10,6 +10,9 @@ export class SettingsStore {
   private applied = new Map<string, SettingValue>();
   private descriptors = new Map<string, SettingDescriptor>();
   private revision = 0;
+  private diskRevision = 0;
+  private watcher?: fs.FSWatcher;
+  private poll?: ReturnType<typeof setInterval>;
   private error?: string;
   private unreadable = false;
   private queue: Promise<unknown> = Promise.resolve();
@@ -19,10 +22,8 @@ export class SettingsStore {
     this.launchValues = Object.assign(Object.create(null), launchValues);
     this.register(descriptors, false);
     try {
-      if (fs.statSync(filename).size > 1024 * 1024) throw new Error('settings_file_too_large');
-      const data = JSON.parse(fs.readFileSync(filename, 'utf8'));
-      if (!data || data.version !== 1 || !data.values || typeof data.values !== 'object' || Array.isArray(data.values)) throw new Error('invalid_settings_file');
-      this.values = Object.assign(Object.create(null), data.values);
+      const saved = readSettings(filename);
+      this.values = saved.values; this.diskRevision = saved.revision;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         this.error = `Cannot read ${filename}: ${String(error)}`;
@@ -95,42 +96,74 @@ export class SettingsStore {
     this.changed(this.catalog());
   }
   set(id: string, value: unknown, guard: () => void = () => {}): Promise<SettingsSnapshot> {
-    const operation = this.queue.then(() => { guard(); return this.write(id, value); });
+    const operation = this.queue.then(() => { guard(); return this.write(id, value, false, guard); });
     this.queue = operation.catch(() => {});
     return operation;
   }
   reset(id: string, guard: () => void = () => {}): Promise<SettingsSnapshot> {
-    const operation = this.queue.then(() => { guard(); return this.write(id, undefined, true); });
+    const operation = this.queue.then(() => { guard(); return this.write(id, undefined, true, guard); });
     this.queue = operation.catch(() => {});
     return operation;
   }
-  private async write(id: string, value: unknown, reset = false): Promise<SettingsSnapshot> {
+  /** Watch the directory because atomic publication replaces the file inode.
+   * Polling and focus reconciliation also cover dropped/coalesced events. */
+  watch(intervalMs = 2000): void {
+    if (this.poll) return;
+    fs.mkdirSync(path.dirname(this.filename), {recursive: true, mode: 0o700});
+    try {
+      this.watcher = fs.watch(path.dirname(this.filename), (_event, name) => {
+        if (!name || String(name) === path.basename(this.filename)) void this.resync();
+      });
+      this.watcher.on('error', () => { this.watcher?.close(); this.watcher = undefined; });
+      this.watcher.unref();
+    } catch { /* Periodic reconciliation remains available. */ }
+    this.poll = setInterval(() => { void this.resync(); }, intervalMs);
+    this.poll.unref();
+    void this.resync();
+  }
+  close(): void { this.watcher?.close(); clearInterval(this.poll); this.poll = undefined; }
+  resync(): Promise<void> {
+    const operation = this.queue.then(async () => {
+      try {
+        const saved = readSettings(this.filename);
+        if (!this.unreadable && saved.revision === this.diskRevision && JSON.stringify(saved.values) === JSON.stringify(this.values)) return;
+        this.values = saved.values; this.diskRevision = saved.revision;
+        this.error = undefined; this.unreadable = false;
+        await this.applyChanges();
+      } catch (error) { this.error = `Cannot read ${this.filename}: ${String(error)}`; this.unreadable = true; }
+      this.revision++; this.changed(this.catalog());
+    });
+    this.queue = operation.catch(() => {});
+    return operation;
+  }
+  private async applyChanges(): Promise<void> {
+    for (const descriptor of this.descriptors.values()) {
+      const desired = this.value(descriptor);
+      if (descriptor.apply !== 'live' || this.applied.get(descriptor.id) === desired) continue;
+      try {
+        await this.applyLive(descriptor.id, desired);
+        this.applied.set(descriptor.id, desired); this.applyErrors.delete(descriptor.id);
+      } catch (error) {
+        this.applyErrors.set(descriptor.id, `Saved ${descriptor.id}, but could not apply it: ${String(error)}`);
+      }
+    }
+  }
+  private async write(id: string, value: unknown, reset = false, guard: () => void = () => {}): Promise<SettingsSnapshot> {
     const descriptor = this.descriptors.get(id);
     if (!descriptor || (!reset && !validateValue(descriptor, value))) throw new Error('invalid_setting_value');
     // Never overwrite a malformed/unsupported provisioned file with partial data.
     if (this.unreadable) throw new Error(this.error);
-    const values = Object.assign(Object.create(null), this.values);
-    if (reset) delete values[id]; else values[id] = value;
-    fs.mkdirSync(path.dirname(this.filename), { recursive: true });
-    const serialized = JSON.stringify({ version: 1, values }, null, 2) + '\n';
-    if (Buffer.byteLength(serialized) > 1024 * 1024) throw new Error('settings_file_too_large');
-    const temporary = `${this.filename}.${randomUUID()}.tmp`;
-    try {
-      fs.writeFileSync(temporary, serialized, { flag: 'wx', mode: 0o600 });
-      fs.renameSync(temporary, this.filename);
-    } finally { fs.rmSync(temporary, { force: true }); }
-    this.values = values;
+    // Read the latest file under the cross-process lock and patch only this key.
+    // Authorization is rechecked after lock acquisition, immediately before commit.
+    const saved = await settingsTransaction(this.filename, (settings, commit) => {
+      guard();
+      if (reset) delete settings.values[id]; else settings.values[id] = value;
+      commit();
+      return settings;
+    });
     delete this.launchValues[id];
-    this.applyErrors.delete(id);
-    if (descriptor.apply === 'live') {
-      try {
-        const desired = this.value(descriptor);
-        await this.applyLive(id, desired);
-        this.applied.set(id, desired);
-      } catch (error) {
-        if (this.applied.get(id) !== this.value(descriptor)) this.applyErrors.set(id, `Saved ${id}, but could not apply it: ${String(error)}`);
-      }
-    }
+    this.values = saved.values; this.diskRevision = saved.revision;
+    await this.applyChanges();
     this.revision++;
     const snapshot = this.catalog();
     this.changed(snapshot);

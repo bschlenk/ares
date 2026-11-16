@@ -4,11 +4,12 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const path = require('node:path');
 const { ToolRegistry } = require('../dist/tools/registry.js');
 const { registerTools } = require('../dist/mcp/register-tools.js');
+const {Targets}=require('../dist/sessions/targets.js');
 const { LocalServiceClient } = require('../dist/services/local-endpoint.js');
 
 test('CLI discovers shared schemas without launching an app; defaults and validation are shared', async () => {
   const client = new LocalServiceClient('/tmp/nonexistent-ares-tools.json', 'unused');
-  const registry = new ToolRegistry(); registerTools(registry, client);
+  const registry = new ToolRegistry(); registerTools(registry, client,new Targets('/tmp/nonexistent-ares-tools-directory'));
   const list = registry.list();
   const cli = JSON.parse(execFileSync(process.execPath, [path.resolve(__dirname, '../dist/cli.js'), 'tools'], {encoding:'utf8',env:{...process.env,ARES_OWNER_LEASE:'expired-lease',ARES_SERVICE_DIR:'/tmp/nonexistent-ares-tools-directory'}}));
   assert.deepEqual(cli, list);

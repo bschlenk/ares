@@ -47,6 +47,7 @@ auto Nintendo64DD::load(string location) -> LoadResult {
 }
 
 auto Nintendo64DD::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   Pak::save("program.disk", ".disk");

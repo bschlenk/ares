@@ -170,6 +170,7 @@ auto MegaDrive::load() -> LoadResult {
 }
 
 auto MegaDrive::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);

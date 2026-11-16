@@ -48,6 +48,7 @@ auto NeoGeoMVS::load(string location) -> LoadResult {
 }
 
 auto NeoGeoMVS::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("time.rtc", ".rtc");
   return true;
 }

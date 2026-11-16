@@ -1,7 +1,15 @@
+import {formatWindowTitle, type WindowPresentation} from './sessions/presentation.js';
+import {ExternalAccessController, externalWork, guardExternalWork} from './services/external-access.js';
+import {publishArtifact} from './services/artifact-writer.js';
+import {nextOpenSequence} from './sessions/discovery.js';
+import {prepareManagementRoot} from './sessions/context.js';
 import {RendererRecovery} from './services/renderer-recovery.js';
 import {romDisplayTitle} from './library/title.js';
 import {zipEntries} from './library/zip.js';
 import {systems as librarySystems} from './library/systems.js';
+import {ScopedCheckpointLibrary} from './services/scoped-checkpoint-library.js';
+import {readJson, publishJson} from './sessions/files.js';
+import type {GenerationData} from './sessions/repository.js';
 import {CheckpointLibrary} from './services/checkpoint-library.js';
 import {Checkpoints} from './services/checkpoints.js';
 import {DEFAULT_CHECKPOINT_FORMAT,validateCheckpointFormat} from './services/checkpoint-format.js';
@@ -22,6 +30,11 @@ import { coreDescriptors, firmwareDescriptors, importedValues, nativeSettingsBml
 import { SettingsStore } from './settings/store.js'
 import { presentationSettings, nativeRuntimeSettings, agentSettings } from './settings/builtins.js'
 import { profileRoot, profileSaves } from './profile.js'
+import {personalContext, type AppContext} from './sessions/context.js'
+import {KernelLock} from './sessions/locks.js'
+import {StorageCoordinator, personalStorageDirectory, type StorageReservation, type StorageInventory} from './sessions/storage.js'
+import {launchWindow} from './sessions/launching.js'
+import {SessionRepository} from './sessions/repository.js'
 import { PluginRegistry } from './plugins/registry.js'
 import {
   app,
@@ -56,38 +69,74 @@ import type {
 } from './services/contracts.js'
 // Compiled entry lives in dist/ in both checkout and copied distribution.
 const appRoot = fileURLToPath(new URL('../', import.meta.url))
-const saveDirectory = (() => {
+let profileLock: KernelLock | undefined
+// Logical data retains its legacy path; Electron browser storage is process-local.
+export const appContext: AppContext = (() => {
+  const inferredProfile = path.join(app.getPath('appData'), app.getName())
+  const suppliedProfile = app.getPath('userData')
+  const selectedProfile = process.env.ARES_PROFILE_DIR ||
+    (app.commandLine.hasSwitch('user-data-dir') || suppliedProfile !== inferredProfile
+      ? suppliedProfile
+      : profileRoot(app.getPath('appData'), process.env.ARES_PROFILE))
+  const index = process.argv.indexOf('--session-name')
+  const name = index >= 0 ? process.argv[index + 1] : undefined
+  if (index >= 0 && (!name || name.startsWith('--'))) throw new Error('invalid_session_name')
+  let context: AppContext
   try {
-    // Respect explicit Electron profiles used by embedders/tests and --user-data-dir.
-    const inferredProfile = path.join(app.getPath('appData'), app.getName())
-    const suppliedProfile = app.getPath('userData')
-    const selectedProfile = process.env.ARES_PROFILE_DIR ||
-      (app.commandLine.hasSwitch('user-data-dir') || suppliedProfile !== inferredProfile
-        ? suppliedProfile
-        : profileRoot(app.getPath('appData'), process.env.ARES_PROFILE))
-    fs.mkdirSync(selectedProfile, { recursive: true })
-    const profileDirectory = fs.realpathSync(selectedProfile)
-    app.setName('ares')
-    app.setPath('userData', profileDirectory)
-    app.setPath('sessionData', path.join(profileDirectory, 'browser'))
-    // Electron owns the OS-backed lock and releases it even after a crash. Never
-    // forward a second launch's arguments or mutations to the existing instance.
-    if (!app.requestSingleInstanceLock()) {
-      console.error(`profile_in_use: ${profileDirectory}; choose ARES_PROFILE or ARES_PROFILE_DIR`)
-      app.exit(1)
+    if (name) {
+      const opened = new SessionRepository(selectedProfile).openSync(name, () => app.exit(1))
+      context = opened.context
+      profileLock = opened.lock
+    } else {
+      context = personalContext(selectedProfile)
     }
-    fs.writeFileSync(path.join(profileDirectory,'lock-holder.json'),JSON.stringify({pid:process.pid,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600});
-    fs.mkdirSync(app.getPath('sessionData'), { recursive: true })
-    app.setAppLogsPath(path.join(profileDirectory, 'logs'))
-    return profileSaves(profileDirectory, process.env.ARES_SAVE_DIR)
   } catch (error) {
-    console.error(error)
+    const existing = (error as Error & {existing?: import('./sessions/repository.js').SessionOwner}).existing
+    if(name && existing) {
+      console.error(`session_existing: ${JSON.stringify(existing)}`)
+      app.exit(0)
+    }
+    console.error(`${name ? 'session_busy_or_unavailable' : 'profile_in_use'}: ${selectedProfile}: ${String(error)}`)
     app.exit(1)
     throw error
   }
+  app.setName(formatWindowTitle(context.sessionName))
+  app.setPath('userData', context.runtimeRoot)
+  app.setPath('sessionData', path.join(context.runtimeRoot, 'browser'))
+  fs.mkdirSync(app.getPath('sessionData'), {recursive: true, mode: 0o700})
+  app.setAppLogsPath(path.join(context.runtimeRoot, 'logs'))
+  return context
 })()
+const sessionRepository = appContext.kind === 'named' ? new SessionRepository(appContext.personalRoot) : undefined
+sessionRepository?.advertise(appContext, profileLock!, false, process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory())
+fs.writeFileSync(path.join(appContext.runtimeRoot, 'lock-holder.json'), JSON.stringify({pid:process.pid,instance:appContext.instanceId,kind:appContext.kind,session:appContext.sessionId,started_at:new Date(Date.now()-process.uptime()*1000).toISOString(),executable:process.execPath,service_directory:process.env.ARES_SERVICE_DIR??defaultServiceDirectory()}),{mode:0o600})
+const openedOrder = nextOpenSequence(prepareManagementRoot(appContext.personalRoot))
+let discoveryState: {title?: string; running?: boolean; paused?: boolean} = {}
+let presentationRevision = 0
+let presentationGame: {title?: string; system: string} = {system: ''}
+function windowPresentation(): WindowPresentation {
+  return {revision:presentationRevision,instance:appContext.instanceId,kind:appContext.kind,
+    sessionName:appContext.sessionName,title:formatWindowTitle(appContext.sessionName,presentationGame.title),
+    gameTitle:presentationGame.title,system:presentationGame.system,access:externalAccess.snapshot()}
+}
+function publishPresentation() {
+  ++presentationRevision
+  if(window && !window.isDestroyed() && !window.webContents.isDestroyed()) {
+    const snapshot=windowPresentation()
+    window.setTitle(snapshot.title)
+    window.webContents.send('window-presentation',snapshot)
+  }
+}
+function setPresentationGame(title?: string, system = '') {
+  if(presentationGame.title===title && presentationGame.system===system)return
+  presentationGame={title,system};publishPresentation()
+}
+const storageCoordinator = new StorageCoordinator()
+const requestedSaveDirectory = process.env.ARES_SAVE_DIR ? profileSaves(appContext.dataRoot, process.env.ARES_SAVE_DIR) : undefined
+const personalSaveDirectory = personalStorageDirectory(appContext, requestedSaveDirectory, lock => {profileLock = lock})
+const saveDirectory = appContext.kind === 'personal' ? personalSaveDirectory : profileSaves(appContext.dataRoot)
 
-const appLogs = new AppLogs(path.join(app.getPath('userData'), 'logs'))
+const appLogs = new AppLogs(path.join(appContext.runtimeRoot, 'logs'), undefined, appContext.instanceId)
 const fatal = (error: unknown) => {
   appLogs.write('main', 'fatal', error)
   const fallback = setTimeout(() => app.exit(1), 1500)
@@ -126,6 +175,7 @@ protocol.registerSchemesAsPrivileged([
 ])
 let recoveryStarting=false,recoveryTransition=false
 export const sessions = new SessionRouter((reply) => {
+  if(reply.ok && reply.result) { const state=reply.result as any; discoveryState={title:state.title, running:state.paused === false, paused:state.paused}; setPresentationGame(state.title,state.system); }
   if(recoveryStarting)return
   if(!active?.recoveryFailure)plugins.observe(reply)
   if (window && !window.isDestroyed() && !window.webContents.isDestroyed())
@@ -133,15 +183,16 @@ export const sessions = new SessionRouter((reply) => {
 }, (source,error)=>appLogs.write(source,'error',error))
 export const plugins = new PluginRegistry(
   path.join(appRoot, 'bundled-plugins'),
-  path.join(app.getPath('userData'), 'plugins'),
+  path.join(appContext.dataRoot, 'plugins'),
   sessions,
   () => sessions.identity,
   (catalog) => {
     if (window && !window.isDestroyed())
       window.webContents.send('plugin-catalog', catalog)
   },
+  path.join(appContext.runtimeRoot, 'plugin-artifacts'),
 )
-export const pairedRecovery=plugins.connectRecovery(path.join(app.getPath('userData'),'paired-recovery'),()=>{
+export const pairedRecovery=plugins.connectRecovery(path.join(appContext.dataRoot,'paired-recovery'),()=>{
   if(!active||active.recoveryFailure||!sessions.identity||recoveryTransition)throw new ServiceError('recovery_session_changed');
   const current=active,identity={...sessions.identity};
   return {client:sessions,identity,guard:()=>{if(active!==current||recoveryTransition||sessions.identity?.session!==identity.session||sessions.identity.epoch!==identity.epoch)throw new ServiceError('recovery_session_changed');}};
@@ -230,7 +281,18 @@ async function pluginAction(
   })
   return { completed: true }
 }
-export const serviceHost = new LocalServiceHost(sessions, async (params) => {
+export const externalAccess=new ExternalAccessController(appContext.instanceId,appContext.kind==='named',()=>{
+  if(window&&!window.isDestroyed())window.webContents.send('external-access',externalAccess.snapshot());
+  publishPresentation();
+},()=>discoveryState.title);
+export function revokeExternalAccess(){return externalAccess.revoke(async()=>{
+  serviceHost.invalidateExternal();
+  // First stop execution promptly; then drain any main lifecycle transition and
+  // confirm the current host has acknowledged cleanup too.
+  await sessions.revokeExternal();
+  await queueOperation(()=>sessions.revokeExternal());
+});}
+export const serviceHost = new LocalServiceHost(sessions, async (params, guard, owner) => {
   if (
     !params ||
     typeof params !== 'object' ||
@@ -238,6 +300,9 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
       (key) =>
         ![
           'operation',
+          'action',
+          'session',
+          'epoch',
           'handle',
           'release',
           'operation_id',
@@ -259,7 +324,30 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
     )
   )
     throw new Error('invalid_plugin_request')
+  // Renderer plugin commands share their human plugin's SDK closure and cannot
+  // carry per-invocation external ownership. Keep that delegation closed in
+  // personal windows; named sessions provide the complete plugin interface.
+  if(appContext.kind==='personal' && ['open','command','add','enable','reload','resetStartup'].includes(params.operation))throw new ServiceError('plugin_management_requires_named_session');
   switch (params.operation) {
+    case 'managed_states': return queueOperation(async()=>{
+      guard();
+      const controller=active?.checkpoints;
+      if(!controller)throw new Error(active?.checkpointReason || 'checkpoint_unavailable');
+      if(params.session!==sessions.identity?.session || params.epoch!==sessions.identity?.epoch)throw new Error('checkpoint_session_changed');
+      const library=checkpointLibrary();
+      if(params.action==='list'){
+        const offset=params.offset??0,limit=params.limit??20;
+        if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>20)throw new Error('invalid_checkpoint_page');
+        const entries=await library.list(controller.game);
+        return {entries:entries.slice(offset,offset+limit),total:entries.length,nextOffset:offset+limit<entries.length?offset+limit:null};
+      }
+      if(params.action==='save')return saveCheckpoint(true,controller.forOwner(owner,guard));
+      if(typeof params.id!=='string')throw new Error('invalid_checkpoint_reference');
+      if(params.action==='load'){await controller.forOwner(owner,guard).load(library,params.id);return {loaded:true};}
+      if(params.action==='rename'&&typeof params.name==='string'){await library.rename(controller.game,params.id,params.name);return {renamed:true};}
+      if(params.action==='delete'){await library.delete(controller.game,params.id);return {deleted:true};}
+      throw new Error('invalid_request');
+    });
     case 'plugin_exports': return pluginExports.page(params)
     case 'script_result': return sessions.readScriptResult(params)
     case 'build_info': return {...buildInfo(),runtime:{electron:process.versions.electron,chromium:process.versions.chrome,node:process.versions.node},local_models:{local_ai_handler_supported:typeof browserSession.defaultSession.registerLocalAIHandler==='function',provider:'none',usable:false,reason:'provider_not_configured'},native_sha256:await hashRom(hostPath),app_instance:appLogs.instance,app_root:appRoot,executable:process.execPath}
@@ -276,13 +364,15 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
       if(Object.keys(params).some(key=>key!=='operation'))throw new Error('invalid_request');
       return await rendererRecovery.recover();
     case 'app_health': return appHealth()
-    case 'app_status': return { ready: sessions.identity !== undefined, pid: process.pid }
+    case 'app_status': return { ready: !!window && !window.isDestroyed(), pid: process.pid, instance: appContext.instanceId, kind: appContext.kind, session_id: appContext.sessionId, session_name: appContext.sessionName, opened_order: openedOrder, loaded: !!active?.romHash, game_title: discoveryState.title, system: active?.system, running: discoveryState.running === true, paused: discoveryState.paused === true, approval: appContext.kind === 'named' ? 'implicit' : externalAccess.snapshot().state==='authorized'?'authorized':'required' }
     case 'load_rom': {
       if (Object.keys(params).some(key => !['operation', 'path', 'system'].includes(key)) || typeof params.path !== 'string' || !path.isAbsolute(params.path) || params.path.includes('\0') || (params.system !== undefined && typeof params.system !== 'string')) throw new Error('invalid_rom_request')
       return queueOperation(async () => {
         const stat = await fs.promises.stat(params.path)
+        guard();
         if (!stat.isFile()) throw new Error('rom_requires_file')
         const romHash = await hashRom(params.path)
+        guard();
         const alreadyLoaded = !!active?.romHash && active.romHash === romHash
         if (!alreadyLoaded) await start({ rom: params.path, system: params.system, agent: true, romHash })
         const reply = await sessions.request('session.status')
@@ -292,14 +382,14 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
     }
     case 'close_rom': {
       if (Object.keys(params).join(',') !== 'operation') throw new Error('invalid_rom_request')
-      await queueOperation(() => start({ agent: true }))
+      await queueOperation(() => {guard();return start({ agent: true });})
       return { loaded: false, session: sessions.identity?.session, epoch: sessions.identity?.epoch }
     }
 
     case 'provenance': {
       if (Object.keys(params).sort().join(',') !== 'operation' && Object.keys(params).sort().join(',') !== 'enabled,operation') throw new Error('invalid_provenance_request')
       if (params.enabled !== undefined && typeof params.enabled !== 'boolean') throw new Error('invalid_provenance_request')
-      const snapshot = params.enabled === undefined ? preferences.catalog() : await setPreference('debug.provenance', params.enabled)
+      const snapshot = params.enabled === undefined ? preferences.catalog() : await setPreference('debug.provenance', params.enabled, false, guard)
       const entry = snapshot.entries.find(entry => entry.descriptor.id === 'debug.provenance')!
       return { enabled: entry.applied, requested: entry.value, pending: entry.pending, error: snapshot.error ?? null }
     }
@@ -315,11 +405,12 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
         rect = await window.webContents.executeJavaScript(`(() => {const all=[...document.querySelectorAll('[data-plugin-panel]')];const e=all.find(e=>e.dataset.pluginPanel===${selector} && e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0);if(!e)return;const r=e.getBoundingClientRect();return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)}})()`)
         if (!rect) throw new Error('panel_not_open')
       }
-      const captureLease = await window.webContents.executeJavaScript('window.beginVideoCapture()') as string
+      const captureLease = await window.webContents.executeJavaScript('window.beginVideoCaptureReady()') as string
       try {
         const before=await window.webContents.executeJavaScript('({overlay:window.overlaySnapshot?.()??null,surfaces:window.videoSnapshot?.()??[]})')
         const image = await window.webContents.capturePage(rect)
         const after=await window.webContents.executeJavaScript('({overlay:window.overlaySnapshot?.()??null,surfaces:window.videoSnapshot?.()??[]})')
+        if(!await window.webContents.executeJavaScript(`window.hasVideoCapture?.(${JSON.stringify(captureLease)})===true`))throw new Error('capture_renderer_changed')
         const frame_reference=before.overlay?.frame&&after.overlay?.frame&&JSON.stringify(before.overlay)===JSON.stringify(after.overlay)?after.overlay.frame:null
         const overlay_geometry=frame_reference?{coordinate_space:'overlay_css',rect_coordinate_space:'window_css',...after.overlay.size,rect:after.overlay.rect,capture_rect:rect??null}:null
         const video_surfaces=after.surfaces.filter((surface:any)=>surface.visible&&(!rect||surface.rect.x<rect.x+rect.width&&surface.rect.x+surface.rect.width>rect.x&&surface.rect.y<rect.y+rect.height&&surface.rect.y+surface.rect.height>rect.y)).map((surface:any)=>{
@@ -327,7 +418,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
           const stable=surface.frame&&JSON.stringify(previous)===JSON.stringify(surface)
           return {...surface,frame:stable?surface.frame:null,frame_match:stable?'renderer_submit':'unavailable_or_changed',rect_coordinate_space:'window_css',capture_rect:rect??null}
         })
-        await fs.promises.writeFile(params.path, image.toPNG(), { flag: 'wx' })
+        await publishArtifact(params.path,false,async write=>{await write(image.toPNG());},guard)
         return { frame_reference,overlay_geometry,video_surfaces,frame_match:frame_reference?'renderer_submit':'unavailable_or_changed',path: params.path, source: params.panel === undefined ? 'window' : 'panel', panel: params.panel ?? null, ...image.getSize() }
       } finally {
         if(!window.webContents.isDestroyed())await window.webContents.executeJavaScript(`window.endVideoCapture(${JSON.stringify(captureLease)})`).catch(()=>{})
@@ -359,7 +450,7 @@ export const serviceHost = new LocalServiceHost(sessions, async (params) => {
     default:
       throw new Error('unknown_plugin_operation')
   }
-})
+}, appContext.instanceId, undefined, externalAccess)
 export { stop as stopNative }
 const installedHost = path.join(
   process.resourcesPath,
@@ -389,11 +480,11 @@ if (!app.isPackaged && process.env.ARES_DEV_RELOAD === '1') {
       window.webContents.reloadIgnoringCache()
   })
 }
-export const workspace = new WorkspaceStore(path.join(app.getPath('userData'), 'workspace.json'))
+export const workspace = new WorkspaceStore(path.join(appContext.dataRoot, 'workspace.json'))
 export const preferences = new SettingsStore(
-  path.join(app.getPath('userData'), 'preferences.json'), [
+  path.join(appContext.dataRoot, 'preferences.json'), [
     ...presentationSettings,
-    {id:'states.root',title:'Save-state storage folder (existing files are not moved or deleted)',section:'Save States',type:'string',default:path.join(app.getPath('userData'),'states'),apply:'live',file:{extensions:[],directory:true}},
+    {id:'states.root',title:'Save-state storage folder (existing files are not moved or deleted)',section:'Save States',type:'string',default:path.join(appContext.dataRoot,'states'),apply:'live',file:{extensions:[],directory:true}},
     {id:'states.dateFormat',title:'Capture date format',section:'Save States',type:'string',default:DEFAULT_CHECKPOINT_FORMAT,maxLength:256,apply:'live'},
     { id: 'emulation.pauseOnFocusLoss', title: 'Pause when the window loses focus', section: 'Emulation', type: 'boolean', default: false, apply: 'live' },
     { id: 'library.directory', title: 'ROM directory', section: 'ROM Library', type: 'string', default: '', apply: 'live', file: { extensions: [], directory: true } },
@@ -404,7 +495,7 @@ export const preferences = new SettingsStore(
     ...nativeRuntimeSettings,
     ...inputDescriptors,
     { id: 'paths.importBml', title: 'Imported ares settings', section: 'Paths', type: 'string', file: { extensions: ['bml'] },
-      default: path.join(app.getPath('userData'), 'settings.bml'), apply: 'next-rom' },
+      default: path.join(appContext.dataRoot, 'settings.bml'), apply: 'next-rom' },
   ],
   snapshot => {
     if (window && !window.isDestroyed()) window.webContents.send('preferences-changed', snapshot)
@@ -437,23 +528,26 @@ export const preferences = new SettingsStore(
     if (Object.keys(configuration).some(key => reply.result?.[key as keyof RuntimeSettings] !== configuration[key as keyof RuntimeSettings])) throw new Error('runtime_settings_not_applied')
   },
   {
-    ...(process.env.ARES_SETTINGS ? { 'paths.importBml': process.env.ARES_SETTINGS } : {}),
+    ...(process.env.ARES_SETTINGS && appContext.kind === 'personal' ? { 'paths.importBml': process.env.ARES_SETTINGS } : {}),
     ...(serviceLaunchOverride() === undefined ? {} : { 'agent.enabled': serviceLaunchOverride() }),
   },
 )
-function appHealth(){return { instance: appLogs.instance, observed_at: new Date().toISOString(), renderer:rendererRecovery.status(), native: { pid: active?.child.pid, recovery_failure: active?.recoveryFailure, generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
-const mainWatchdog=new MainWatchdog(appHealth,error=>appLogs.write('watchdog','error',error));
+function appHealth(){return { kind:appContext.kind, opened_order:openedOrder, instance: appLogs.instance, observed_at: new Date().toISOString(), renderer:rendererRecovery.status(), native: { pid: active?.child.pid, recovery_failure: active?.recoveryFailure, generation: active?.generation, failure: active?.failure, last_video_sequence: active?.lastSequence, ...sessions.health() }, last_error: appLogs.lastError, logs_directory: appLogs.directory,user_interaction_waits:pluginExports.waits() };}
+const mainWatchdog=new MainWatchdog(()=>appContext.kind==='named'?appHealth():{instance:appContext.instanceId,kind:'personal',opened_order:openedOrder,approval:'required'},error=>appLogs.write('watchdog','error',error));
 function serviceLaunchOverride(): boolean | undefined {
   const switches = process.argv.filter(arg => arg === '--services' || arg === '--no-services')
   if (switches.length) return switches.at(-1) === '--services'
+  if (appContext.kind === 'named') return true
   if (process.env.ARES_ENABLE_SERVICES === '1' || process.argv.includes('--instance-name')) return true
   return undefined
 }
 async function configureServices(enabled: boolean) {
+  if(appContext.kind==='named')enabled=true;
   if (!enabled) { await mainWatchdog.close(); await serviceHost.close(); return }
   if (serviceHost.info) return
   const index = process.argv.indexOf('--instance-name')
-  const name = index < 0 ? undefined : process.argv[index + 1]
+  const name = index < 0 ? appContext.sessionName : process.argv[index + 1]
+  if (appContext.sessionName && name !== appContext.sessionName) throw new Error('conflicting_session_and_instance_name')
   if (index >= 0 && (!name || name.startsWith('--'))) throw new Error('invalid_instance_name')
   const file = await serviceHost.listen(process.env.ARES_SERVICE_DIR, name, hostPath)
   try{await mainWatchdog.start(serviceHost.info!);}catch(error){await mainWatchdog.close();await serviceHost.close();throw error;}
@@ -473,7 +567,10 @@ async function refreshNativeSettings() {
 }
 async function setPreference(id: string, value: unknown, reset = false, guard: () => void = () => {}) {
   if(id==='states.dateFormat' && !reset) {const error=validateCheckpointFormat(String(value));if(error)throw new Error(error)}
-  if(id==='states.root' && !reset && (typeof value!=='string'||!path.isAbsolute(value)))throw new Error('Choose an absolute storage folder')
+  if(id==='states.root' && !reset) {
+    if(typeof value!=='string'||!path.isAbsolute(value))throw new Error('Choose an absolute storage folder')
+    if(appContext.kind==='named') { guard(); profileSaves(appContext.dataRoot, value) }
+  }
   if (reset) await preferences.reset(id, guard); else await preferences.set(id, value, guard)
   if (id === 'paths.importBml') await refreshNativeSettings()
   return preferences.catalog()
@@ -491,8 +588,8 @@ async function choosePreferenceFile(id: string, guard: () => void = () => {}) {
 plugins.connectSettings(new PluginSettingsService(preferences, setPreference, choosePreferenceFile))
 function preferenceValue(id: string) { return preferences.catalog().entries.find(entry => entry.descriptor.id === id)!.value }
 const romLibrary = new RomLibrary(() => String(preferenceValue('library.directory')),
-  path.join(app.getPath('userData'), 'artwork'), () => preferenceValue('library.downloadArtwork') === true)
-void romLibrary.scan().catch(error => appLogs.write('library', 'error', error))
+  path.join(appContext.runtimeRoot, 'artwork'), () => preferenceValue('library.downloadArtwork') === true)
+
 async function openRomFile(system = '', guard: () => void = () => {}) {
   guard()
   const result = await dialog.showOpenDialog(window, {
@@ -560,6 +657,7 @@ ipcMain.handle('plugin.library', (event, token: unknown, request: import('./libr
   } finally { --libraryRequests }
 }))
 
+let nativeStartupRequested = false
 let active: NativeSession | null = null,
   port: MessagePortMain | null = null
 let quitting = false,
@@ -572,12 +670,16 @@ function command(text: string) {
     active.child.stdin.write(text + '\n')
 }
 let checkpointBusy=false
-function checkpointLibrary() {return new CheckpointLibrary(String(preferenceValue('states.root')),file=>shell.trashItem(file),message=>appLogs.write('checkpoint-retention','warn',message))}
-async function saveCheckpoint(permanent:boolean) {
+function checkpointLibrary() {
+  const local = new CheckpointLibrary(String(preferenceValue('states.root')),file=>shell.trashItem(file),message=>appLogs.write('checkpoint-retention','warn',message));
+  const inherited = appContext.kind === 'named' ? readJson<GenerationData>(path.join(appContext.dataRoot,'data.json'),1024*1024,true).personalStates : undefined;
+  return new ScopedCheckpointLibrary(local, inherited ? new CheckpointLibrary(inherited, async()=>{throw new Error('inherited_checkpoint_read_only')}) : undefined);
+}
+async function saveCheckpoint(permanent:boolean, controller=active?.checkpoints) {
   if(checkpointBusy)throw new Error('checkpoint_busy')
   const session=active;if(!session?.checkpoints)throw new Error(session?.checkpointReason||'Save states unavailable')
   checkpointBusy=true
-  try{return await session.checkpoints.save(checkpointLibrary(),permanent)}finally{checkpointBusy=false}
+  try{return await controller!.save(checkpointLibrary(),permanent)}finally{checkpointBusy=false}
 }
 async function autosaveBeforeStop(old:NativeSession) {
   if(!old.checkpoints)return
@@ -588,6 +690,7 @@ async function autosaveBeforeStop(old:NativeSession) {
       if(!state.result?.checkpoint_eligible)return
       await saveCheckpoint(false);return
     }catch(error) {
+      guardExternalWork();
       const choice=await dialog.showMessageBox(window,{type:'error',title:'Could not save your game',message:'The game is still open.',detail:String(error),buttons:['Retry','Stay in game','Leave without saving'],defaultId:0,cancelId:1,noLink:true})
       if(choice.response===1)throw new Error('checkpoint_stay_in_game')
       if(choice.response===2)return
@@ -599,7 +702,9 @@ async function stop() {
   if (!old) return
   recoveryTransition=true
   try{await pairedRecovery.idle();await autosaveBeforeStop(old);if(old.checkpointHash)await pairedRecovery.disarmGame(old.checkpointHash)}finally{recoveryTransition=false}
+  guardExternalWork();
   active = null
+  discoveryState={};setPresentationGame()
   plugins.disconnect()
   sessions.detach()
   // EOF also releases the native command reader. Escalate only for a stuck host.
@@ -614,18 +719,39 @@ async function hashRom(file: string) {
   return hash.digest('hex')
 }
 async function start(options: StartOptions & { agent?: boolean; romHash?: string; title?: string }) {
+  guardExternalWork();
+  nativeStartupRequested = true
   const romHash = options.rom ? options.romHash ?? await hashRom(options.rom) : undefined
   let system = 'Synthetic'
   await refreshNativeSettings()
+  guardExternalWork();
   const startupSettings = preferences.catalog()
-  const settingsFile = String(startupSettings.entries.find(entry => entry.descriptor.id === 'paths.importBml')!.value)
+  const selectedSettingsFile = String(startupSettings.entries.find(entry => entry.descriptor.id === 'paths.importBml')!.value)
+  const identity = { session: randomUUID(), epoch: 1 }
+  const configurationDirectory = path.join(appContext.runtimeRoot, 'runtime-settings')
+  fs.mkdirSync(configurationDirectory, { recursive: true, mode: 0o700 })
+  const configurationFile = path.join(configurationDirectory, `${identity.session}.bml`)
+  fs.writeFileSync(configurationFile, nativeSettingsBml(startupSettings), { flag: 'wx', mode: 0o600 })
+  const importedFile = path.join(configurationDirectory, `${identity.session}.import.bml`)
+  // Freeze imported configuration as well as the generated overlay. Preparation
+  // and the actual loader must see the same peripheral/firmware choices.
+  let settingsFile = ''
+  if (selectedSettingsFile) {
+    try { fs.writeFileSync(importedFile, fs.readFileSync(selectedSettingsFile), {flag: 'wx', mode: 0o600}); settingsFile = importedFile }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { fs.rmSync(configurationFile, {force: true}); throw error } }
+  }
+  const transactionFile = path.join(configurationDirectory, `${identity.session}.storage.json`)
+  const removeConfiguration = () => { fs.rmSync(configurationFile, { force: true }); fs.rmSync(transactionFile, {force: true}); fs.rmSync(importedFile, {force: true}) }
+  let reservation: StorageReservation | undefined, barrierFd: number | undefined, launched = false
+  try {
   // Probe before stopping the running game, so an unsupported file leaves it intact.
   if (options.rom) {
     const identifyArgs = [
       '--identify',
       options.rom,
       '--save-dir',
-      saveDirectory,
+      appContext.kind === 'named' ? personalSaveDirectory : saveDirectory,
+      '--settings-overlay', configurationFile,
     ]
     if (options.system) identifyArgs.push('--system', options.system)
     if (settingsFile) identifyArgs.push('--settings', settingsFile)
@@ -651,7 +777,22 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     const member=members.find(entry=>librarySystems[path.posix.extname(entry.name).slice(1).toLowerCase()]?.name===system)??members.find(entry=>librarySystems[path.posix.extname(entry.name).slice(1).toLowerCase()])
     if(member)gameTitle=romDisplayTitle(path.posix.basename(member.name,path.posix.extname(member.name)))
   }
+  // Prepare and reserve before stopping the current game. Reservations belonging
+  // to this coordinator remain held across overlap, with no unlock/relock gap.
+  const persistenceRoot = appContext.kind === 'named' ? personalSaveDirectory : saveDirectory
+  if (options.rom) {
+    const prepareArgs = ['--prepare-storage', '--rom', options.rom, '--system', system, '--save-dir', persistenceRoot, '--settings-overlay', configurationFile, '--silent']
+    if (settingsFile) prepareArgs.push('--settings', settingsFile)
+    for (const media of options.media || []) prepareArgs.push('--media', media)
+    const inventory = JSON.parse(await probe(prepareArgs)) as StorageInventory
+    guardExternalWork();
+    reservation = await storageCoordinator.reserve(inventory, appContext, gameTitle || system)
+    guardExternalWork();
+    await storageCoordinator.initialize(reservation, appContext)
+  }
+  guardExternalWork();
   await stop()
+  guardExternalWork();
   const args = options.rom ? ['--rom', options.rom] : ['--synthetic']
   if (options.rom) args.push('--system', system)
   if (options.rom||options.agent) args.push('--paused')
@@ -660,18 +801,21 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
   if (settingsFile) args.push('--settings', settingsFile)
   if (options.hd) args.push('--1080p')
   if (options.silent || process.env.ARES_SILENT === '1') args.push('--silent')
-  args.push('--save-dir', saveDirectory, '--resource-dir', resourceDirectory)
-  const identity = { session: randomUUID(), epoch: 1 }
-  args.push('--control-session', identity.session)
-  const configurationDirectory = path.join(app.getPath('userData'), 'runtime-settings')
-  fs.mkdirSync(configurationDirectory, { recursive: true })
-  const configurationFile = path.join(configurationDirectory, `${identity.session}.bml`)
-  fs.writeFileSync(configurationFile, nativeSettingsBml(startupSettings), { flag: 'wx', mode: 0o600 })
-  args.push('--settings-overlay', configurationFile)
-  const removeConfiguration = () => fs.rmSync(configurationFile, { force: true })
+  args.push('--save-dir', persistenceRoot, '--resource-dir', resourceDirectory)
+  args.push('--control-session', identity.session, '--settings-overlay', configurationFile)
+  const inherited: number[] = [profileLock!.fd]
+  if (reservation) {
+    inherited.push(reservation.fd)
+    barrierFd = fs.openSync(storageCoordinator.barrierFile(), fs.constants.O_CREAT | fs.constants.O_RDWR | fs.constants.O_NOFOLLOW, 0o600)
+    const barrierIndex = 4 + inherited.length
+    inherited.push(barrierFd)
+    publishJson(transactionFile, {version: 1, personal: appContext.kind === 'personal', barrier: barrierIndex, resources: reservation.nativeResources()})
+    args.push('--storage-transaction', transactionFile)
+  }
   const child = spawn(hostPath, args, {
-    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe', 'pipe', ...inherited],
   }) as ChildProcessByStdio<Writable, Readable, Readable>
+  launched = true
   const session: NativeSession = {
     child,
     system,
@@ -683,12 +827,14 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     closed: Promise.resolve(),
   }
   session.closed = new Promise((resolve) =>
-    child.once('close', (code, signal) => {
+    child.once('close', async (code, signal) => {
       removeConfiguration()
+      await reservation?.release()
       if (active === session) {
         port?.postMessage({reset:true,system:session.system,reason:'native_disconnected'});
         if(window&&!window.isDestroyed()&&!window.webContents.isDestroyed())window.webContents.send('session-state',{protocol:1,id:'native-disconnected',...(sessions.identity??identity),ok:false,error:'native_host_disconnected'});
         active = null
+        discoveryState={};setPresentationGame()
         plugins.disconnect()
         sessions.detach()
         status(
@@ -741,7 +887,7 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     await sessions.request('session.status');
     if(startupError)throw startupError;
   })();
-  if (window && !window.isDestroyed()) window.setTitle(gameTitle ? `${gameTitle} — ares` : 'ares')
+  setPresentationGame(gameTitle,system)
   void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window?.isFocused() ?? false).catch(error => appLogs.write('focus-pause', 'error', error))
   void startup.then(()=>client.request('session.status')).then(reply => {
     removeConfiguration()
@@ -791,9 +937,14 @@ async function start(options: StartOptions & { agent?: boolean; romHash?: string
     const reply = await sessions.request('session.pause', client.identity, undefined, 'agent-launch');
     if (!reply.ok) throw new Error(reply.error)
   }
+  } finally {
+    if (barrierFd !== undefined) fs.closeSync(barrierFd)
+    if (!launched) { removeConfiguration(); await reservation?.release() }
+  }
 }
 function queueOperation<T>(task: () => Promise<T>) {
-  const result = operation.then(task)
+  const scope=externalWork.getStore();
+  const result = operation.then(()=>{scope?.guard();return task();})
   operation = result.then(() => {}, () => {})
   return result
 }
@@ -807,6 +958,8 @@ function enqueue(task: () => Promise<void>) {
 app
   .whenReady()
   .then(async () => {
+    if (appContext.kind === 'named') profileSaves(appContext.dataRoot, String(preferenceValue('states.root')))
+    void romLibrary.scan().catch(error => appLogs.write('library', 'error', error))
     await refreshNativeSettings()
     await plugins.initialize(
       (process.env.ARES_PLUGIN_DIRS || '')
@@ -845,6 +998,7 @@ app
       minWidth: 650,
       minHeight: 480,
       backgroundColor: '#000000',
+      title: formatWindowTitle(appContext.sessionName),
       ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),
       webPreferences: {
         preload: path.join(appRoot, 'dist/preload.js'),
@@ -857,11 +1011,15 @@ app
     window.on('close',event=>{if(!quitReady){event.preventDefault();app.quit()}})
     window.on('page-title-updated', event => event.preventDefault());
     const focusChanged = () => { void sessions.configureFocusPause(preferenceValue('emulation.pauseOnFocusLoss') === true, window.isFocused()).catch(error => appLogs.write('focus-pause', 'error', error)); };
-    window.on('focus', focusChanged); window.on('blur', () => { command('fastforward 0'); focusChanged(); });
+    window.on('focus', () => { focusChanged(); void preferences.resync(); }); window.on('blur', () => { command('fastforward 0'); focusChanged(); });
     window.webContents.on('did-start-loading', () => command('fastforward 0'));
     window.webContents.on('render-process-gone', () => command('fastforward 0'));
     window.on('enter-full-screen', () => window.webContents.send('window-fullscreen', true));
     window.on('leave-full-screen', () => window.webContents.send('window-fullscreen', false));
+    ipcMain.handle('window.presentation', event => {
+      if(event.sender!==window.webContents || event.senderFrame!==window.webContents.mainFrame)throw new Error('invalid_sender');
+      return windowPresentation();
+    });
     ipcMain.handle('window.fullscreen', event => {
       if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('invalid_sender');
       return window.isFullScreen();
@@ -874,6 +1032,7 @@ app
         { type: 'separator' as const }, { role: 'quit' as const },
       ] }] : []),
       { label: 'File', submenu: [
+        { label: 'New Window', accelerator: 'CmdOrCtrl+N', click: () => { try { launchWindow({appRoot, executable: process.execPath, packaged: app.isPackaged}, appContext.personalRoot); } catch (error) { status(String(error)); } } },
         { label: 'Open ROM…', accelerator: 'CmdOrCtrl+O', click: action('open') },
         ...(process.platform !== 'darwin' ? [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: action('settings') }] : []),
         { role: 'close' as const },
@@ -953,8 +1112,8 @@ app
             generation: active.generation,
             receivedMs: performance.timeOrigin + performance.now(),
           })
-      } else
-        enqueue(() =>
+      } else if (!nativeStartupRequested)
+        enqueue(() => nativeStartupRequested ? Promise.resolve() :
           start(
             process.env.ARES_DEV_RELOAD === '1' && process.env.ARES_DEV_SESSION
               ? JSON.parse(process.env.ARES_DEV_SESSION) as StartOptions
@@ -1077,6 +1236,14 @@ app
         }
       },
     )
+    ipcMain.handle('external-access', (event,action) => {
+      if(event.sender!==window.webContents || event.senderFrame!==window.webContents.mainFrame)throw new Error('invalid_sender');
+      if(action==='allow')externalAccess.decide(true);
+      else if(action==='deny')externalAccess.decide(false);
+      else if(action==='revoke')return revokeExternalAccess().then(()=>externalAccess.snapshot());
+      else if(action!==undefined)throw new Error('invalid_request');
+      return externalAccess.snapshot();
+    });
     ipcMain.handle('agent.action', async (event, action: unknown) => {
       if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('invalid_sender')
       const bundled = isBundledCliRuntime(appRoot, process.execPath)
@@ -1105,6 +1272,17 @@ app
         throw new Error('invalid_request')
       })
     }
+    ipcMain.handle('session-data',async(event,request:unknown)=>{
+      if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!request||typeof request!=='object')throw new Error('invalid_request');
+      const p=request as {operation:string;name?:string;mode?:string;archiveId?:string};
+      const repository=new SessionRepository(appContext.personalRoot);
+      if(p.operation==='list')return repository.list();
+      if(typeof p.name!=='string')throw new Error('invalid_request');
+      if(p.operation==='archives')return repository.archives(p.name);
+      if(p.operation==='reset'&&(p.mode==='fresh'||p.mode==='inherit-personal'))return repository.replace(p.name,p.mode);
+      if(p.operation==='restore')return repository.replace(p.name,'restore',p.archiveId);
+      throw new Error('invalid_request');
+    });
     ipcMain.handle('checkpoints',async(event,request:unknown)=>{
       if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!request||typeof request!=='object')throw new Error('invalid_request')
       const p=request as {operation:string;id?:string;name?:string;session?:string}
@@ -1194,6 +1372,8 @@ app
         if (process.env.ARES_AUTOTEST === '1') app.quit()
       }
     })
+    preferences.watch()
+    sessionRepository?.advertise(appContext, profileLock!, true, process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory())
     void window.loadFile(path.join(appRoot, 'index.html'), {
       query: {
         autotest: process.env.ARES_AUTOTEST || '',
@@ -1223,6 +1403,8 @@ app.on('before-quit', (event) => {
     for(const close of [()=>plugins.close(),()=>mainWatchdog.close(),()=>serviceHost.close()]){
       try{await close()}catch(error){appLogs.write('main','error',error)}
     }
+    preferences.close()
+    await profileLock?.release()
     quitReady=true
     app.quit()
   })()

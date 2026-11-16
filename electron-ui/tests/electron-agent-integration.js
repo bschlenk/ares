@@ -11,7 +11,7 @@ fs.writeFileSync(file, JSON.stringify({ version: 1, values: { 'agent.enabled': s
 app.setPath('userData', profile);
 Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_ROM: '', ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DISABLE_PLUGINS: '1', ARES_SERVICE_DIR: path.join(temporary, 'ipc') });
 delete process.env.ARES_ENABLE_SERVICES;
-const { sessions, serviceHost, preferences } = await import('../dist/main.js');
+const { sessions, serviceHost, preferences, externalAccess } = await import('../dist/main.js');
 const until = async fn => { for (let n = 0; n < 400; ++n) { try { const value = await fn(); if (value) return value; } catch {} await new Promise(r => setTimeout(r, 25)); } throw new Error('agent integration timed out'); };
 const deadline = setTimeout(() => app.exit(1), 25000);
 app.on('will-quit', () => { clearTimeout(deadline); fs.rmSync(temporary, { recursive: true, force: true }); });
@@ -33,6 +33,7 @@ app.whenReady().then(async () => {
     assert.equal(preferences.catalog().entries.some(e => e.descriptor.id === 'agent.name'), false);
     await js("window.ares.preferences.set('agent.enabled', true)");
     assert.ok(serviceHost.info);
+    externalAccess.request('agent-fixture');await js('window.ares.externalAccess("allow")');
     const metadata = serviceHost.metadataFile;
     client = new LocalServiceClient(serviceHost.metadataFile, serviceHost.instance);
     assert.equal((await client.request('session.status')).session, initial.session);

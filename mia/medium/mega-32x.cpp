@@ -73,6 +73,7 @@ auto Mega32X::load(string location) -> LoadResult {
 }
 
 auto Mega32X::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   if(auto node = document["game/board/memory(type=RAM,content=Save)"]) {

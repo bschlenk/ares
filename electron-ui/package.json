@@ -27,6 +27,9 @@
     "test:kirby": "node scripts/build.js && electron tests/electron-kirby.js",
     "test:kirby-feedback": "node scripts/build.js && node tests/kirby-feedback-live.cjs",
     "plugin": "node dist/plugins/cli.js",
+    "test:session-recovery": "node scripts/build.js && node --test tests/session-recovery.test.js && electron tests/electron-session-recovery.js",
+    "test:session-storage": "node --test tests/session-storage.test.js && node tests/session-storage-live.js",
+    "test:personal-windows": "node scripts/build.js && node --test tests/personal-windows.test.js && node tests/personal-windows-live.js",
     "test:profiles": "node scripts/build.js && node tests/profile-live.cjs",
     "test:launch": "node tests/launch-live.cjs",
     "test:plugin-settings": "node scripts/build.js && electron tests/electron-plugin-settings.js",
@@ -52,7 +55,10 @@
     "test:save-states-cross-core": "node scripts/build.js && node tests/checkpoint-cross-core.js",
     "test:paired-recovery": "node scripts/build.js && node --test --test-concurrency=1 tests/paired-recovery.test.js tests/paired-recovery-native.test.js tests/paired-recovery-electron.test.js",
     "test:network": "node scripts/build.js && node --test --test-concurrency=1 tests/plugin-network.test.js tests/plugin-network-electron.test.js",
-    "test:video": "node scripts/build.js && node --test tests/video-source.test.js && electron tests/electron-native-video.js"
+    "test:video": "node scripts/build.js && node --test tests/video-source.test.js && electron tests/electron-native-video.js",
+    "test:external-access": "node scripts/build.js && node --test tests/external-access.test.js tests/external-access-native.test.js && electron tests/electron-external-access.js",
+    "test:session-presentation": "node scripts/build.js && node --test tests/session-presentation.test.js tests/video-source.test.js && electron tests/electron-session-presentation.js && electron tests/electron-session-presentation.js --personal-test",
+    "test:session-selection": "node scripts/build.js && node --test tests/session-selection.test.js && electron tests/electron-session-selection.js && electron tests/electron-session-selection.js --personal-test"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

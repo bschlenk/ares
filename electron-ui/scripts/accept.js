@@ -117,12 +117,24 @@ async function main() {
     ['electron-workspace', 'electron-workspace.js', []],
     ['electron-settings', 'electron-settings.js', []],
     ['electron-save-states', 'electron-checkpoints.js', []],
+    ['electron-session-presentation', 'electron-session-presentation.js', []],
+    ['electron-personal-presentation', 'electron-session-presentation.js', ['--personal-test']],
+    ['electron-external-access', 'electron-external-access.js', []],
+    ['electron-session-selection', 'electron-session-selection.js', []],
+    ['electron-session-selection-disabled-named', 'electron-session-selection.js', ['--disabled-named-test']],
+    ['electron-session-selection-personal', 'electron-session-selection.js', ['--personal-test']],
+    ['electron-session-recovery', 'electron-session-recovery.js', []],
+    ['electron-session-recovery-no-services', 'electron-session-recovery.js', ['--no-services-test']],
     ['electron-agent', 'electron-agent-integration.js', []],
     ['electron-agent-forced-on', 'electron-agent-integration.js', ['--services']],
     ['electron-agent-forced-off', 'electron-agent-integration.js', ['--no-services']],
     ['electron-recovery', 'electron-recovery.js', ['--disable-plugins']],
   ]) await gate(name, electron, [`tests/${file}`, ...args])
+  await gate('session-selection-live', process.execPath, ['tests/session-selection-live.js']);
+  await gate('personal-windows', process.execPath, ['tests/personal-windows-live.js']);
   await gate('profile-ownership', process.execPath, ['tests/profile-live.cjs'])
+  await gate('session-context', process.execPath, ['tests/session-context-live.js'])
+  await gate('session-storage', process.execPath, ['tests/session-storage-live.js'])
   await gate('launch-isolation', process.execPath, ['tests/launch-live.cjs'])
   const bundle = path.join(runDirectory, 'Ares.app')
   try {

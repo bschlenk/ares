@@ -110,6 +110,7 @@ auto PCEngineLD::changeDiskState(const string state) -> void {
 }
 
 auto PCEngineLD::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(game->location);
   hucard->save(game->location);

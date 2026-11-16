@@ -36,6 +36,7 @@ auto GameGear::load(string location) -> LoadResult {
 }
 
 auto GameGear::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   if(auto node = document["game/board/memory(type=RAM,content=Save)"]) {

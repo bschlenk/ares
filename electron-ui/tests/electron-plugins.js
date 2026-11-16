@@ -2,10 +2,10 @@ import { buildSync } from 'esbuild'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow } from 'electron'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import assert from 'node:assert/strict'
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ares-plugin-ui-'))
+const temporary = fs.mkdtempSync('/tmp/ares-plugin-ui-')
+process.env.ARES_SERVICE_DIR = path.join(temporary, 'ipc');
 app.setPath('userData', path.join(temporary, 'profile'))
 process.env.ARES_SAVE_DIR = path.join(temporary, 'profile', 'saves')
 delete process.env.ARES_ROM

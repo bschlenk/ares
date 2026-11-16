@@ -18,7 +18,7 @@ module.exports = async function checkSignals(bundle) {
   Object.assign(baseEnv,{ARES_BACKGROUND_TEST:'1',ARES_DEFAULT_PLUGINS:'0',ARES_SILENT:'1',ARES_ENABLE_SERVICES:'1',ARES_SERVICE_DIR:serviceDirectory});
   const children=[];
   const launch=profile=>{
-    const child=spawn(electron,[...entry,`--user-data-dir=${path.join(directory,profile)}`,'--instance-name','kirby'],{env:baseEnv,stdio:['ignore','pipe','pipe']});
+    const child=spawn(electron,[...entry,`--user-data-dir=${path.join(directory,profile)}`,'--instance-name','kirby','--session-name','kirby'],{env:baseEnv,stdio:['ignore','pipe','pipe']});
     child.stdout.resume();let log='';child.stderr.on('data',b=>log+=b);const closed=once(child,'close');const value={child,closed,log:()=>log};children.push(value);return value;
   };
   async function until(fn,label){

@@ -25,6 +25,7 @@ auto Nintendo64DD::load(string location) -> LoadResult {
 }
 
 auto Nintendo64DD::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("time.rtc", ".rtc");
   
   return true;

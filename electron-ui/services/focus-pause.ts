@@ -48,6 +48,10 @@ export class FocusPause {
       this.owned = false; this.automation = true;
     });
   }
+  barrier(): Promise<void> {
+    // Clear focus's resume entitlement after every prior continuation drains.
+    return this.enqueue(async()=>{this.owned=false;this.automation=true;});
+  }
   private async reconcile(): Promise<void> {
     const client = this.client;
     if (!client) return;

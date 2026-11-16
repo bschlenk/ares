@@ -83,6 +83,7 @@ auto MSX2::load() -> LoadResult {
 }
 
 auto MSX2::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   if(tape && tape != game) tape->save(tape->location);

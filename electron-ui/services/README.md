@@ -423,3 +423,76 @@ The full source audit and multi-media mapping are in
 `electron tests/electron-checkpoints.js` after building JS/native. The Electron
 fixture uses disposable profiles and original artificial media, and stubs Trash
 and save-failure decisions; it never uses an existing user session.
+
+## Managed states and session recovery
+
+See [managed-library tools and reset/restore recipes](../sessions/RECOVERY.md). Named states
+include explicit Personal/Session origin and read-only inherited references.
+Whole-session reset/restore requires a closed target; previous data is retained.
+
+## Session discovery and target scope
+
+Local `management({operation:'app_status'})` returns the typed metadata allowlist
+in `management-contracts.ts`: instance UUID, kind, persistent name/ID, namespace
+open sequence, cached title/system/playback state, readiness and approval state.
+It never calls native `session.status`. Endpoint permissions, authentication and
+schema negotiation still apply. Name-lock liveness uses this same metadata probe.
+Open order is allocated under the session namespace's kernel lock.
+
+The public CLI/MCP registry adds an optional `target` to gameplay and management
+tools. Each selected instance gets its own bounded client/registry/cancellation
+context; there is no adapter-global mutable selection. Instances remain pinned
+across disconnects; a new request to a named handle may reopen its persisted name.
+Additional `operation_ref`, `lease_ref` and `result_ref` fields returned by scoped tools are opaque
+`aresref1` values containing their original instance target and native identity for operations.
+Retain them verbatim; references reject another target or changed native epoch.
+Legacy numeric IDs remain supported for explicit low-level use.
+
+Personal windows require an in-memory window-wide grant. Before approval the
+explicit allowlist is authenticated `app_status`, `access_request`,
+`access_status`, `access_wait`, `access_cancel` and transport negotiation/cancel.
+Native status, reads, captures, artifacts, settings, ROM changes and owner leases
+remain closed. The watchdog's personal cache contains only minimal metadata.
+
+`access_request` returns an opaque `request_id` and leaves one nonmodal Allow/Deny
+prompt pending for its bounded deadline (default 30 seconds, maximum 60), even
+when the short requesting CLI disconnects. Cancel that request with
+`access_cancel({request_id})`. `access_wait` in CLI/MCP polls approval and holds no
+gameplay command on the host; abort, disconnect, Deny and timeout remove its
+requester. Up to 32 requesters share one prompt. The endpoint reserves room for
+these probes/waiters separately from its eight protected connection owners.
+
+Allow applies to every authenticated client of that window. Renderer reload does
+not remove it; app close does. Revoke closes the gate and increments its generation
+before cleanup, invalidates all leases, guards queued main/native/file work, and
+waits for a privileged native safe-point barrier. The barrier releases external
+owners (including batch children, detached input demonstrations and disconnected
+leases), stops scripts/observers/recordings, clears external inputs and pauses.
+Focus-pause loses its resume entitlement. A failed barrier leaves access closed
+in `revoking`; the native client's failure handling terminates an unresponsive
+host. Reapproval cannot revive work from a previous generation.
+
+Personal renderer plugin mutations/delegation (`add`, `enable`, `reload`,
+`resetStartup`, `open`, `command`) return
+`plugin_management_requires_named_session` even with a grant: their shared human
+SDK callbacks cannot yet carry separate external invocation ownership. Use a named
+session for that interface. Human plugin ownership is preserved by revocation.
+Named instances have implicit authorization and keep their service available even
+when the copied personal `agent.enabled` setting was disabled.
+
+
+Session identity is shown in both the native window title and the custom header.
+Named sessions keep a `Session: <name>` indicator whenever playback controls are
+revealed, including empty views; it has no dismiss or Revoke action. Authorized
+personal windows show that external clients can access real settings and saves,
+with keyboard-reachable **Revoke** in the same toolbar. Pointer inactivity hides
+these with the controls; keyboard focus reveals them. Reloading the interface
+reconstructs identity and access from main-process state.
+
+Game captures exclude this app chrome. Presented UI captures hold a common scope
+for the entire capture, including panel rectangles and nested captures; game and
+plugin overlays remain. Native screenshots, recordings and checkpoint previews
+use native pixels. A renderer reload during UI capture fails that capture without
+publishing it. Per-process `app.setName` is applied before readiness for named
+sessions; this alone does not establish macOS packaged Dock hover behavior. See
+[acceptance evidence](../ACCEPTANCE.md) for verification and remaining limits.

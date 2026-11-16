@@ -53,6 +53,7 @@ auto GameBoyAdvance::load(string location) -> LoadResult {
 }
 
 auto GameBoyAdvance::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   if(auto node = document["game/board/memory(type=RAM,content=Save)"]) {

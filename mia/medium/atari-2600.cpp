@@ -266,6 +266,7 @@ auto Atari2600::load(string location) -> LoadResult {
 }
 
 auto Atari2600::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
   if(!document) return false;
   auto board = document["game/board"].string();

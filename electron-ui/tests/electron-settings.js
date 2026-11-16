@@ -13,8 +13,8 @@ fs.writeFileSync(file, JSON.stringify({ version: 1, values: {
 } }));
 app.setPath('userData', profile);
 delete process.env.ARES_SETTINGS;
-Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_ROM: '', ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DISABLE_PLUGINS: '1', ARES_ENABLE_SERVICES: '0' });
-const { sessions } = await import('../dist/main.js');
+Object.assign(process.env, { ARES_PROFILE_DIR: profile, ARES_SERVICE_DIR: path.join(temporary, 'ipc'), ARES_ROM: '', ARES_AUTOTEST: '', ARES_SILENT: '1', ARES_BACKGROUND_TEST: '1', ARES_DISABLE_PLUGINS: '1', ARES_ENABLE_SERVICES: '0' });
+const { sessions, appContext } = await import('../dist/main.js');
 const until = async check => {
   for (let i = 0; i < 300; i++) {
     try { const result = await check(); if (result) return result; } catch {}
@@ -121,7 +121,7 @@ app.whenReady().then(async () => {
     await until(() => js(`window.ares.preferences.catalog().then(s => !s.entries.find(e => e.descriptor.id === ${JSON.stringify(firmwareId)}).pending)`));
     assert.equal(JSON.parse(fs.readFileSync(file)).values[firmwareId], path.join(media, 'boot.rom'));
     assert.equal(fs.readFileSync(imported, 'utf8'), original);
-    assert.deepEqual(fs.readdirSync(path.join(profile, 'runtime-settings')), [], 'launch snapshots removed after acknowledgement');
+    assert.deepEqual(fs.readdirSync(path.join(appContext.runtimeRoot, 'runtime-settings')), [], 'launch snapshots removed after acknowledgement');
     await js(`window.ares.preferences.reset(${JSON.stringify(firmwareId)})`);
     assert.equal(await js(`window.ares.preferences.catalog().then(s => s.entries.find(e => e.descriptor.id === ${JSON.stringify(firmwareId)}).pending)`), true);
     assert.equal((await sessions.request('session.status')).result.system, 'Game Boy Advance', 'changing firmware never restarts a running game');

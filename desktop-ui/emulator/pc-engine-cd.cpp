@@ -76,6 +76,7 @@ auto PCEngineCD::load() -> LoadResult {
 }
 
 auto PCEngineCD::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(game->location);
   bios->save(game->location);

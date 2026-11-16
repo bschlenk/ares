@@ -5,7 +5,6 @@ import { randomUUID } from 'node:crypto';
 export interface AppLogEntry { cursor:number; timestamp:string; severity:string; source:string; message:string; instance:string; nativeGeneration?:number; truncated:number }
 /** Bounded diagnostic sink. Writes are serialized, and never log their own failures. */
 export class AppLogs {
-  readonly instance=randomUUID();
   private entries:AppLogEntry[]=[];
   private sequence=0;
   private pending=0;
@@ -15,7 +14,7 @@ export class AppLogs {
   private repeats=new Map<string,{at:number;count:number}>();
   lost=0;
   lastError?:AppLogEntry;
-  constructor(readonly directory:string, private maxBytes=1024*1024) {
+  constructor(readonly directory:string, private maxBytes=1024*1024, readonly instance:string=randomUUID()) {
     fs.mkdirSync(directory,{recursive:true,mode:0o700});
     // Recover only a bounded tail from our four regular log files. Restart
     // creates a new cursor generation; retained entries keep their source instance.

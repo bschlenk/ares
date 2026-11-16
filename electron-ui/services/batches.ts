@@ -1,3 +1,4 @@
+import {externalWork} from './external-access.js';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { ServiceError, type SessionClient, type SessionIdentity, type SessionReply, type ExecutionOperation } from './contracts.js';
@@ -15,9 +16,9 @@ export class Batches {
   async run(native: SessionClient & { identity: SessionIdentity }, invoke: SessionClient, starting: SessionIdentity,
     p: BatchParams, owner: string, current: () => boolean, releaseArtifacts: (owner: string) => void): Promise<BatchResult> {
     if (this.jobs.size) throw new ServiceError('busy');
-    const child = `batch-${randomUUID()}`, deadline = performance.now() + p.timeoutMs;
+    const child = `${owner.startsWith('ext-')?'ext-':'batch-'}${randomUUID()}`, deadline = performance.now() + p.timeoutMs;
     let cancelled = '', release: Promise<unknown> | undefined;
-    const revoke = () => { releaseArtifacts(child); release ??= native.request('execution.release', undefined, undefined, child).catch(() => {}); };
+    const revoke = () => { releaseArtifacts(child); release ??= externalWork.exit(()=>native.request('execution.release', undefined, undefined, child)).catch(() => {}); };
     const job = { child, token:p.cancellationToken, cancel: (reason: string) => { cancelled ||= reason; revoke(); } };
     this.jobs.set(owner, job);
     const timer = setTimeout(() => job.cancel('timeout'), p.timeoutMs);

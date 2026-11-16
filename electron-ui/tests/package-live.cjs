@@ -132,9 +132,14 @@ async function run() {
     { cwd: temporary, env, input: 'quit\n', timeout: 10000 },
   )
   env.ARES_PROFILE_DIR=path.join(temporary,'profile')
+  env.ARES_SAVE_DIR=''
+  const {SessionRepository}=await import('../dist/sessions/repository.js')
+  const opened=await new SessionRepository(env.ARES_PROFILE_DIR).open('package-fixture')
+  const dataProfile=opened.context.dataRoot
+  await opened.lock.release()
   const child = spawn(
     path.join(bundle, 'Contents/MacOS/Ares'),
-    [`--user-data-dir=${path.join(temporary, 'profile')}`],
+    [`--user-data-dir=${path.join(temporary, 'profile')}`, '--session-name', 'package-fixture'],
     { cwd: temporary, env },
   )
   const closed = once(child, 'close')
@@ -168,8 +173,9 @@ async function run() {
     )
     const {ToolRegistry}=require('../dist/tools/registry.js');
     const {registerTools}=require('../dist/mcp/register-tools.js');
+    const {Targets}=require('../dist/sessions/targets.js');
     const {LocalServiceClient}=require('../dist/services/local-endpoint.js');
-    const registry=new ToolRegistry(),schemaClient=new LocalServiceClient('/tmp/ares-package-schema-only.json','schema');registerTools(registry,schemaClient);
+    const registry=new ToolRegistry(),schemaClient=new LocalServiceClient('/tmp/ares-package-schema-only.json','schema');registerTools(registry,schemaClient,new Targets(env.ARES_SERVICE_DIR,env.ARES_PROFILE_DIR));
     assert.deepEqual([...inventory].sort(),registry.list().map(t=>t.name).sort());schemaClient.close();
     for (const name of [
       'profiler_control',
@@ -239,8 +245,8 @@ async function run() {
     }
     assert.equal(cli('open', 'test.packaged', 'panel').completed, true)
     const stampFile = path.join(
-      temporary,
-      'profile/plugins/test.packaged-v1.json',
+      dataProfile,
+      'plugins/test.packaged-v1.json',
     )
     const waitStamp = async (version) => {
       for (let i = 0; i < 150; i++) {
@@ -260,7 +266,7 @@ async function run() {
     assert.equal(firstStamp.recovery.journalSequence,1)
     assert.equal(nextStamp.recovery.journalSequence,2)
     assert.notEqual(firstStamp.recovery.id,nextStamp.recovery.id)
-    const pairedFolder=path.join(temporary,'profile/paired-recovery/test.packaged-v1')
+    const pairedFolder=path.join(dataProfile,'paired-recovery/test.packaged-v1')
     const pairedIndex=JSON.parse(fs.readFileSync(path.join(pairedFolder,'latest.json'),'utf8'))
     assert.equal(pairedIndex.pointId,nextStamp.recovery.id)
     assert.ok(fs.statSync(path.join(pairedFolder,pairedIndex.pointId,'state.bin')).size>533)
@@ -269,7 +275,7 @@ async function run() {
       firstStamp.session,
       'TSX replacement must keep the native session/epoch',
     )
-    const journal=JSON.parse(fs.readFileSync(path.join(temporary,'profile/plugins/test.packaged-v1.journal.json'),'utf8'))
+    const journal=JSON.parse(fs.readFileSync(path.join(dataProfile,'plugins/test.packaged-v1.journal.json'),'utf8'))
     assert.deepEqual(journal.records.map(r=>r.value.version),[1,2])
 
 

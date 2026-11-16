@@ -1,3 +1,6 @@
+import {registerScopedTools} from './scoped-tools.js';
+import {Targets} from '../sessions/targets.js';
+import {registerSessionDataTools} from './session-data-tools.js';
 import {registerCoreTools} from './core-tools.js';
 import { registerDemonstrationTools } from './demonstration-tools.js';
 import { buildInfo } from '../services/build-info.js';
@@ -29,7 +32,12 @@ import { AutomaticServiceClient } from '../services/automatic-client.js';
 import { defaultServiceDirectory, LocalServiceClient } from '../services/local-endpoint.js';
 import { MemoryClient, hexToBytes, type RegionHandle } from '../services/memory.js';
 
-export function registerTools(server: ToolRegistrar, local: LocalServiceClient) {
+export function registerTools(server: ToolRegistrar, local: LocalServiceClient, targets?: Targets) {
+  if(targets) return registerScopedTools(server,targets,local);
+  registerUnscopedTools(server,local);
+  return ()=>local.close();
+}
+export function registerUnscopedTools(server: ToolRegistrar, local: LocalServiceClient) {
 const memory = new MemoryClient(local);
 let regions: RegionHandle[] | undefined;
 // Retain identity with recent operation handles, just as region handles do.
@@ -71,6 +79,7 @@ const failure = (error: unknown) => ({ ...output({ error: error instanceof Servi
   server.registerTool('script_results',{description:'List retained script result handles, consumption/expiry state and bounded store admission diagnostics. Consumed CLI results are evictable; unconsumed results remain pinned until expiry or explicit release.',inputSchema:z.object({offset:z.number().int().min(0).max(16).default(0),limit:z.number().int().min(1).max(8).default(8)}).strict(),annotations:{readOnlyHint:true}},p=>call(()=>local.manage({operation:'script_result',list:true,...p})));
   server.registerTool('script_result_release',{description:'Release an immutable completed result handle. Does not cancel or mutate active execution.',inputSchema:z.object({result_handle:z.string().uuid()}).strict()},p=>call(()=>local.manage({operation:'script_result',release:true,handle:p.result_handle})));
   server.registerTool('owner_lease',{description:'Explicit durable ownership across local clients, bounded to 10 minutes. Create, then use lease_id on each connection before starting/running/stopping resources. list discovers status; release cancels execution and frees inputs/recordings. Ordinary disconnect cleanup remains enabled for connections without a lease.',inputSchema:z.object({action:z.enum(['create','use','list','release']),lease_id:z.string().uuid().optional(),name:z.string().min(1).max(64).default('agent job'),seconds:z.number().int().min(1).max(600).default(300)}).strict()},p=>call(()=>local.manage({operation:'owner_lease',...p})));
+  registerSessionDataTools(server,local,status);
   registerDemonstrationTools(server,local,status);
   registerMemoryTools(server, local, status);
   server.registerTool('provenance_control', { description: 'Query or explicitly enable/disable bounded N64 ROM-to-RAM DMA provenance. Omit enabled to query. Applies immediately and to subsequent ROM loads, so enable before loading/resetting the ROM to capture boot transfers. Disabling frees the history. Reading overlay_log never enables recording.', inputSchema: z.object({ enabled: z.boolean().optional() }).strict() }, p => call(() => local.manage({ operation: 'provenance', ...p })));

@@ -96,6 +96,7 @@ auto MegaLD::changeDiskState(const string state) -> void {
 }
 
 auto MegaLD::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(game->location);
   game->save(game->location);

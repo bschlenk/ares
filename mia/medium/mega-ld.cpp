@@ -63,6 +63,7 @@ auto MegaLD::load(string location) -> LoadResult {
 }
 
 auto MegaLD::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
 
   return true;

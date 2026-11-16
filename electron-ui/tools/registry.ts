@@ -11,6 +11,7 @@ export class ToolRegistry implements ToolRegistrar {
     this.entries.set(name, { config, handler });
     return {};
   }) as McpServer['registerTool'];
+  configuration(name:string):any { return this.entries.get(name)?.config; }
   list() {
     return [...this.entries].map(([name, { config }]) => ({ name, description: config.description,
       inputSchema: z.toJSONSchema(config.inputSchema, { target: 'draft-7', io: 'input' }),

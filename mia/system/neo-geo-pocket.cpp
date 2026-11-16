@@ -21,6 +21,7 @@ auto NeoGeoPocket::load(string location) -> LoadResult {
 }
 
 auto NeoGeoPocket::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("cpu.ram", ".cram");
   Pak::save("apu.ram", ".aram");
 

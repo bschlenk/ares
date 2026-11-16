@@ -1,3 +1,5 @@
+import {readReference} from './mcp/target-references.js';
+import {Targets} from './sessions/targets.js';
 import { ToolFailure, failureValue } from './tools/failures.js';
 import { waitForScript } from './services/script-wait.js';
 import { publishArtifact } from './services/artifact-writer.js';
@@ -10,10 +12,16 @@ import { AutomaticServiceClient } from './services/automatic-client.js';
 import { defaultServiceDirectory } from './services/local-endpoint.js';
 
 export async function main(argv = process.argv.slice(2)) {
-  const client = new AutomaticServiceClient(process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory(), process.env.ARES_INSTANCE_NAME);
+  const waitAccess=argv.includes('--wait-access');argv=argv.filter(arg=>arg!=='--wait-access');
+  if(process.env.ARES_TARGET && process.env.ARES_INSTANCE_NAME)throw new Error('contradictory_target_flags');
+  const leaseReference=readReference(process.env.ARES_OWNER_LEASE);
+  const targets=new Targets(undefined,undefined,process.env.ARES_TARGET,process.env.ARES_INSTANCE_NAME);
+  const selected=argv[0]==='run'?await targets.client(process.env.ARES_TARGET??leaseReference?.target):undefined;
+  if(selected&&leaseReference&&selected.target!==leaseReference.target){selected.client.close();throw new Error('target_reference_mismatch');}
+  const client = selected?.client ?? new AutomaticServiceClient(process.env.ARES_SERVICE_DIR ?? defaultServiceDirectory(), process.env.ARES_INSTANCE_NAME);
   const registry = new ToolRegistry();
-  installCancellation(registry, client);
-  registerTools(registry, client);
+  if(argv[0]==='run')installCancellation(registry,client);
+  const close=registerTools(registry, client,argv[0]==='run'?undefined:targets);
   const abort = new AbortController();
   const interrupt = () => abort.abort();
   process.once('SIGINT', interrupt);
@@ -23,7 +31,14 @@ export async function main(argv = process.argv.slice(2)) {
     if (command === 'tools' && !tool) {
       process.stdout.write(JSON.stringify(registry.list()) + '\n'); return;
     }
-    if(process.env.ARES_OWNER_LEASE&&!['build_info','owner_lease'].includes(tool))await client.manage({operation:'owner_lease',action:'use',lease_id:process.env.ARES_OWNER_LEASE});
+    if(command==='run'&&waitAccess){
+      const deadline=Date.now()+30000;
+      const requested=await client.manage({operation:'access_request',waiter:true});
+      let state=requested.state;
+      try{while(state==='pending'&&Date.now()<deadline){abort.signal.throwIfAborted();await new Promise(r=>setTimeout(r,100));state=(await client.manage({operation:'access_status'})).state;}if(state!=='authorized')throw new Error('access_denied_or_timeout');}
+      finally{if(requested.request_id)await client.manage({operation:'access_cancel',request_id:requested.request_id}).catch(()=>{});}
+    }
+    if(command==='run'&&process.env.ARES_OWNER_LEASE)await client.manage({operation:'owner_lease',action:'use',lease_id:leaseReference?.value??process.env.ARES_OWNER_LEASE});
     if (command === 'run' && tool) {
       let args: unknown = {}, outputPath: string | undefined; let retain=false;let video_path:string|undefined;let videoSource:'presented'|'framebuffer'='framebuffer';const state_paths:string[]=[],output_paths:string[]=[];
       for (let i=0;i<flags.length;i+=2) {
@@ -79,6 +94,14 @@ export async function main(argv = process.argv.slice(2)) {
         try { args[key.slice(2)] = JSON.parse(value); } catch { args[key.slice(2)] = value; }
       }
     }
+    if(leaseReference && args.target===undefined)args.target=process.env.ARES_TARGET??leaseReference.target;
+    if(waitAccess && !tool.startsWith('access_')){
+      const pending=await registry.call('access_wait',{target:args.target},abort.signal);
+      const access=JSON.parse(pending.content[0].text);
+      if(pending.isError || access.state!=='authorized')throw new Error(access.error??'access_denied');
+      args.target=access.target||args.target;
+    }
+    if(process.env.ARES_OWNER_LEASE&&!['build_info','owner_lease'].includes(tool)){const lease=await registry.call('owner_lease',{action:'use',lease_id:process.env.ARES_OWNER_LEASE,target:args.target},abort.signal);if(lease.isError)throw new Error(lease.content[0].text);}
     const result = await registry.call(tool, args, abort.signal);
     // Preserve images and other structured content; ordinary JSON tools emit their value directly.
     const content = result.content;
@@ -90,7 +113,7 @@ export async function main(argv = process.argv.slice(2)) {
     process.exitCode = abort.signal.aborted ? 130 : 1;
   } finally {
     process.removeListener('SIGINT', interrupt);
-    client.close();
+    close();
   }
 }
-await main();
+await main().catch(error=>{process.stderr.write(JSON.stringify(failureValue(error))+'\n');process.exitCode=1;});

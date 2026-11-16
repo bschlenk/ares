@@ -67,6 +67,20 @@ namespace mia {
   auto setHomeLocation(std::function<string ()>) -> void;
   auto setSaveLocation(std::function<string ()>) -> void;
   auto setResourceResolver(std::function<string (const string&)>) -> void;
+  // Optional frontend persistence policy. Without hooks, retain upstream behavior.
+  struct StorageHooks {
+    bool preparing = false;
+    std::function<std::vector<u8> (const string&)> read;
+    std::function<bool (const string&, std::span<const u8>)> write;
+    std::function<void (bool)> transaction;
+  };
+  extern StorageHooks storageHooks;
+  auto readPersistent(const string&) -> std::vector<u8>;
+  auto writePersistent(const string&, std::span<const u8>) -> bool;
+  struct StorageTransaction {
+    StorageTransaction() { if(storageHooks.transaction) storageHooks.transaction(true); }
+    ~StorageTransaction() { if(storageHooks.transaction) storageHooks.transaction(false); }
+  };
   auto construct() -> void;
   auto identify(const string& filename) -> std::vector<string>;
   auto import(std::shared_ptr<Pak>, const string& filename) -> bool;

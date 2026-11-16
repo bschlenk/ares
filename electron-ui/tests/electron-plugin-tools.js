@@ -28,6 +28,8 @@ Object.assign(process.env, {
 })
 delete process.env.ARES_AUTOTEST
 delete process.env.ARES_DEFAULT_PLUGINS
+delete process.env.ARES_SAVE_DIR
+process.argv.push('--session-name','plugin-tools-fixture')
 const { sessions, plugins, serviceHost, stopNative } =
   await import('../dist/main.js')
 let peer, client

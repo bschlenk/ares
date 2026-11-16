@@ -1,5 +1,10 @@
 # Fixture acceptance and remaining gates
 
+Session-management task evidence is recorded in
+[sessions/IMPLEMENTATION.md](sessions/IMPLEMENTATION.md). This is incremental
+work; the eleven session-management spec criteria are not yet accepted. Named game loads and personal multiwindow now use coordinated storage;
+approval/revocation and full session lifecycle remain outstanding.
+
 From `electron-ui/`:
 
 ```sh
@@ -133,3 +138,229 @@ timeout errors are distinguished from child-process exit failures.
 Per-gate logs and revision-tagged summaries remain the source of validation
 results. A configured workflow alone is not evidence that a particular revision
 passed on GitHub's hosted runner.
+
+## Session management task 2 — storage transactions (2026-11-10)
+
+See [implementation evidence](sessions/IMPLEMENTATION.md#task-2--actual-storage-ownership-and-inheritance)
+and the [loader/write-path inventory](sessions/STORAGE-INVENTORY.md). Named ROM
+loads now prepare/reserve actual persistence, snapshot lazily into private
+resource mappings, and hold inherited kernel ownership through native exit.
+Personal profile exclusivity remains until task 3.
+
+Final native/TypeScript builds and **42 focused tests pass with zero skips**.
+The full `mise exec node@24.22.0 -- npm run accept` run in
+`artifacts/acceptance/run-ynzGhW` passed **316 fixture tests**, native smoke and
+three Electron gates, then failed at an existing stale MCP tool-list expectation.
+The full suite is not green and its later gates were not reached. Exact commands,
+crash/alias/peripheral coverage, separate desktop evidence and unrun limits are in
+the implementation report. Task 2 contributes to spec criteria 2–4; it is not
+acceptance of tasks 3–7 or closure of issue #37.
+
+## Session management task 3 — personal windows and shared settings (2026-11-10)
+
+Implementation commit: **`9be56e5f1`**.
+
+File → New Window now creates a personal process from personal or named windows,
+with independent browser/native/UI runtime resources and shared coordinated data.
+Preferences reconcile through directory watching, persisted revisions, polling and
+focus. The remaining stores have kernel transactions or process-local caches;
+see the [data-root audit](sessions/DATA-ROOT-AUDIT.md) and
+[task evidence](sessions/IMPLEMENTATION.md#task-3--personal-windows-and-shared-settings).
+
+Native/TypeScript builds and **81 focused tests pass with zero skips**. Eleven
+separate desktop checks pass, including named-only New Window twice, shared live
+settings, conflicting loads preserving the current game, effective custom routing,
+actual independent saves and child operation after parent installation removal.
+The acceptance runner includes the new `personal-windows` gate.
+
+Full `mise exec node@24.22.0 -- npm run accept` run
+`artifacts/acceptance/run-6uKFuz` passed **329 fixture tests**, native smoke and
+three Electron gates before failing at the existing stale MCP tool-list assertion
+in `tests/electron-mcp.js:44`. Later full-suite gates were not reached; full
+acceptance is not green. The implementation report records exact commands,
+earlier corrected failures and the dirty baseline revision. Packaged New Window,
+Dock behavior, physical input, approval/revoke gameplay and capture/banner checks
+remain unrun/manual. Task 4 is next; issue #37 remains open.
+
+
+## Session management task 4 — managed states and recovery (2026-11-10)
+
+Implementation commit: **`e89674814`**.
+
+Named windows now list/load read-only personal managed states alongside writable
+session states. Source-qualified references disambiguate timestamp collisions;
+backend rename/delete/retention cannot modify inherited entries. Both whole-
+session reset modes and archive restore use exclusive lifecycle ownership and a
+recoverable generation transaction. Restore retains the selected archive and
+displaced current data. Settings → Sessions exposes Restore previous data;
+CLI/MCP provide managed-library and offline lifecycle tools.
+
+See [implementation evidence](sessions/IMPLEMENTATION.md#task-4--managed-states-and-recovery)
+for exact commands, revision, crash boundaries, coverage and earlier corrected
+failures, and [recipes](sessions/RECOVERY.md). Native/TypeScript builds and **60
+focused tests** pass with zero skips. Separate desktop checks pass:
+`SESSION_RECOVERY_UI_PASS`, `SESSION_RECOVERY_NO_SERVICES_PASS`,
+`CHECKPOINT_UI_PASS`. Generated-media screenshots of the new views were inspected.
+
+Full `mise exec node@24.22.0 -- npm run accept` run
+`artifacts/acceptance/run-mz2PPL` passed **338 fixture tests**, native smoke and
+three Electron gates. MCP's updated inventory passed, then its existing Game Boy
+recording assertion failed at `tests/electron-mcp.js:101`: the runtime correctly
+returns `primary-screen-frame` rather than the old expected `unavailable`.
+Later full-suite gates are unrun; full acceptance is not green. The first full
+attempt also caught schema-report drift (corrected) and overlapping-build
+identity failures (no rebuilds overlapped the rerun).
+
+This contributes spec criteria 6–7, not completion of issue #37. Packaged/Dock,
+physical gameplay, personal approval/revoke, banner/capture pixels and other
+platforms remain unrun/manual. Task 5 is next; reuse the repository lifecycle and
+scoped state facade when adding selection. No user personal saves were used.
+
+## Session management task 5 — discovery and scoped selection (2026-11-10)
+
+Task 5 adds typed metadata discovery, monotonic open order, personal-default
+resolution, named runtime open/select, immutable startup selection and shell-scoped
+`ARES_TARGET` handles. The public CLI/MCP registry pools target clients with
+request-local native identities and cancellation. Scoped operation/capture/lease/
+script-result references retain their original target; raw IDs remain compatible.
+Offline recovery tools accept the selected named namespace. Personal external
+operations remain closed until task 6 supplies approval/revocation; access tools
+explicitly report that dependency. Named sessions remain implicitly authorized.
+
+Focused coverage includes concurrent subprocess sequence allocation, stopped-name
+selection without launch, offline reset/restore, two interleaved callers, native
+cancellation isolation, stale references, mismatched leases, CLI exported handles,
+legacy reconnect and no preapproval native requests. New desktop checks use only
+disposable profiles and generated Game Boy media. `scripts/accept.js` discovers
+the new fixture tests and includes both desktop modes plus the launch integration
+check. See `sessions/IMPLEMENTATION.md` for exact final commands and outcomes.
+
+Spec criterion 8 now has automated implementation coverage. Criteria 9–10 remain
+gated on task 6, and criterion 11 remains task 7. Packaged/Dock and complete final
+acceptance are not claimed by this task.
+
+Final task 5 validation: all three TypeScript targets and the full native build
+pass. The final `mise exec node@24.22.0 -- npm run accept` run
+(`artifacts/acceptance/run-oHmuAx/summary.json`) reports **346/347 fixture tests
+passed**, zero skips, with one unchanged recovery scheduler timing assertion
+(`input_active` versus `undefined`, `paired-recovery.test.js:105`). Its isolated
+rerun passes. All nine new selection tests pass in the full run. Later full-suite
+gates remain unrun after this failure. Independent desktop runs report
+`SESSION_SELECTION_NAMED_PASS`, `SESSION_SELECTION_PERSONAL_PASS` and
+`SESSION_SELECTION_LIVE_PASS`. The separately attempted MCP desktop gate reaches
+its known Game Boy video-clock mismatch (`primary-screen-frame` versus
+`unavailable`, now line 103). Exact commands and revision/coverage limits are in
+the implementation report. Task 6 is next; full issue acceptance remains open.
+
+
+## Task 6: personal access and native revocation
+
+Task 6 is implemented in **`9d0b7ada2`** on `feat/session-management` after
+`25c02f655`. Coverage advances spec criteria 9–10: nonmodal pending
+approval during gameplay, short and simultaneous clients, Deny/cancel/timeout,
+window-wide grants/reload, generation invalidation, management/native cancellation,
+no replay, disconnected durable leases and held inputs, scripts, batch children,
+observers, recordings, artifact/checkpoint commits, a native paused barrier and
+human-owned observer preservation. Named services remain implicit even with copied
+integration-disabled settings. New access tests and two desktop gates are wired
+into `scripts/accept.js`; the MCP inventory/parity record includes `access_cancel`.
+
+Personal external renderer plugin mutation/delegation remains closed with
+`plugin_management_requires_named_session`; use named sessions for
+`add/enable/reload/resetStartup/open/command`. Those callbacks currently share the
+human SDK scope, so their per-invocation provenance is not claimed. Task 7 owns
+persistent named identification, final toolbar presentation and capture pixel
+exclusion. Packaged Dock behavior and physical-controller/manual approval tests
+remain unrun. Issue #37 is not complete.
+
+Native build and all three TypeScript targets pass. The focused boundary,
+controller, native barrier, selection, cancellation, settings, checkpoints,
+artifacts and schema lane passes **60/60 tests**, no skips. Separate native
+script/observer checks pass, and the N64 batch test passes with desktop/graphics
+access after its sandboxed run reported `renderer_unavailable`. Independent
+Electron checks pass for named selection, personal selection, inherited-disabled
+named startup, and `EXTERNAL_ACCESS_PASS` (including actual CLI wait cancellation
+and proof that a cancelled ROM load does not execute on later Allow).
+
+The first full `mise exec node@24.22.0 -- npm run accept` run is
+[run-kyGeKd](artifacts/acceptance/run-kyGeKd/summary.json): **351/351 fixtures**,
+native smoke, electron-local-ai, electron-session and electron-shutdown pass; the
+MCP gate stops at the existing Game Boy frame-kind mismatch at
+`tests/electron-mcp.js:103`. Later gates are unrun in that full command. Exact
+commands, final-run evidence and remaining limits are in the
+[implementation report](sessions/IMPLEMENTATION.md#task-6--personal-approval-cancellation-and-native-revocation).
+
+
+Final task 6 full run: [run-nH9w7f](artifacts/acceptance/run-nH9w7f/summary.json)
+passes **352/352 fixtures**, zero skips/failures, native smoke and the same three
+initial Electron checks, then fails only at the documented MCP video-clock
+assertion. Subsequent full-command gates remain unrun; independent access and
+selection checks passed separately. The access desktop check additionally proves
+that a settings write queued behind the actual preferences lock cannot commit
+after Revoke. An intermediate run overlapped a rebuild and had missing compiled
+modules; it is explicitly invalidated in the implementation report.
+
+## Task 7: identity, toolbar and capture integration
+
+Implemented in **`6c7f6fb12`**. Task 7 extends main-owned state with a revisioned window presentation snapshot.
+The same title formatter feeds startup application naming, BrowserWindow titles
+and the custom header. Session names survive empty games, ROM switches, native
+disconnect and renderer reload. Named banners have no action; personal banners
+explain real-data access and expose Revoke. All toolbar visibility writers,
+including demonstration polling, preserve identification in empty windows.
+
+Presented UI captures hide explicit app chrome through the common video capture
+lease, regardless of capture rectangle. Nested captures restore only on the last
+release. Errors and client cancellation release in `finally`; renderer navigation
+invalidates the lease and prevents publication. The prior two-second expiry was
+removed because it could reveal chrome during a slow capture. Legitimate overlays
+remain. Native screenshot/AVI/checkpoint paths use native pixels; plugin frame
+exports serialize native observer data and never sample DOM chrome.
+
+`electron-session-presentation.js` runs separately for named and personal windows,
+with generated Game Boy media, private service directories and disposable data.
+It checks titles/reload/disconnect, toolbar idle/keyboard focus, personal Revoke,
+magenta banner exclusion and green overlay preservation in panel/full-window PNGs,
+native presented crops/AVI pixels, managed preview pixels, nested leases lasting beyond two
+seconds, injected capture failure, client cancellation and reload during capture.
+The small pixel tolerance accounts for PNG/display color-profile conversion.
+Exact command outcomes and the final full-suite result are in the
+[implementation report](sessions/IMPLEMENTATION.md#task-7--identification-toolbar-and-captures).
+
+Final mapping to the eleven spec criteria (prior task evidence remains linked in
+that report; a row is not a claim of packaged/manual completion):
+
+| Criterion | Automated evidence | Remaining release limits |
+| --- | --- | --- |
+| 1: New personal windows from named startup | `personal-windows-live.js`, `electron-personal-windows.js`, task 3 | Packaged Dock click/activation manual check unrun |
+| 2: Shared personal stores and ownership | `personal-windows.test.js`, `session-storage.test.js`, `session-storage-live.js`, tasks 2–3 | Generated Game Boy, PlayStation, N64 and ZX Spectrum storage fixtures; not every firmware/peripheral combination |
+| 3: Independent persisted named data | `session-context-live.js`, `session-storage-live.js`, tasks 1–2 | Private media and every supported core not exercised |
+| 4: Lazy inheritance, including absent saves | `session-storage.test.js`, `session-storage-live.js`, task 2 | Same peripheral/core coverage limits |
+| 5: Initial settings clone then divergence | `session-repository.test.js`, `personal-windows.test.js`, tasks 1–3 | No outstanding implemented-scope limit |
+| 6: Managed overlay, protected origins, file tools | `session-recovery.test.js`, `electron-session-recovery.js`, `electron-mcp.js`, task 4 | Existing serializer support limits apply |
+| 7: Reset, archive and nondestructive restore | `session-recovery.test.js`, `electron-session-recovery.js`, task 4 | No automatic archive deletion; cross-core serializer matrix not exhaustive |
+| 8: Deterministic scoped selection | `session-selection.test.js`, `session-selection-live.js`, `electron-session-selection.js`, task 5 | No machine-global selection |
+| 9: Nonblocking approval and no delayed execution | `external-access.test.js`, `electron-external-access.js`, task 6 | Physical-controller gameplay/manual packaged approval unrun |
+| 10: Revoke, cleanup, fresh grants | `external-access-native.test.js`, `electron-external-access.js`, task 6; personal presentation test | External renderer plugin mutations remain deliberately named-only |
+| 11: Durable identity, toolbar and clean captures | `session-presentation.test.js`, `video-source.test.js`, both presentation desktop modes; existing video/export lanes | Packaged Dock hover naming and human UI checks unrun |
+
+macOS: supported `app.setName(<session> — ares)` runs before readiness and after
+logical data-root selection. The development regression verifies the Electron
+application name, not the OS Dock hover string. Bundle display metadata is never
+rewritten at runtime. **Copied-packaged Dock hover names and independent icon
+activation have not been manually measured in this task.** No claim is made that
+macOS honors per-process names over the fixed bundle display name. These checks,
+physical-controller approval gameplay and packaged title/banner/toolbar reveal
+remain explicit release limits; issue #37 remains open until they are accounted
+for. The automated copied-package passes do not substitute for those checks.
+
+
+Final task 7 full command: `mise exec node@24.22.0 -- npm run accept` (desktop access)
+— **ACCEPTANCE_PASS: 38/38 gates, 353/353 fixtures**, zero skipped/failed/cancelled
+fixtures. [run-hJ1Kfw](artifacts/acceptance/run-hJ1Kfw/summary.json) records configure,
+native/TypeScript builds, smoke, every Electron gate including both presentation
+modes and access/recovery checks, live multiwindow/storage/profile/launch checks,
+packaging, copied-package MCP and packaged helper UI. Earlier failed attempts and
+their fixture/import fixes are documented in the implementation report; none is
+counted as a pass. This run used the dirty task 7 tree based on `8540c98cd`; the
+implementation commit records its final sources. Manual release limits above remain.

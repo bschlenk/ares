@@ -4,6 +4,9 @@ import type {SessionClient, SessionIdentity, SessionReply, ServiceMethod, Servic
 
 export class Checkpoints {
   constructor(private client: SessionClient, readonly game: CheckpointGame, private identity: () => SessionIdentity | undefined, private current: () => boolean, private compatibility: () => Record<string, unknown>) {}
+  forOwner(owner: string, authorize: () => void) {
+    return new Checkpoints({request: (method, identity, params) => this.client.request(method, identity, params, owner)}, this.game, this.identity, () => {authorize(); return this.current();}, this.compatibility);
+  }
   private guard(identity: SessionIdentity) {
     const current = this.identity();
     if (!this.current() || current?.session !== identity.session || current.epoch !== identity.epoch) throw new Error('checkpoint_session_changed');
@@ -13,7 +16,7 @@ export class Checkpoints {
     if (!reply.ok || !reply.result) throw new Error(reply.error || 'invalid_reply');
     return reply.result;
   }
-  async save(library: CheckpointLibrary, permanent: boolean) {
+  async save(library: Pick<CheckpointLibrary, 'publish' | 'read'>, permanent: boolean) {
     const identity = {...this.identity()!}; this.guard(identity);
     const compatibility = this.compatibility();
     const snapshot = await this.request('checkpoint.capture', identity);
@@ -35,7 +38,7 @@ export class Checkpoints {
       return await library.publish(this.game,{state:bytes.subarray(0,snapshot.stateBytes),screenshot,capturedAt:new Date(snapshot.capturedAt),screenshotGeometry:{width:snapshot.width,height:snapshot.height,aspect:snapshot.aspect??snapshot.width/snapshot.height},compatibility},permanent,()=>this.guard(identity));
     } finally { await this.request('checkpoint.release',identity,{id:snapshot.id}).catch(()=>{}); }
   }
-  async load(library: CheckpointLibrary, id: string) {
+  async load(library: Pick<CheckpointLibrary, 'publish' | 'read'>, id: string) {
     const identity = {...this.identity()!}; this.guard(identity);
     const {state, metadata} = await library.read(this.game,id);
     if (JSON.stringify(metadata.compatibility) !== JSON.stringify(this.compatibility())) throw new Error('checkpoint_configuration_mismatch');

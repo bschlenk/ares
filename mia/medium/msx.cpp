@@ -45,11 +45,12 @@ auto MSX::load(string location) -> LoadResult {
 }
 
 auto MSX::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
   if(!pak) return false;
 
   if(pak->attribute("tape").boolean()) {
-    if(!pak->attribute("modified").boolean()) return true;
+    if(!storageHooks.preparing && !pak->attribute("modified").boolean()) return true;
 
     if(file::exists(location) && location.iendsWith(".wav")) {
       return saveWav(location);
@@ -158,6 +159,14 @@ auto MSX::analyze(std::vector<u8>& rom) -> string {
 
 
 auto MSX::loadTape(string location) -> LoadResult {
+  if(storageHooks.read && location.iendsWith(".wav")) {
+    this->location = location;
+    loadPersistentWave(location,true);
+    pak->setAttribute("title", Medium::name(location));
+    pak->setAttribute("region", "NTSC");
+    return successful;
+  }
+
   if(!inode::exists(location)) return romNotFound;
   if(location.iendsWith(".cas")) return loadCas(location);
   if(location.iendsWith(".tzx") || location.iendsWith(".tsx")) return loadTzx(location);
@@ -317,6 +326,7 @@ auto MSX::loadCas(string location) -> LoadResult {
   }
   pak->append("program.tape", output);
 
+  if(storageHooks.read) loadPersistentWave(saveLocation(location, "program.tape", ".wav"));
   return successful;
 }
 
@@ -353,10 +363,12 @@ auto MSX::loadTzx(string location) -> LoadResult {
   }
   pak->append("program.tape", output);
 
+  if(storageHooks.read) loadPersistentWave(saveLocation(location, "program.tape", ".wav"));
   return successful;
 }
 
 auto MSX::saveWav(string location) -> bool {
+  if(storageHooks.write) return savePersistentWave(location);
   std::vector<u16> data;
   auto fd = pak->read("program.tape");
   if(!fd) return false;

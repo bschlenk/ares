@@ -36,6 +36,7 @@ auto MegaCD32X::load(string location) -> LoadResult {
 }
 
 auto MegaCD32X::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   Pak::save("backup.ram", ".bram");
 
   return true;

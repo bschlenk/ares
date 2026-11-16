@@ -24,6 +24,10 @@ let exportGesture=false;
 for(const kind of ['click','keydown'])window.addEventListener(kind,event=>{if(event.isTrusted){exportGesture=true;setTimeout(()=>{exportGesture=false;},0);}},true);
 function takeExportGesture(){const allowed=exportGesture&&navigator.userActivation.isActive;exportGesture=false;return allowed;}
 const api: AresBridge = {
+  windowPresentation:()=>ipcRenderer.invoke('window.presentation'),
+  onWindowPresentation:callback=>{const listener=(_event:unknown,snapshot:any)=>callback(snapshot);ipcRenderer.on('window-presentation',listener);return ()=>ipcRenderer.removeListener('window-presentation',listener);},
+  externalAccess:action=>ipcRenderer.invoke('external-access',action),
+  onExternalAccess:callback=>{const listener=(_event:unknown,state:any)=>callback(state);ipcRenderer.on('external-access',listener);return ()=>ipcRenderer.removeListener('external-access',listener);},
   checkpoints:request=>ipcRenderer.invoke('checkpoints',request),
   onCheckpointsChanged:callback=>{const listener=()=>callback();ipcRenderer.on('checkpoint-changed',listener);return ()=>ipcRenderer.removeListener('checkpoint-changed',listener)},
   agentAction: action => ipcRenderer.invoke('agent.action', action),
@@ -36,6 +40,7 @@ const api: AresBridge = {
     ipcRenderer.on('app-action', listener)
     return () => ipcRenderer.removeListener('app-action', listener)
   },
+  sessionData: request => ipcRenderer.invoke('session-data',request),
   preferences: {
     catalog: () => ipcRenderer.invoke('preferences.catalog'),
     set: (id, value) => ipcRenderer.invoke('preferences.set', id, value),

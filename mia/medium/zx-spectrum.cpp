@@ -48,10 +48,19 @@ auto ZXSpectrum::loadTzx(string location) -> LoadResult {
   }
   pak->append("program.tape", output);
 
+  if(storageHooks.read) loadPersistentWave(saveLocation(location, "program.tape", ".wav"));
   return successful;
 }
 
 auto ZXSpectrum::loadWav(string location, string originalLocation) -> LoadResult {
+  if(storageHooks.read && location.iendsWith(".wav")) {
+    this->location = location;
+    loadPersistentWave(location,true);
+    pak->setAttribute("title", Medium::name(location));
+    pak->setAttribute("region", "NTSC");
+    return successful;
+  }
+
   this->location = originalLocation ? originalLocation : location;
   this->manifest = analyze(location);
   auto document = BML::unserialize(manifest);
@@ -104,9 +113,10 @@ auto ZXSpectrum::loadWav(string location, string originalLocation) -> LoadResult
 }
 
 auto ZXSpectrum::save(string location) -> bool {
+  mia::StorageTransaction storageTransaction;
   auto document = BML::unserialize(manifest);
   if(!pak) return false;
-  if(!pak->attribute("modified").boolean()) return true;
+  if(!storageHooks.preparing && !pak->attribute("modified").boolean()) return true;
 
   if(directory::exists(location)) {
     return Pak::save("program.tape", ".sav");
@@ -124,6 +134,7 @@ auto ZXSpectrum::save(string location) -> bool {
 }
 
 auto ZXSpectrum::saveWav(string location) -> bool {
+  if(storageHooks.write) return savePersistentWave(location);
   std::vector<u16> data;
   auto fd = pak->read("program.tape");
   if(!fd) return false;

@@ -1,3 +1,4 @@
+import {storeTransaction} from '../sessions/transactions.js';
 import fs from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
@@ -33,21 +34,26 @@ export class PluginJournals {
     if(!token(stream)||!['journal.append','journal.read'].includes(operation))return Promise.reject(new ServiceError('journal_invalid_request'));
     return this.serial(file,()=>this.run(file,stream,operation,params,guard));
   }
-  private serial<T>(file:string,work:()=>Promise<T>):Promise<T>{
+  private serial<T>(file:string,work:()=>Promise<T>, lock = true):Promise<T>{
     let queue=this.queues.get(file);if(!queue){queue={tail:Promise.resolve(),pending:0};this.queues.set(file,queue);}
     if(queue.pending>=JOURNAL_LIMITS.pending)return Promise.reject(new ServiceError('journal_overload'));
     ++queue.pending;const owned=queue;
-    const job=queue.tail.then(work);
+    const job=queue.tail.then(()=>lock ? storeTransaction(file, work) : work());
     queue.tail=job.catch(()=>{});
     return job.finally(()=>{if(--owned.pending===0&&this.queues.get(file)===owned)this.queues.delete(file);});
   }
   /** Holds the namespace queue until the paired state is published. */
   withSnapshot<T>(file:string,guard:()=>void,work:(bytes:Buffer,sequence:number)=>Promise<T>):Promise<T>{
-    return this.serial(file,async()=>{guard();await this.cleanStaging(file);const {data}=await this.load(file);guard();
-      const bytes=Buffer.from(JSON.stringify(data));if(bytes.length>JOURNAL_LIMITS.bytes-65536)throw new ServiceError('recovery_journal_needs_space');
-      return work(bytes,data.nextSequence-1);
-    });
+    return this.serial(file,async()=>{
+      const snapshot = await storeTransaction(file, async () => {
+        guard();await this.cleanStaging(file);const {data}=await this.load(file);guard();
+        const bytes=Buffer.from(JSON.stringify(data));if(bytes.length>JOURNAL_LIMITS.bytes-65536)throw new ServiceError('recovery_journal_needs_space');
+        return {bytes, sequence:data.nextSequence-1};
+      });
+      return work(snapshot.bytes,snapshot.sequence);
+    }, false);
   }
+
   verifyRecovery(file:string,snapshot:Buffer):Promise<void>{return this.serial(file,async()=>{const {data}=await this.load(file);this.verifyPrefix(data,snapshot);});}
   private verifyPrefix(data:Data,snapshot:Buffer){const frozen=JSON.parse(snapshot.toString('utf8')) as Data;const cutoff=frozen.nextSequence-1;
     if(frozen.format!==1||(frozen.excluded!==undefined&&(!Array.isArray(frozen.excluded)||frozen.excluded.length>1024||frozen.excluded.some(r=>!Array.isArray(r)||r.length!==2||!integer(r[0])||!integer(r[1])||r[0]<1||r[0]>r[1]||r[1]>cutoff)))||!integer(cutoff)||!Array.isArray(frozen.records)||cutoff!==frozen.records.length||JSON.stringify(data.records.slice(0,cutoff))!==JSON.stringify(frozen.records))throw new ServiceError('recovery_journal_diverged');return cutoff;

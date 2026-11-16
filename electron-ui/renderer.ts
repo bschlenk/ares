@@ -1,4 +1,5 @@
-import {beginVideoCapture,endVideoCapture,captureHeld,onCaptureReleased} from './video/capture.js';
+import {installExternalAccess} from './ui/external-access.js';
+import {beginVideoCapture,beginVideoCaptureReady,hasVideoCapture,endVideoCapture,captureHeld,onCaptureReleased} from './video/capture.js';
 import {VideoCanvas} from './video/canvas.js';
 import {videoSource} from './video/source.js';
 import {videoSnapshot} from './video/surfaces.js';
@@ -25,8 +26,20 @@ const $ = <K extends keyof Elements>(id: K): Elements[K] => {
   return element as Elements[K];
 };
 window.addEventListener('error', event => notify(event.message));
+const updateAccess = installExternalAccess();
+let identificationVisible=false, loadedGame=false, demonstrationActive=false;
+function refreshPlaybackVisibility(){ $('video-controls').hidden=!(identificationVisible||loadedGame||demonstrationActive); }
+let presentationRevision = -1;
+function applyPresentation(snapshot: import('./sessions/presentation.js').WindowPresentation) {
+  if(snapshot.revision < presentationRevision)return;
+  presentationRevision=snapshot.revision;
+  updateWindowTitle(snapshot);updateAccess(snapshot);
+  identificationVisible=snapshot.kind==='named'||['authorized','revoking'].includes(snapshot.access.state);
+  loadedGame=!!snapshot.gameTitle;refreshPlaybackVisibility();
+}
+window.ares.onWindowPresentation(applyPresentation);
+void window.ares.windowPresentation().then(applyPresentation).catch(notify);
 const canvas = $('screen'), videoRenderer = new VideoCanvas(canvas), gl = videoRenderer.gl;
-let demonstrationActive=false;
 let system = 'Synthetic', aspect = 4 / 3;
 configureOverlays($('viewport'),canvas);
 let width = 0, height = 0, pending: FramePacket | null = null, port: MessagePort | undefined, paused = false;
@@ -176,7 +189,7 @@ window.ares.systems().then(systems => {
 let sessionIdentity: SessionIdentity | undefined;
 function acceptSessionState(reply: SessionReply) {
   if (!reply.ok || !reply.result) { if (reply.error?.includes('disconnected')) videoSource.reset('native_disconnected'); return; }
-  updateWindowTitle(reply.result.title, reply.result.system);
+
   const previous = sessionIdentity;
   sessionIdentity = { session: reply.session, epoch: reply.epoch };
   paused = (reply.result.manual_paused ?? reply.result.paused) && reply.result.operation_id == null;
@@ -187,7 +200,7 @@ function acceptSessionState(reply: SessionReply) {
   pauseButton.querySelector<SVGElement>('.pause-icon')!.toggleAttribute('hidden', paused);
   pauseButton.querySelector<SVGElement>('.play-icon')!.toggleAttribute('hidden', !paused);
   const loaded = !reply.result.synthetic;
-  $('video-controls').hidden = !loaded&&!demonstrationActive;
+  loadedGame=loaded;refreshPlaybackVisibility();
   $('paused-indicator').hidden = !loaded || !(paused || reply.result.focus_paused);
   $('paused-indicator').textContent = reply.result.focus_paused ? 'Ⅱ Paused while unfocused' : 'Ⅱ Paused';
   if (previous && (previous.session !== reply.session || previous.epoch !== reply.epoch)) window.dispatchEvent(new Event('ares-session-reset'));
@@ -289,7 +302,7 @@ function tick() {
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
-window.beginVideoCapture=beginVideoCapture;window.endVideoCapture=endVideoCapture;
+window.beginVideoCapture=beginVideoCapture;window.beginVideoCaptureReady=beginVideoCaptureReady;window.hasVideoCapture=hasVideoCapture;window.endVideoCapture=endVideoCapture;
 window.videoSnapshot=videoSnapshot;
 window.overlayFrame=overlayFrame;window.overlaySnapshot=overlaySnapshot;
 window.stats = stats;
@@ -309,7 +322,7 @@ const recordingControls=document.getElementById('recording-controls')!;
 window.addEventListener('pagehide',installDemonstrationControls(window.ares,recordingControls,visible=>{
   demonstrationActive=visible;
   $('viewport').toggleAttribute('data-recording-controls',visible);
-  $('video-controls').hidden=system==='Synthetic'&&!visible;
+  refreshPlaybackVisibility();
 },notify),{once:true});
 
 installCheckpointControls();

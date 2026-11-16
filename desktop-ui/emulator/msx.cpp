@@ -96,6 +96,7 @@ auto MSX::load() -> LoadResult {
 }
 
 auto MSX::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   if(tape && tape != game) tape->save(tape->location);
@@ -130,6 +131,7 @@ auto MSX::loadTape(ares::Node::Object node, string location) -> bool {
 }
 
 auto MSX::unloadTape(ares::Node::Object node) -> void {
+  mia::StorageTransaction storageTransaction;
   if(node->name() == "MSX Tape") {
     if(tape) tape->save(tape->location);
     tape.reset();

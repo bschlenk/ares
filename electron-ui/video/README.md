@@ -102,8 +102,14 @@ observation bindings. Without `present`, static overlay content is supported.
 
 Normal panel/window capture includes these canvases and overlays. `ui_screenshot`
 and `ares-plugin screenshot` briefly hold presentation, while native execution
-and frame credit continue. A lease expires within two seconds even if capture
-fails. Before/after metadata must match; otherwise the response omits the frame
+and frame credit continue. Capture leases hide marked app chrome (titles,
+playback controls, session/access banners and approval prompts) for the full
+capture interval, including slow and nested captures. The final release restores
+chrome in `finally`, including cancellation/errors. Navigation destroys the scope;
+a capture crossing renderer recovery is rejected before publication. Legitimate
+game and plugin overlays remain visible. Native presented/framebuffer screenshots,
+AVI recordings and managed checkpoint previews use native pixels, independent of
+DOM chrome; plugin frame exports contain native observer data. Before/after metadata must match; otherwise the response omits the frame
 reference. `video_surfaces[]` reports each intersecting visible surface, its own
 `frame`, picture/container rectangles in window CSS coordinates, options and
 overlay geometry. The existing top-level `frame_reference` describes the primary

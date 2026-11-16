@@ -1,3 +1,4 @@
+import {localRequestContext} from '../services/local-endpoint.js';
 import { scriptStatus } from '../services/script-wait.js';
 import type { ToolRegistrar } from '../tools/registry.js';
 import { randomUUID } from 'node:crypto';
@@ -13,15 +14,15 @@ export function installCancellation(server: ToolRegistrar, client: LocalServiceC
   const scope = new AsyncLocalStorage<{signal:AbortSignal; operation?:{id:number;identity:SessionIdentity;script?:boolean}; batch?:{identity:SessionIdentity;token:string}; cancel?:Promise<unknown>}>();
   const request = client.request.bind(client);
   function cancel(s: NonNullable<ReturnType<typeof scope.getStore>>) {
-    if(s.batch && !s.cancel) s.cancel=request('experiment.cancelBatch',s.batch.identity,{token:s.batch.token}).catch(()=>undefined);
-    if(s.operation && !s.cancel){const op=s.operation;s.cancel=(async()=>{if(op.script)await scriptStatus({request} as LocalServiceClient,op.id,op.identity);return request('execution.cancel',op.identity,{operationId:op.id});})().catch(()=>undefined);}
+    if(s.batch && !s.cancel) s.cancel=localRequestContext.run({},()=>request('experiment.cancelBatch',s.batch!.identity,{token:s.batch!.token})).catch(()=>undefined);
+    if(s.operation && !s.cancel){const op=s.operation;s.cancel=localRequestContext.run({},async()=>{if(op.script)await scriptStatus({request} as LocalServiceClient,op.id,op.identity);return request('execution.cancel',op.identity,{operationId:op.id});}).catch(()=>undefined);}
   }
   client.request = (async (method: any, identity?: SessionIdentity, params?: any) => {
     const s=scope.getStore();
     // An aborted call cannot start additional work after an intervening await.
     if(s?.signal.aborted && !['execution.status','execution.cancel','clock.waitCancel','input.release'].includes(method)) throw new ServiceError('cancelled');
     if(s && method === 'experiment.batch' && identity) {s.batch={identity,token:randomUUID()};params={...params,cancellationToken:s.batch.token};}
-    const reply=await request(method,identity,params);
+    const reply=await (['execution.status','execution.cancel','clock.waitCancel','input.release'].includes(method)?localRequestContext.run({},()=>request(method,identity,params)):request(method,identity,params));
     if(s && method === 'experiment.batch') s.batch=undefined;
     const result=reply.ok ? reply.result as any : undefined;
     if(s && result?.state === 'running' && Number.isSafeInteger(result.operation_id) && !['execution.status','execution.cancel','clock.waitCancel','input.release'].includes(method)) {
@@ -35,7 +36,7 @@ export function installCancellation(server: ToolRegistrar, client: LocalServiceC
   server.registerTool = ((name:string,config:any,handler:any) => register(name,config,async (args:any,ctx:ServerContext) => {
     const s={signal:ctx.mcpReq.signal} as NonNullable<ReturnType<typeof scope.getStore>>;
     const abort=()=>cancel(s);s.signal.addEventListener('abort',abort,{once:true});
-    try { return await scope.run(s,()=>handler(args,ctx)); }
+    try { return await scope.run(s,()=>localRequestContext.run({signal:s.signal},()=>handler(args,ctx))); }
     finally {s.signal.removeEventListener('abort',abort);if(s.signal.aborted){cancel(s);await s.cancel;}}
   })) as typeof server.registerTool;
 }

@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 assert.equal(app.isPackaged, true);
 app.setPath('userData', path.join(process.env.HOME, 'profile'));
-await import('./dist/main.js');
+const {externalAccess}=await import('./dist/main.js');
 const timeout = setTimeout(() => app.exit(1), 60000);
 app.whenReady().then(async () => {
   try {
@@ -41,6 +41,7 @@ app.whenReady().then(async () => {
     assert.deepEqual(config.mcpServers.ares.args, []);
     assert.equal(JSON.stringify(config).includes(app.getAppPath()), false, 'installed helper configuration is independent of the bundle location');
     assert.deepEqual(JSON.parse(await js('window.ares.agentAction(\"preview\")')), config);
+    externalAccess.request('packaged-agent-fixture');await js('window.ares.externalAccess("allow")');
     const peer = new StdioPeer(config.mcpServers.ares.command, config.mcpServers.ares.args);
     try {
       await peer.initialize();

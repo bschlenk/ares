@@ -43,6 +43,7 @@ auto ZXSpectrum::load() -> LoadResult {
 }
 
 auto ZXSpectrum::save() -> bool {
+  mia::StorageTransaction storageTransaction;
   root->save();
   system->save(system->location);
   game->save(game->location);
@@ -76,6 +77,7 @@ auto ZXSpectrum::loadTape(ares::Node::Object node, string location) -> bool {
 }
 
 auto ZXSpectrum::unloadTape(ares::Node::Object node) -> void {
+  mia::StorageTransaction storageTransaction;
   if(node->name() == "ZX Spectrum Tape") {
     if(tape) tape->save(tape->location);
     tape.reset();

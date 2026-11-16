@@ -712,3 +712,40 @@ not determine identity. See [SAVE-STATES-PLAN.md](SAVE-STATES-PLAN.md#technical-
 for the system audit, content/media identity and publication schema. Saturn and
 ZX Spectrum currently report save states unavailable because their core payloads
 are incomplete.
+
+## Managed states and session recovery
+
+See [managed-library tools and reset/restore recipes](sessions/RECOVERY.md). Named states
+include explicit Personal/Session origin and read-only inherited references.
+Whole-session reset/restore requires a closed target; previous data is retained.
+
+### Personal external access
+
+Personal CLI/MCP gameplay access requires window-wide Allow/Deny approval.
+`ares call emu_status --wait-access` waits locally before issuing the command;
+`access_request`, `access_status`, `access_wait` and `access_cancel` expose the
+same flow explicitly. Revoke in the playback controls invalidates every client
+and lease, cancels external work and pauses at an acknowledged native barrier.
+Grants survive renderer reload but never app restart. Named sessions remain
+implicitly authorized even if their initial copy of personal settings disabled
+integration. External renderer plugin mutations/delegation remain restricted to
+named sessions so they cannot acquire the human plugin's ownership in a personal
+window. See [service access semantics](services/README.md) and
+[CLI/MCP examples](mcp/README.md#personal-approval-and-cancellation).
+
+
+Session identity is shown in both the native window title and the custom header.
+Named sessions keep a `Session: <name>` indicator whenever playback controls are
+revealed, including empty views; it has no dismiss or Revoke action. Authorized
+personal windows show that external clients can access real settings and saves,
+with keyboard-reachable **Revoke** in the same toolbar. Pointer inactivity hides
+these with the controls; keyboard focus reveals them. Reloading the interface
+reconstructs identity and access from main-process state.
+
+Game captures exclude this app chrome. Presented UI captures hold a common scope
+for the entire capture, including panel rectangles and nested captures; game and
+plugin overlays remain. Native screenshots, recordings and checkpoint previews
+use native pixels. A renderer reload during UI capture fails that capture without
+publishing it. Per-process `app.setName` is applied before readiness for named
+sessions; this alone does not establish macOS packaged Dock hover behavior. See
+[acceptance evidence](ACCEPTANCE.md) for verification and remaining limits.

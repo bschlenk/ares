@@ -48,7 +48,7 @@ test('real N64 batch: baseline/load/write/active-VI-run/crop sweep, partial effe
   const child = spawn(host, ['--rom', rom, '--system', 'Nintendo 64', '--settings', settings, '--silent', '--paused', '--save-dir', path.join(dir, 'saves'), '--control-session', identity.session], { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
   const closed = once(child, 'close'); let log = ''; child.stderr.on('data', b => log = (log + b).slice(-20000)); child.stdout.resume();const previewFrames=[];const previewParser=new FrameParser(frame=>previewFrames.push(frame));child.stdout.on('data',bytes=>previewParser.push(bytes));
   const native = new NativeSessionClient(child.stdin, child.stdio[3], identity, () => {}), router = new SessionRouter(); router.attach(native);
-  const endpoint = new LocalServiceHost(router,async p=>{if(p.operation==='app_status')return {ready:true};if(p.operation==='script_result')return router.readScriptResult(p);throw new Error('unavailable');}); let peer, other;
+  const endpoint = new LocalServiceHost(router,async p=>{if(p.operation==='app_status')return {ready:true,instance:endpoint.instance,kind:'personal',opened_order:1};if(p.operation==='script_result')return router.readScriptResult(p);throw new Error('unavailable');}); let peer, other;
   try {
     unwrap(await native.request('session.status')); await endpoint.listen(path.join(dir, 'ipc'));
     peer = new StdioPeer(process.execPath, [path.resolve(__dirname, '../dist/mcp/server.js'), '--connection', endpoint.metadataFile, '--instance', endpoint.instance]); await peer.initialize();
