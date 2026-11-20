@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LocalServiceClient } from '../services/local-endpoint.js'
 import { buildArtifact } from './artifacts.js'
+import { pluginBuildCache } from './build-cache.js'
 import { validateManifest } from './manifest.js'
 import type { PluginInfo } from './contracts.js'
 const args = process.argv.slice(2),
@@ -41,10 +42,10 @@ async function main() {
   }
   if (operation === 'build') {
     if (!values[0]) throw new Error('build requires a plugin directory')
-    const source = path.resolve(values[0]),
+    const source = await fs.realpath(path.resolve(values[0])),
       built = await buildArtifact(
         source,
-        path.resolve(options.output ?? path.join(source, '.ares-plugin-build')),
+        options.output ? path.resolve(options.output) : pluginBuildCache(source),
       )
     return {
       artifact: built.hash,

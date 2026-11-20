@@ -73,7 +73,7 @@ It uses disposable renamed and byte-swapped copies and saves, never the original
 
 Plain-JS entries and optional `build: {entry:"src/plugin.tsx", jsxFactory:"h"}`
 inputs are bundled by the host's esbuild into immutable content-addressed artifacts
-under userData/plugins/artifacts. Relative imports and assets are captured; files
+under the app's per-instance runtime `plugin-artifacts` directory. Relative imports and assets are captured; files
 are limited to 2 MiB each, snapshots to 16 MiB / 256 files. Build/import errors keep
 the current scope, DOM and styles intact. Host bundles include esbuild; no external
 npm/watch process is required. Installing a plugin's dependencies remains an author
@@ -194,7 +194,19 @@ allows explicitly pinning an existing generation; otherwise the CLI obtains the
 current token immediately before sending an action. Stale tokens reject rather
 than binding to a replacement/game. Reload waits for the new active generation
 and reports build/activation errors; it never retries a command. `build --output`
-selects the artifact cache; the default `.ares-plugin-build` is ignored by watchers.
+selects an explicit artifact directory. Otherwise CLI builds use the OS cache:
+`~/Library/Caches/Ares Workbench/plugin-builds/` on macOS,
+`$XDG_CACHE_HOME/ares-workbench/plugin-builds/` on Linux (default `~/.cache/`),
+or `%LOCALAPPDATA%/Ares Workbench/Cache/plugin-builds/` on Windows.
+Each canonical plugin source directory has a separate hashed namespace, and the
+CLI prints the resulting artifact path. The source directory is not modified.
+These outputs are rebuildable, not installed plugin copies; keep the source and
+its dependencies. Old source-local `.ares-plugin-build` directories are no longer
+used by default and can be removed when no command or consumer uses their output.
+The running app uses its own per-instance artifacts and retains active, candidate
+and previous rollback builds while pruning unreferenced versions. CLI build
+outputs remain available until explicitly removed or the OS cache is cleared;
+they are not automatically pruned because callers may still use the returned path.
 The list is paged without log bodies; `--page-size 1` reduces response size and the
 CLI automatically reduces oversized pages.
 
